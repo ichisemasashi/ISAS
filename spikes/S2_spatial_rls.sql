@@ -32,23 +32,8 @@ CREATE TABLE field (
   gis_area_sqm numeric GENERATED ALWAYS AS (ST_Area(geom::geography)) STORED,
   timezone     text NOT NULL DEFAULT 'Asia/Tokyo'
 );
-ALTER TABLE field ENABLE ROW LEVEL SECURITY;
-ALTER TABLE field FORCE ROW LEVEL SECURITY;
 
-CREATE FUNCTION allowed_tenants2() RETURNS uuid[] LANGUAGE sql STABLE AS $$
-  SELECT string_to_array(current_setting('app.allowed_tenants', true), ',')::uuid[]
-$$;
-CREATE POLICY p_field_boundary ON field AS RESTRICTIVE
-  USING (tenant_id = ANY(allowed_tenants2())) WITH CHECK (tenant_id = ANY(allowed_tenants2()));
-CREATE POLICY p_field_read ON field AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(allowed_tenants2()));
-GRANT SELECT, INSERT ON field TO app_user;
-
--- 複合空間索引（tenant_id を先頭に含む）: これがプルーニング＋空間を両立できるかが要点
-CREATE INDEX field_tenant_geom_gix ON field USING gist (tenant_id, geom);
--- 比較用: geom 単独 GiST（代替案）
-CREATE INDEX field_geom_gix ON field USING gist (geom);
-
--- 20 テナント × 各 5000 圃場 = 10万件（山形近辺にランダム配置の小ポリゴン）
+-- 先に seed（RLS 有効化前。所有者が投入）: 20 テナント × 各 5000 圃場 = 10万件
 INSERT INTO field (tenant_id, name, geom)
 SELECT t.tid,
        'field-'||t.tid||'-'||g,
@@ -59,7 +44,22 @@ FROM (SELECT ('00000000-0000-7000-8000-'||lpad(to_hex(s),12,'0'))::uuid AS tid
       FROM generate_series(1,20) s) t
 CROSS JOIN generate_series(1,5000) g;
 
+-- 複合空間索引（tenant_id を先頭に含む）: これがプルーニング＋空間を両立できるかが要点
+CREATE INDEX field_tenant_geom_gix ON field USING gist (tenant_id, geom);
+-- 比較用: geom 単独 GiST（代替案）
+CREATE INDEX field_geom_gix ON field USING gist (geom);
 ANALYZE field;
+
+-- seed 後に RLS を有効化
+ALTER TABLE field ENABLE ROW LEVEL SECURITY;
+ALTER TABLE field FORCE ROW LEVEL SECURITY;
+CREATE FUNCTION allowed_tenants2() RETURNS uuid[] LANGUAGE sql STABLE AS $$
+  SELECT string_to_array(current_setting('app.allowed_tenants', true), ',')::uuid[]
+$$;
+CREATE POLICY p_field_boundary ON field AS RESTRICTIVE
+  USING (tenant_id = ANY(allowed_tenants2())) WITH CHECK (tenant_id = ANY(allowed_tenants2()));
+CREATE POLICY p_field_read ON field AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(allowed_tenants2()));
+GRANT SELECT, INSERT ON field TO app_user;
 RESET ROLE;
 
 -- ============ 計測 ============

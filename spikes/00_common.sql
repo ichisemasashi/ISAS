@@ -8,15 +8,26 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS btree_gist;   -- gist(tenant_id, geom) 複合索引用
 
 -- --- ロール（ADR-0001: 非所有者・非BYPASSRLS のアプリロール／監査は BYPASSRLS 別ロール）---
-DROP ROLE IF EXISTS app_owner;
-DROP ROLE IF EXISTS app_user;
-DROP ROLE IF EXISTS audit_writer;
+DROP SCHEMA IF EXISTS spike CASCADE;   -- 前回実行の残骸（app_owner所有）を先に消す
+-- 前回付与した権限（public USAGE 等）を含めロール依存を除去してから削除
+DO $$
+DECLARE r text;
+BEGIN
+  FOREACH r IN ARRAY ARRAY['app_owner','app_user','audit_writer'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('DROP OWNED BY %I CASCADE', r);
+      EXECUTE format('DROP ROLE %I', r);
+    END IF;
+  END LOOP;
+END $$;
 CREATE ROLE app_owner   NOLOGIN NOSUPERUSER NOBYPASSRLS;  -- テーブル所有者（FORCE RLS 検証用）
 CREATE ROLE app_user    NOLOGIN NOSUPERUSER NOBYPASSRLS;  -- アプリ実行ロール
 CREATE ROLE audit_writer NOLOGIN NOSUPERUSER BYPASSRLS;   -- 監査書込専用（R3-L1）
 GRANT app_owner TO postgres;   -- postgres が SET ROLE できるように
 GRANT app_user  TO postgres;
 GRANT audit_writer TO postgres;
+-- postgis 型/関数は public にあるため、アプリロールに public の USAGE を付与
+GRANT USAGE ON SCHEMA public TO app_owner, app_user, audit_writer;
 
 -- --- UUIDv7 のタイムスタンプ抽出（R4-L1: IMMUTABLE で作れるか＝生成列/CHECK の前提）---
 -- UUIDv7 先頭48bit = unix_ts_ms(ビッグエンディアン)。text化して先頭12hexを取り出す。

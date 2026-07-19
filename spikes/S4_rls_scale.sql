@@ -21,6 +21,22 @@ CREATE TABLE worklog (
   field_group_id uuid NOT NULL,        -- R3-M1: 可変テーブルは非正規化スコープ列
   body text
 );
+-- データ: 10 テナント × 50 グループ × 圃場100 = 5万圃場、作業日誌 各圃場5件=25万件
+-- 先に seed（RLS 有効化前・所有者が投入）
+INSERT INTO fld (tenant_id, field_group_id)
+SELECT ('00000000-0000-7000-8000-'||lpad(to_hex(t),12,'0'))::uuid,
+       ('00000000-0000-7000-9000-'||lpad(to_hex(t*100+grp),12,'0'))::uuid
+FROM generate_series(1,10) t, generate_series(1,50) grp, generate_series(1,100) f;
+
+INSERT INTO worklog (tenant_id, field_id, field_group_id, body)
+SELECT f.tenant_id, f.id, f.field_group_id, 'log'
+FROM fld f, generate_series(1,5) k;
+
+CREATE INDEX ON fld (tenant_id, field_group_id);
+CREATE INDEX ON worklog (tenant_id, field_group_id);
+ANALYZE fld; ANALYZE worklog;
+
+-- seed 後に RLS 有効化
 ALTER TABLE fld ENABLE ROW LEVEL SECURITY;     ALTER TABLE fld FORCE ROW LEVEL SECURITY;
 ALTER TABLE worklog ENABLE ROW LEVEL SECURITY; ALTER TABLE worklog FORCE ROW LEVEL SECURITY;
 
@@ -38,21 +54,6 @@ CREATE POLICY s2 ON worklog AS RESTRICTIVE USING (field_group_id IS NULL OR fiel
 CREATE POLICY r2 ON worklog AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(allowed_tenants4()));
 
 GRANT SELECT ON fld, worklog TO app_user;
-
--- データ: 10 テナント × 50 グループ × 圃場100 = 5万圃場、作業日誌 各圃場5件=25万件
-\set T '00000000-0000-7000-8000-00000000000a'
-INSERT INTO fld (tenant_id, field_group_id)
-SELECT ('00000000-0000-7000-8000-'||lpad(to_hex(t),12,'0'))::uuid,
-       ('00000000-0000-7000-9000-'||lpad(to_hex(t*100+grp),12,'0'))::uuid
-FROM generate_series(1,10) t, generate_series(1,50) grp, generate_series(1,100) f;
-
-INSERT INTO worklog (tenant_id, field_id, field_group_id, body)
-SELECT f.tenant_id, f.id, f.field_group_id, 'log'
-FROM fld f, generate_series(1,5) k;
-
-CREATE INDEX ON fld (tenant_id, field_group_id);
-CREATE INDEX ON worklog (tenant_id, field_group_id);
-ANALYZE fld; ANALYZE worklog;
 RESET ROLE;
 
 -- ============ 計測 ============

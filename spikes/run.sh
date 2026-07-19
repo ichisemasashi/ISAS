@@ -16,7 +16,7 @@ until docker compose exec -T db pg_isready -U postgres -d spike >/dev/null 2>&1;
 done
 echo " ready"
 
-echo "== 3) 共通セットアップ（拡張・ロール・UUIDv7）=="
+echo "== 3) 共通セットアップ（拡張・ロール・UUIDv7）: 1回だけ =="
 $PSQL -f - < 00_common.sql
 
 run_one () {
@@ -25,10 +25,12 @@ run_one () {
   echo "########################################################"
   echo "# 実行: $f"
   echo "########################################################"
-  # 各スパイクは独立させるため、対象スキーマを毎回作り直す
-  $PSQL -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null
-  $PSQL -f - < 00_common.sql >/dev/null
-  $PSQL -f - < "$f"
+  # public/postgis には触れず、専用スキーマ spike を作り直して隔離
+  $PSQL -c "DROP SCHEMA IF EXISTS spike CASCADE;
+            CREATE SCHEMA spike AUTHORIZATION app_owner;
+            GRANT USAGE ON SCHEMA spike TO app_user;" >/dev/null
+  # search_path を spike,public に固定して実行（postgis 型/関数は public から解決）
+  { echo "SET search_path = spike, public;"; cat "$f"; } | $PSQL -f -
 }
 
 case "$TARGET" in

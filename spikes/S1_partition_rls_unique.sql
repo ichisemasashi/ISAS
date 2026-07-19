@@ -5,8 +5,14 @@
 --   ・同一 event_uuid 再送 → 0 重複（受理時刻が変わっても）
 --   ・不整合 event_ts は CHECK で拒否（パーティション誤配置を防ぐ）
 --   ・書込は app.tenant_id のテナントに限定（WITH CHECK）
--- 併せて R3-M2（event_ts の決定性を DB で束縛）を検証し、
--- 「生成列をパーティションキーにできない」PostgreSQL 制約も明示的に確認する。
+--
+-- ★スパイクで判明した重要事項（設計へ反映）:
+--   (1) 生成列はパーティションキーにできない（probe で確認）。
+--   (2) BEFORE ROW トリガはタプルルーティングの「後」に走るため、
+--       トリガで partition key(event_ts) を導出する経路は機能しない。
+--   → 採用: event_ts はアプリ/リポジトリ層で uuidv7_time(event_uuid) を計算して
+--     INSERT 時に明示供給し、DB は CHECK(event_ts = uuidv7_time(event_uuid)) で
+--     整合を強制する（不整合値を拒否＝誤配置・dedupすり抜けを防止）。
 -- =====================================================================
 \set ON_ERROR_STOP on
 SET client_min_messages = NOTICE;
@@ -24,7 +30,7 @@ BEGIN
     RAISE NOTICE 'S1 probe: 生成列をパーティションキーに採用可';
     EXECUTE 'DROP TABLE _probe_gen';
   EXCEPTION WHEN others THEN
-    RAISE NOTICE 'S1 probe: 生成列はパーティションキー不可（%）→ CHECK+トリガ経路を採用', SQLERRM;
+    RAISE NOTICE 'S1 probe: 生成列はパーティションキー不可（%）→ CHECK+アプリ計算経路を採用', SQLERRM;
   END;
 END $$;
 
@@ -35,7 +41,7 @@ CREATE TABLE location_log (
   event_uuid  uuid        NOT NULL,               -- クライアント生成 UUIDv7
   tenant_id   uuid        NOT NULL,
   user_id     uuid        NOT NULL,
-  event_ts    timestamptz NOT NULL,               -- サーバがトリガで uuidv7_time から設定
+  event_ts    timestamptz NOT NULL,               -- アプリが uuidv7_time(event_uuid) を計算し供給
   occurred_at timestamptz NOT NULL,               -- 業務時点（振り分けに使わない）
   geom        geometry(Point,4326),
   PRIMARY KEY (tenant_id, event_ts, event_uuid),  -- 全パーティションキー包含
@@ -51,15 +57,6 @@ CREATE TABLE location_log_2026_08 PARTITION OF location_log
   FOR VALUES FROM ('2026-08-01') TO ('2026-09-01') PARTITION BY HASH (tenant_id);
 CREATE TABLE location_log_2026_08_h0 PARTITION OF location_log_2026_08 FOR VALUES WITH (MODULUS 2, REMAINDER 0);
 CREATE TABLE location_log_2026_08_h1 PARTITION OF location_log_2026_08 FOR VALUES WITH (MODULUS 2, REMAINDER 1);
-
--- サーバ側で event_ts を UUIDv7 から導出（クライアント値を信頼しない・R3-M2）
-CREATE FUNCTION set_event_ts() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  NEW.event_ts := uuidv7_time(NEW.event_uuid);
-  RETURN NEW;
-END $$;
-CREATE TRIGGER trg_set_event_ts BEFORE INSERT ON location_log
-  FOR EACH ROW EXECUTE FUNCTION set_event_ts();
 
 -- RLS（親に定義 → 全（サブ）パーティションに適用。FORCE で owner も従わせる）
 ALTER TABLE location_log ENABLE ROW LEVEL SECURITY;
@@ -91,24 +88,24 @@ RESET ROLE;
 -- =========================== 試験 ===========================
 SET ROLE app_user;
 
--- 投入: A/B 各テナントに数百件（app.tenant_id を切替えながら）
+-- 投入: A/B 各テナントに300件（event_ts はアプリ計算＝uuidv7_time で明示供給）
 SET app.allowed_tenants = :'A';
 SET app.tenant_id = :'A';
-INSERT INTO location_log(event_uuid, tenant_id, user_id, occurred_at, geom)
-SELECT gen_uuidv7('2026-07-15'::timestamptz + (g||' min')::interval),
-       :'A'::uuid, gen_random_uuid(),
-       '2026-07-15'::timestamptz + (g||' min')::interval,
+INSERT INTO location_log(event_uuid, tenant_id, user_id, event_ts, occurred_at, geom)
+SELECT s.u, :'A'::uuid, gen_random_uuid(), uuidv7_time(s.u), s.occ,
        ST_SetSRID(ST_MakePoint(140.3, 38.2), 4326)
-FROM generate_series(1,300) g;
+FROM (SELECT gen_uuidv7('2026-07-15'::timestamptz + (g||' min')::interval) AS u,
+             '2026-07-15'::timestamptz + (g||' min')::interval AS occ
+      FROM generate_series(1,300) g) s;
 
 SET app.allowed_tenants = :'B';
 SET app.tenant_id = :'B';
-INSERT INTO location_log(event_uuid, tenant_id, user_id, occurred_at, geom)
-SELECT gen_uuidv7('2026-08-10'::timestamptz + (g||' min')::interval),
-       :'B'::uuid, gen_random_uuid(),
-       '2026-08-10'::timestamptz + (g||' min')::interval,
+INSERT INTO location_log(event_uuid, tenant_id, user_id, event_ts, occurred_at, geom)
+SELECT s.u, :'B'::uuid, gen_random_uuid(), uuidv7_time(s.u), s.occ,
        ST_SetSRID(ST_MakePoint(140.4, 38.3), 4326)
-FROM generate_series(1,300) g;
+FROM (SELECT gen_uuidv7('2026-08-10'::timestamptz + (g||' min')::interval) AS u,
+             '2026-08-10'::timestamptz + (g||' min')::interval AS occ
+      FROM generate_series(1,300) g) s;
 
 -- (1) テナント遮断: A のみ許可 → B は 0 件、全体は A の 300 件だけ
 SET app.allowed_tenants = :'A';
@@ -123,49 +120,36 @@ BEGIN
   RAISE NOTICE 'S1-(1) PASS: 他テナント遮断100%%（可視 % 件のみ）', n_all;
 END $$;
 
--- (2) 冪等: 同一 event_uuid を「異なる受理時刻」で再送 → 0 重複
+-- (2) 冪等: 同一 event_uuid を「異なる occurred_at」で再送 → 0 重複
 DO $$
 DECLARE u uuid := gen_uuidv7('2026-07-20 00:00:00+00'); before int; after int;
 BEGIN
-  INSERT INTO location_log(event_uuid,tenant_id,user_id,occurred_at)
-    VALUES (u, '11111111-1111-7111-8111-111111111111', gen_random_uuid(), now())
+  INSERT INTO location_log(event_uuid,tenant_id,user_id,event_ts,occurred_at)
+    VALUES (u, '11111111-1111-7111-8111-111111111111', gen_random_uuid(), uuidv7_time(u), now())
     ON CONFLICT (tenant_id, event_ts, event_uuid) DO NOTHING;
   SELECT count(*) INTO before FROM location_log WHERE event_uuid = u;
-  -- 再送（occurred_at を変えても event_ts はサーバが uuid から再導出＝同一パーティション）
-  INSERT INTO location_log(event_uuid,tenant_id,user_id,occurred_at)
-    VALUES (u, '11111111-1111-7111-8111-111111111111', gen_random_uuid(), now() + interval '5 min')
+  -- 再送: occurred_at を変えても event_ts は uuidv7_time(u) で同一 → 同一PK
+  INSERT INTO location_log(event_uuid,tenant_id,user_id,event_ts,occurred_at)
+    VALUES (u, '11111111-1111-7111-8111-111111111111', gen_random_uuid(), uuidv7_time(u), now() + interval '5 min')
     ON CONFLICT (tenant_id, event_ts, event_uuid) DO NOTHING;
   SELECT count(*) INTO after FROM location_log WHERE event_uuid = u;
   IF after <> 1 OR before <> 1 THEN RAISE EXCEPTION 'S1-(2) FAIL: 重複排除できず (before=%, after=%)', before, after; END IF;
   RAISE NOTICE 'S1-(2) PASS: 同一event_uuid再送で0重複（件数=%）', after;
 END $$;
 
--- (3) 不整合 event_ts の挿入は CHECK で拒否（トリガを一時無効化して直接突く）
-RESET ROLE;
-SET ROLE app_owner;
-ALTER TABLE location_log DISABLE TRIGGER trg_set_event_ts;  -- サーバ導出を止めて生値を試す
-RESET ROLE;
-SET ROLE app_user;
-SET app.allowed_tenants = :'A';
-SET app.tenant_id = :'A';
+-- (3) 不整合 event_ts（uuidv7_time と異なる値）は CHECK で拒否
 DO $$
 DECLARE u uuid := gen_uuidv7('2026-07-20 00:00:00+00'); blocked boolean := false;
 BEGIN
   BEGIN
-    -- event_ts に uuidv7_time(u) と異なる値を入れる → CHECK(event_ts_derived) 違反のはず
     INSERT INTO location_log(event_uuid, tenant_id, user_id, event_ts, occurred_at)
       VALUES (u, '11111111-1111-7111-8111-111111111111', gen_random_uuid(),
-              '2000-01-01 00:00:00+00', now());
+              '2000-01-01 00:00:00+00', now());   -- uuidv7_time(u) と不一致
   EXCEPTION WHEN check_violation THEN blocked := true;
   END;
   IF NOT blocked THEN RAISE EXCEPTION 'S1-(3) FAIL: 不整合 event_ts が CHECK を通過した'; END IF;
-  RAISE NOTICE 'S1-(3) PASS: 不整合 event_ts を CHECK が拒否（誤配置を防止）';
+  RAISE NOTICE 'S1-(3) PASS: 不整合 event_ts を CHECK が拒否（誤配置・dedupすり抜けを防止）';
 END $$;
-RESET ROLE;
-SET ROLE app_owner;
-ALTER TABLE location_log ENABLE TRIGGER trg_set_event_ts;   -- 復帰
-RESET ROLE;
-SET ROLE app_user;
 
 -- (4) 書込境界: current=A で tenant_id=B を書くと WITH CHECK 違反
 SET app.allowed_tenants = '11111111-1111-7111-8111-111111111111,22222222-2222-7222-8222-222222222222';
@@ -174,8 +158,8 @@ DO $$
 DECLARE u uuid := gen_uuidv7('2026-08-20 00:00:00+00'); blocked boolean := false;
 BEGIN
   BEGIN
-    INSERT INTO location_log(event_uuid,tenant_id,user_id,occurred_at)
-      VALUES (u, '22222222-2222-7222-8222-222222222222', gen_random_uuid(), now());
+    INSERT INTO location_log(event_uuid,tenant_id,user_id,event_ts,occurred_at)
+      VALUES (u, '22222222-2222-7222-8222-222222222222', gen_random_uuid(), uuidv7_time(u), now());
   EXCEPTION WHEN check_violation OR insufficient_privilege THEN blocked := true;
   END;
   IF NOT blocked THEN RAISE EXCEPTION 'S1-(4) FAIL: 現テナント外への書込が通った'; END IF;
@@ -215,4 +199,4 @@ SELECT count(*) FROM location_log
 WHERE event_ts >= '2026-07-01' AND event_ts < '2026-08-01';
 RESET ROLE;
 
-\echo '===== S1 完了（各 PASS/NOTICE を確認。EXPLAIN に 2026_08 が出ないこと＝プルーニング） ====='
+\echo '===== S1 完了（各 PASS を確認。EXPLAIN に 2026_08 が出ないこと＝プルーニング） ====='

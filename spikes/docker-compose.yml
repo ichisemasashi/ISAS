@@ -2,7 +2,8 @@
 # 使い方: docker compose up -d  →  ./run.sh  →  docker compose down -v
 services:
   db:
-    image: postgis/postgis:16-3.4        # PostgreSQL 16 + PostGIS 3.4
+    image: imresamu/postgis:16-3.4       # PostgreSQL 16 + PostGIS 3.4（arm64ネイティブ・マルチアーチ）
+    shm_size: "512mb"                    # 空間/ソートのメモリ確保
     environment:
       POSTGRES_PASSWORD: spike
       POSTGRES_DB: spike
