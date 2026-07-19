@@ -1,0 +1,15 @@
+# M4 スパイク用 PostgreSQL + PostGIS 環境
+# 使い方: docker compose up -d  →  ./run.sh  →  docker compose down -v
+services:
+  db:
+    image: postgis/postgis:16-3.4        # PostgreSQL 16 + PostGIS 3.4
+    environment:
+      POSTGRES_PASSWORD: spike
+      POSTGRES_DB: spike
+    ports:
+      - "55432:5432"                     # ホスト55432に公開（衝突回避）
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d spike"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
