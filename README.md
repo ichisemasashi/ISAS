@@ -24,6 +24,7 @@
 | [docs/開発工程.md](docs/開発工程.md) | 全体工程・マイルストーン・現在地 |
 | [docs/design/ADR/](docs/design/ADR/README.md) | アーキテクチャ決定記録（一覧・ステータス） |
 | [docs/design/データモデル設計書.md](docs/design/データモデル設計書.md) | 論理/物理ERD・RLSポリシー・パーティション設計 |
+| [docs/design/PostgreSQL実挙動検証記録.md](docs/design/PostgreSQL実挙動検証記録.md) | 設計文書の PostgreSQL に関する主張を実測で検証した記録（スパイクSQLと文書の差異を含む） |
 | [spikes/](spikes/README.md) | 技術検証（PostgreSQL＋PostGIS の PoC ハーネス） |
 | `docs/**/レビュー記録_*.md`、`docs/要求仕様書_敵対的レビュー記録票_*.md` | 敵対的レビューの監査証跡 |
 
