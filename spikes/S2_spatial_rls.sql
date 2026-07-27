@@ -1,3 +1,7 @@
+-- 【v2】文書 §4 の述語形（正規化形・関数ラップなし）に揃えた。
+-- ⚠️ 本ファイルは PostGIS が必要。未導入環境では実行できない（2026-07-27 の再実行では未実行）。
+--   PG-M2（RLS 下で非 leakproof な述語が索引条件に使えるか＝PostGIS の && / <-> の leakproof 性）は
+--   本ファイルの再実行時に必ず EXPLAIN 全文で確認すること。
 -- =====================================================================
 -- S2: PostGIS 空間クエリ × RLS 性能
 -- 設計書 v4 §6 field を検証。合格基準（5.2.1）: 地図初期表示 2秒/p95。
@@ -53,19 +57,16 @@ ANALYZE field;
 -- seed 後に RLS を有効化
 ALTER TABLE field ENABLE ROW LEVEL SECURITY;
 ALTER TABLE field FORCE ROW LEVEL SECURITY;
-CREATE FUNCTION allowed_tenants2() RETURNS uuid[] LANGUAGE sql STABLE AS $$
-  SELECT string_to_array(current_setting('app.allowed_tenants', true), ',')::uuid[]
-$$;
 CREATE POLICY p_field_boundary ON field AS RESTRICTIVE
-  USING (tenant_id = ANY(allowed_tenants2())) WITH CHECK (tenant_id = ANY(allowed_tenants2()));
-CREATE POLICY p_field_read ON field AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(allowed_tenants2()));
+  USING (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[])) WITH CHECK (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]));
+CREATE POLICY p_field_read ON field AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]));
 GRANT SELECT, INSERT ON field TO app_user;
 RESET ROLE;
 
 -- ============ 計測 ============
 SET ROLE app_user;
 \set T '00000000-0000-7000-8000-000000000005'
-SET app.allowed_tenants = :'T';
+SET app.allowed_tenants = '{' || :'T' || '}';
 
 \echo '--- (A) RLS + 空間 bbox クエリ（複合索引が効くか / プルーニング）---'
 EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING ON)

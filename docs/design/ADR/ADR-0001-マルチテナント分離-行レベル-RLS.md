@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **提案中（再オープン・High処置進行中）**（v16：**IND3-H1／PG-H5**＝ブートストラップのキーを **`bootstrap_owner`（専用の関数所有者ロール）**に変更し自己矛盾を解消（実測検証済み）。**PG-H6**＝**パーティション子を専用スキーマ `part` に置き通常ロールに `USAGE` を与えない**（実測：子直接参照は `permission denied`）。**PG-H4／IND3-M6**＝**ビューは `security_invoker`（PG15+）必須**とし検査・テストに追加。v15 で IND3-H2／H3／H4／PG-H1 を処置済。**残：IND3-H5・M（多数）・L／PG-H2・H3・M1〜M9・L1〜L13／スパイクの再実行**。[第9回](レビュー記録_ADR-0001.md)／[PG検証](../PostgreSQL実挙動検証記録.md)） |
+| ステータス | **提案中（再オープン・High処置済／M・L残）**（v17：**スパイクを文書の設計そのままで書き直して再実行し、S1 の全項目が PASS**（PG15 必須の `security_invoker` のみスキップ）。**再実行で判明した2件を反映**：**①permissive の `TO` には正当にアクセスする全ロールを列挙する**（`admin_role` を実体化＝PG-H3 の実地是正）、**②クランプ窓の下限は最古パーティションの開始以上でなければならない**（データモデル §5）。v15＝裁定(a)、v16＝独立経路一致3件。**残：IND3 Medium 8・Low 4／PG-H2(解消)・H3(一部)・M9・L13／S2・security_invoker・所有者/トリガ経路は未実行**。[第9回](レビュー記録_ADR-0001.md)／[PG検証](../PostgreSQL実挙動検証記録.md)／[spikes](../../../spikes/README.md)） |
 | 日付 | 2026-07-17 |
 | 由来 | 確定済み（要求仕様9章#6の方向性をADRとして正式記録） |
 | 関連 | 要求仕様 [7章 インフラ／#6](../../農業営農支援システム_要求仕様書.md)、[ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0005 権限モデル](ADR-0005-権限モデル-RBAC-メンバーシップ.md) |
@@ -51,7 +51,9 @@
 
       **restrictive をロール限定にしてはならない。** 例外が必要なら**述語の中に書く**（下記2）。
 
-    - **【v14】① には「基本 permissive」が必須である（処置中に判明した PostgreSQL の性質）**：PostgreSQL では行が可視になるのは **「すべての restrictive を満たし、かつ**少なくとも1つの permissive を満たす**」**場合であり、**permissive が1本も無いテーブルは誰にも0行**になる（permissive の OR が空集合＝偽）。したがって **restrictive テナント分離だけを置いた①テーブルは、正しいテナント文脈でも何も見えない**。**①③には「経路を開く基本 permissive」を必ず置く**：`FOR ALL TO app_role, auth_role USING (true) WITH CHECK (true)`（**絞りは restrictive が行う**ので `true` でよい）。**検査に「permissive が1本も無い①③テーブルが存在しないこと」を含める**（§5）。
+    - **【v17】permissive の `TO` には「そのテーブルに正当にアクセスするすべてのロール」を列挙する（PG-H3・S1 再実行で実地確認）**：v14〜v16 は `TO app_role, auth_role` と書いていたが、**S1 を文書どおりに実行したところ、共有マスタ（③）の共有行を投入できなかった**——**テーブル所有者も FORCE RLS 下では permissive の対象外**であり、`TO` に無いロールは何もできない。**A1c-L2 が言う「管理用の別接続/別ロール」を `admin_role` として実体化**し、③の permissive の `TO` に列挙した。あわせて **③の restrictive の WITH CHECK に `admin_role` の共有行書込例外**（`OR (current_user = '<admin_role>' AND tenant_id IS NULL)`）を加える（一般ロールの共有汚染は引き続き拒否＝A1d-M1）。
+  - **列挙漏れの倒れる方向は安全側**（そのロールが何もできない＝フェイルクローズ）だが、**「所有者・トリガ・バッチ経路は permissive の対象外」であることを設計として明示**しないと、実装時に「なぜか書けない」で FORCE RLS を外す方向へ倒れる。**`*_history` の版履歴トリガ・監査トリガ・一括投入の書込主体も、同じ枠で明示する**（未着手＝§5）。
+- **【v14】① には「基本 permissive」が必須である（処置中に判明した PostgreSQL の性質）**：PostgreSQL では行が可視になるのは **「すべての restrictive を満たし、かつ**少なくとも1つの permissive を満たす**」**場合であり、**permissive が1本も無いテーブルは誰にも0行**になる（permissive の OR が空集合＝偽）。したがって **restrictive テナント分離だけを置いた①テーブルは、正しいテナント文脈でも何も見えない**。**①③には「経路を開く基本 permissive」を必ず置く**：`FOR ALL TO app_role, auth_role USING (true) WITH CHECK (true)`（**絞りは restrictive が行う**ので `true` でよい）。**検査に「permissive が1本も無い①③テーブルが存在しないこと」を含める**（§5）。
       > これは v13 までの記述（「①＝restrictive のみ」）では**全①テーブルが0行になる**という欠陥であり、**IND2-H3（restrictive/permissive の結合意味論）と同じ根**である。教訓14（列挙対象を機械的に洗い出す）を **restrictive/permissive の全組合せ**に当てて発見した。
 
     1. **restrictive テナント分離ポリシーは全ロールに適用する**（`TO` 指定なし）。述語は §2.9.5 の**正規化形**を用いる（**未設定・空は非通過／不正値は例外**）。

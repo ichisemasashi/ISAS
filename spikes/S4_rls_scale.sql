@@ -1,3 +1,5 @@
+-- 【v2】文書 §4 の述語形（正規化形・関数ラップなし・restrictive は TO なし）に揃えた。
+--   旧版は関数ラップ＋カンマ区切り注入で、文書とは別物だった（PG-H2/PG-M4）。
 -- =====================================================================
 -- S4: RLS × 規模（許可集合注入・権限導出・スコープ）
 -- 設計書 v4 §4 を検証。合格基準（5.2.1）: 一覧・API 500ms/p95。
@@ -40,18 +42,14 @@ ANALYZE fld; ANALYZE worklog;
 ALTER TABLE fld ENABLE ROW LEVEL SECURITY;     ALTER TABLE fld FORCE ROW LEVEL SECURITY;
 ALTER TABLE worklog ENABLE ROW LEVEL SECURITY; ALTER TABLE worklog FORCE ROW LEVEL SECURITY;
 
-CREATE FUNCTION allowed_tenants4() RETURNS uuid[] LANGUAGE sql STABLE AS $$
-  SELECT string_to_array(current_setting('app.allowed_tenants', true), ',')::uuid[] $$;
-CREATE FUNCTION scope_groups4() RETURNS uuid[] LANGUAGE sql STABLE AS $$
-  SELECT string_to_array(current_setting('app.scope_field_groups', true), ',')::uuid[] $$;
 
 -- テナント分離(restrictive) + スコープ(restrictive, NULL 不可視化回避) + 読取(permissive)
-CREATE POLICY b ON fld AS RESTRICTIVE USING (tenant_id = ANY(allowed_tenants4()));
-CREATE POLICY s ON fld AS RESTRICTIVE USING (field_group_id IS NULL OR field_group_id = ANY(scope_groups4()));
-CREATE POLICY r ON fld AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(allowed_tenants4()));
-CREATE POLICY b2 ON worklog AS RESTRICTIVE USING (tenant_id = ANY(allowed_tenants4()));
-CREATE POLICY s2 ON worklog AS RESTRICTIVE USING (field_group_id IS NULL OR field_group_id = ANY(scope_groups4()));
-CREATE POLICY r2 ON worklog AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(allowed_tenants4()));
+CREATE POLICY b ON fld AS RESTRICTIVE USING (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]));
+CREATE POLICY s ON fld AS RESTRICTIVE USING (field_group_id IS NULL OR field_group_id = ANY(COALESCE(NULLIF(current_setting('app.scope_field_groups', true), ''), '{}')::uuid[]));
+CREATE POLICY r ON fld AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]));
+CREATE POLICY b2 ON worklog AS RESTRICTIVE USING (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]));
+CREATE POLICY s2 ON worklog AS RESTRICTIVE USING (field_group_id IS NULL OR field_group_id = ANY(COALESCE(NULLIF(current_setting('app.scope_field_groups', true), ''), '{}')::uuid[]));
+CREATE POLICY r2 ON worklog AS PERMISSIVE FOR SELECT USING (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]));
 
 GRANT SELECT ON fld, worklog TO app_user;
 RESET ROLE;
@@ -59,10 +57,10 @@ RESET ROLE;
 -- ============ 計測 ============
 SET ROLE app_user;
 -- あるユーザーが テナント5 の 3 グループ(グループ番号 501,502,503)を担当
-SET app.allowed_tenants = '00000000-0000-7000-8000-000000000005';
+SET app.allowed_tenants = '{00000000-0000-7000-8000-000000000005}';   -- 【v2】配列リテラル形（PG-H2）
 -- 担当グループ3件を動的にセット（テナント5 = 5*100+1..3）
 SELECT set_config('app.scope_field_groups',
-  string_agg(gid::text, ','), false)
+  '{' || string_agg(gid::text, ',') || '}', false)
 FROM (SELECT ('00000000-0000-7000-9000-'||lpad(to_hex(501+g),12,'0'))::uuid gid
       FROM generate_series(0,2) g) x;
 
