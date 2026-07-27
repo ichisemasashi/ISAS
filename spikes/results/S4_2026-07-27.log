@@ -1,0 +1,73 @@
+# S4 実行ログ
+実行日: 2026-07-27
+PostgreSQL: PostgreSQL 14.23 (Homebrew) on aarch64-apple-darwin25.4.0, compiled by Apple clang version 21.0.0 (clang-2100.0.123.102), 64-bit
+                                                    set_config                                                    
+------------------------------------------------------------------------------------------------------------------
+ {00000000-0000-7000-9000-0000000001f5,00000000-0000-7000-9000-0000000001f6,00000000-0000-7000-9000-0000000001f7}
+(1 row)
+
+--- (A) 圃場一覧（テナント分離＋スコープ restrictive）---
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on fld (actual time=0.103..6.305 rows=300 loops=1)
+   Recheck Cond: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+   Filter: ((field_group_id IS NULL) OR (field_group_id = ANY ((COALESCE(NULLIF(current_setting('app.scope_field_groups'::text, true), ''::text), '{}'::text))::uuid[])))
+   Rows Removed by Filter: 4700
+   Heap Blocks: exact=147
+   Buffers: shared hit=147 read=6
+   ->  Bitmap Index Scan on fld_tenant_id_field_group_id_idx (actual time=0.090..0.090 rows=5000 loops=1)
+         Index Cond: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+         Buffers: shared read=6
+ Planning:
+   Buffers: shared hit=29 read=2
+ Planning Time: 0.327 ms
+ Execution Time: 6.322 ms
+(13 rows)
+
+--- (B) 作業日誌一覧（非正規化 field_group_id で子テーブル絞り = R3-M1 可変テーブル経路）---
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on worklog (actual time=0.778..32.792 rows=1500 loops=1)
+   Recheck Cond: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+   Filter: ((field_group_id IS NULL) OR (field_group_id = ANY ((COALESCE(NULLIF(current_setting('app.scope_field_groups'::text, true), ''::text), '{}'::text))::uuid[])))
+   Rows Removed by Filter: 23500
+   Heap Blocks: exact=803
+   Buffers: shared hit=803 read=26
+   ->  Bitmap Index Scan on worklog_tenant_id_field_group_id_idx (actual time=0.722..0.722 rows=25000 loops=1)
+         Index Cond: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+         Buffers: shared read=26
+ Planning:
+   Buffers: shared hit=21 read=1
+ Planning Time: 0.097 ms
+ Execution Time: 32.851 ms
+(13 rows)
+
+--- (C) 参考: 子を field 経由サブクエリで絞る場合（採用しない案・性能比較用）---
+                                                                                                                                                     QUERY PLAN                                                                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather (actual time=0.685..15.451 rows=1500 loops=1)
+   Workers Planned: 2
+   Workers Launched: 2
+   Buffers: shared hit=5331
+   ->  Nested Loop (actual time=0.238..12.897 rows=500 loops=3)
+         Buffers: shared hit=5331
+         ->  Parallel Bitmap Heap Scan on worklog w (actual time=0.225..11.294 rows=500 loops=3)
+               Recheck Cond: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+               Filter: ((field_group_id IS NULL) OR (field_group_id = ANY ((COALESCE(NULLIF(current_setting('app.scope_field_groups'::text, true), ''::text), '{}'::text))::uuid[])))
+               Rows Removed by Filter: 7833
+               Heap Blocks: exact=306
+               Buffers: shared hit=829
+               ->  Bitmap Index Scan on worklog_tenant_id_field_group_id_idx (actual time=0.498..0.498 rows=25000 loops=1)
+                     Index Cond: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+                     Buffers: shared hit=26
+         ->  Index Scan using fld_pkey on fld (actual time=0.003..0.003 rows=1 loops=1500)
+               Index Cond: (id = w.field_id)
+               Filter: ((tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])) AND ((field_group_id IS NULL) OR (field_group_id = ANY ((COALESCE(NULLIF(current_setting('app.scope_field_groups'::text, true), ''::text), '{}'::text))::uuid[]))))
+               Buffers: shared hit=4502
+ Planning:
+   Buffers: shared hit=62 read=1
+ Planning Time: 0.241 ms
+ Execution Time: 15.504 ms
+(23 rows)
+
+===== S4 完了（(A)(B) の実時間が 500ms/p95 目安内か、(C) との差を確認） =====

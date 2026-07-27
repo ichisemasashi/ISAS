@@ -1,0 +1,274 @@
+# S1 実行ログ
+実行日: 2026-07-27
+PostgreSQL: PostgreSQL 14.23 (Homebrew) on aarch64-apple-darwin25.4.0, compiled by Apple clang version 21.0.0 (clang-2100.0.123.102), 64-bit
+PostGIS: 未導入（S2 はスキップ）
+
+## 00_common.sql
+psql:00_common.sql:22: NOTICE:  postgis 未導入: S2（空間）はスキップされる。S1/S4 は実行可能。
+psql:00_common.sql:27: NOTICE:  schema "part" does not exist, skipping
+psql:00_common.sql:28: NOTICE:  schema "priv" does not exist, skipping
+psql:00_common.sql:29: NOTICE:  schema "spike" does not exist, skipping
+psql:00_common.sql:92: NOTICE:  uuidv7_time: IMMUTABLE かつ時刻復元一致（診断用として維持）
+
+## S1_partition_rls_unique.sql
+
+=== (1) 遮断：他テナントは不可視 ===
+psql:S1_partition_rls_unique.sql:218: NOTICE:  PASS  (1) A のみ可視 (80件・B の40件は不可視)
+ ck 
+----
+ 
+(1 row)
+
+=== (2) 横断が通る：グループ管理者が allowed_tenants 内の他テナントを読む ===
+psql:S1_partition_rls_unique.sql:222: NOTICE:  PASS  (2) 横断で A+B が可視 (120件) ← permissive では成立しない形
+ ck 
+----
+ 
+(1 row)
+
+=== (3) 本人起点横断：allowed_tenants の外の自分の labor_summary が読める ===
+psql:S1_partition_rls_unique.sql:226: NOTICE:  PASS  (3) 形(b) で B の自分の行も可視 (2件)
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:228: NOTICE:  PASS  (3b) 他人(U2)では B の行は不可視 (1件)
+ ck 
+----
+ 
+(1 row)
+
+=== (4) ③共有行が見える＋横断で配下の上書きも見える ===
+psql:S1_partition_rls_unique.sql:232: NOTICE:  PASS  (4) 共有行＋A の上書き行が可視 (2件)
+ ck 
+----
+ 
+(1 row)
+
+=== (5) capability：無いと他者の位置ログが見えない／あると見える ===
+psql:S1_partition_rls_unique.sql:236: NOTICE:  PASS  (5a) cap 無し → 自分の分のみ (50件)
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:238: NOTICE:  PASS  (5b) cap 有り → 他者の分も可視 (80件)
+ ck 
+----
+ 
+(1 row)
+
+=== (6) 書込側：他テナント名義 INSERT / 行移送 / 共有行書込 の拒否 ===
+psql:S1_partition_rls_unique.sql:261: NOTICE:  PASS  (6a) 他テナント名義の labor_summary 追記を拒否
+psql:S1_partition_rls_unique.sql:261: NOTICE:  PASS  (6b) UPDATE による行移送を拒否
+psql:S1_partition_rls_unique.sql:261: NOTICE:  PASS  (6c) 一般ロールの共有行 INSERT を拒否
+=== (7) 冪等：受理台帳が再送を弾き、記録済み event_ts を返す ===
+psql:S1_partition_rls_unique.sql:281: NOTICE:  PASS  (7a) 再送は0件扱い
+psql:S1_partition_rls_unique.sql:281: NOTICE:  PASS  (7b) 記録済み event_ts が不変（サーバ採番でも決定性が保たれる）
+=== (8) クランプ：端末時計が ±1年ずれても ①-a が受理できる（IND3-H5）===
+psql:S1_partition_rls_unique.sql:298: NOTICE:  PASS  (8) 端末時計が -20年/+5年ずれても受理できた（クランプ後は必ずパーティション内）
+=== (9) 子テーブルの直接参照が拒否される（PG-H6）===
+psql:S1_partition_rls_unique.sql:310: NOTICE:  PASS  (9) 子テーブルの直接参照を拒否（part スキーマの USAGE 無し）
+=== (10) 注入漏れ：SET LOCAL を使った接続の「2回目」でも 0行（例外にならない）===
+psql:S1_partition_rls_unique.sql:319: NOTICE:  PASS  (10a) TX内では可視
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:320: NOTICE:  PASS  (10b) COMMIT後の「未設定」は NULL ではない（＝素のキャストなら 22P02 で落ちる状態）
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:321: NOTICE:  PASS  (10c) 正規化形なので 0行（素のキャストなら 22P02 で落ちる）
+ ck 
+----
+ 
+(1 row)
+
+=== (11) ブートストラップ（IND3-H1/PG-H5）===
+psql:S1_partition_rls_unique.sql:327: NOTICE:  PASS  (11a) auth_role が関数経由でテナント跨ぎ解決 (A,B の2件)
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:328: NOTICE:  PASS  (11b) 主張と引数が一致しないと0件
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:336: NOTICE:  PASS  (11c) auth_role の membership 直接参照を拒否（テーブル権限ゼロ）
+=== (12) FORCE RLS：所有者も従う ===
+psql:S1_partition_rls_unique.sql:341: NOTICE:  PASS  (12) 所有者でも注入無しなら 0行（FORCE RLS）
+ ck 
+----
+ 
+(1 row)
+
+=== (13) カタログ構造検査（ADR-0001 v16 §5 一段目）===
+psql:S1_partition_rls_unique.sql:346: NOTICE:  PASS  (13a) restrictive に TO 指定が付いていない
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:348: NOTICE:  PASS  (13b) permissive の述語が true 以外のものが無い
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:350: NOTICE:  PASS  (13c) restrictive に WITH CHECK が明示されている
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:355: NOTICE:  PASS  (13d) tenant_id 列を持つ表に restrictive が存在する
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:358: NOTICE:  PASS  (13e) part スキーマに通常ロールの権限が無い
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:359: NOTICE:  PASS  (13f) app_user は part の USAGE を持たない
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:363: NOTICE:  PASS  (13g) auth_role はいかなるテーブルにも直接権限を持たない
+ ck 
+----
+ 
+(1 row)
+
+psql:S1_partition_rls_unique.sql:365: NOTICE:  PASS  (13h) rolsuper/rolbypassrls を持つロールが一覧内（audit_writer のみ）
+ ck 
+----
+ 
+(1 row)
+
+=== (14) security_invoker ビュー（PG15+ のみ・PG14 ではスキップ）===
+psql:S1_partition_rls_unique.sql:380: WARNING:  SKIP  (14) security_invoker は PostgreSQL 15 以降が必要（現在 14.23 (Homebrew)）。本設計の最低要求は PG15（ADR-0004 §2.5）
+
+=== S1 完了 ===
+
+## EXPLAIN（プルーニングと索引利用の全文）
+SET
+SET
+SET
+SET
+--- (E1) RLS述語のみ：ハッシュ副軸のプルーニングは起きるか（PG-M1）---
+                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual time=0.145..0.146 rows=1 loops=1)
+   Buffers: shared hit=10
+   ->  Append (actual time=0.014..0.139 rows=81 loops=1)
+         Buffers: shared hit=10
+         Subplans Removed: 24
+         ->  Bitmap Heap Scan on location_log_2026_06_h0 location_log_1 (actual time=0.003..0.003 rows=0 loops=1)
+               Recheck Cond: (event_ts >= (now() - '30 days'::interval))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=1
+               ->  Bitmap Index Scan on location_log_2026_06_h0_pkey (actual time=0.002..0.002 rows=0 loops=1)
+                     Index Cond: (event_ts >= (now() - '30 days'::interval))
+                     Buffers: shared hit=1
+         ->  Bitmap Heap Scan on location_log_2026_06_h1 location_log_2 (actual time=0.001..0.001 rows=0 loops=1)
+               Recheck Cond: (event_ts >= (now() - '30 days'::interval))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=1
+               ->  Bitmap Index Scan on location_log_2026_06_h1_pkey (actual time=0.000..0.000 rows=0 loops=1)
+                     Index Cond: (event_ts >= (now() - '30 days'::interval))
+                     Buffers: shared hit=1
+         ->  Bitmap Heap Scan on location_log_2026_07_h0 location_log_3 (actual time=0.010..0.087 rows=81 loops=1)
+               Recheck Cond: (event_ts >= (now() - '30 days'::interval))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Heap Blocks: exact=1
+               Buffers: shared hit=2
+               ->  Bitmap Index Scan on location_log_2026_07_h0_pkey (actual time=0.004..0.004 rows=81 loops=1)
+                     Index Cond: (event_ts >= (now() - '30 days'::interval))
+                     Buffers: shared hit=1
+         ->  Bitmap Heap Scan on location_log_2026_07_h1 location_log_4 (actual time=0.043..0.043 rows=0 loops=1)
+               Recheck Cond: (event_ts >= (now() - '30 days'::interval))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Rows Removed by Filter: 40
+               Heap Blocks: exact=1
+               Buffers: shared hit=2
+               ->  Bitmap Index Scan on location_log_2026_07_h1_pkey (actual time=0.002..0.002 rows=40 loops=1)
+                     Index Cond: (event_ts >= (now() - '30 days'::interval))
+                     Buffers: shared hit=1
+         ->  Bitmap Heap Scan on location_log_2026_08_h0 location_log_5 (actual time=0.001..0.001 rows=0 loops=1)
+               Recheck Cond: (event_ts >= (now() - '30 days'::interval))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=1
+               ->  Bitmap Index Scan on location_log_2026_08_h0_pkey (actual time=0.000..0.000 rows=0 loops=1)
+                     Index Cond: (event_ts >= (now() - '30 days'::interval))
+                     Buffers: shared hit=1
+         ->  Bitmap Heap Scan on location_log_2026_08_h1 location_log_6 (actual time=0.001..0.001 rows=0 loops=1)
+               Recheck Cond: (event_ts >= (now() - '30 days'::interval))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=1
+               ->  Bitmap Index Scan on location_log_2026_08_h1_pkey (actual time=0.000..0.000 rows=0 loops=1)
+                     Index Cond: (event_ts >= (now() - '30 days'::interval))
+                     Buffers: shared hit=1
+         ->  Bitmap Heap Scan on location_log_2026_09_h0 location_log_7 (actual time=0.000..0.000 rows=0 loops=1)
+               Recheck Cond: (event_ts >= (now() - '30 days'::interval))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=1
+               ->  Bitmap Index Scan on location_log_2026_09_h0_pkey (actual time=0.000..0.000 rows=0 loops=1)
+                     Index Cond: (event_ts >= (now() - '30 days'::interval))
+                     Buffers: shared hit=1
+         ->  Bitmap Heap Scan on location_log_2026_09_h1 location_log_8 (actual time=0.000..0.001 rows=0 loops=1)
+               Recheck Cond: (event_ts >= (now() - '30 days'::interval))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=1
+               ->  Bitmap Index Scan on location_log_2026_09_h1_pkey (actual time=0.000..0.000 rows=0 loops=1)
+                     Index Cond: (event_ts >= (now() - '30 days'::interval))
+                     Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=1990
+ Planning Time: 3.757 ms
+ Execution Time: 0.259 ms
+(68 rows)
+
+--- (E2) アプリが tenant_id 等値を明示した場合 ---
+                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual time=0.100..0.101 rows=1 loops=1)
+   Buffers: shared hit=8
+   ->  Append (actual time=0.011..0.098 rows=81 loops=1)
+         Buffers: shared hit=8
+         Subplans Removed: 12
+         ->  Index Scan using location_log_2026_06_h0_pkey on location_log_2026_06_h0 location_log_1 (actual time=0.004..0.004 rows=0 loops=1)
+               Index Cond: ((tenant_id = '11111111-1111-7111-8111-111111111111'::uuid) AND (event_ts >= (now() - '30 days'::interval)))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=2
+         ->  Index Scan using location_log_2026_07_h0_pkey on location_log_2026_07_h0 location_log_2 (actual time=0.007..0.086 rows=81 loops=1)
+               Index Cond: ((tenant_id = '11111111-1111-7111-8111-111111111111'::uuid) AND (event_ts >= (now() - '30 days'::interval)))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=2
+         ->  Index Scan using location_log_2026_08_h0_pkey on location_log_2026_08_h0 location_log_3 (actual time=0.003..0.003 rows=0 loops=1)
+               Index Cond: ((tenant_id = '11111111-1111-7111-8111-111111111111'::uuid) AND (event_ts >= (now() - '30 days'::interval)))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=2
+         ->  Index Scan using location_log_2026_09_h0_pkey on location_log_2026_09_h0 location_log_4 (actual time=0.003..0.003 rows=0 loops=1)
+               Index Cond: ((tenant_id = '11111111-1111-7111-8111-111111111111'::uuid) AND (event_ts >= (now() - '30 days'::interval)))
+               Filter: (((user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid) OR ('view_others_tracks'::text = ANY ((COALESCE(NULLIF(current_setting('app.caps'::text, true), ''::text), '{}'::text))::text[]))) AND (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])))
+               Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=19
+ Planning Time: 0.532 ms
+ Execution Time: 0.132 ms
+(25 rows)
+
