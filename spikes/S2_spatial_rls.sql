@@ -1,11 +1,11 @@
 -- 【v2】文書 §4 の述語形（正規化形・関数ラップなし）に揃えた。
--- ⚠️ 本ファイルは PostGIS が必要。未導入環境では実行できない（2026-07-27 の再実行では未実行）。
---   PG-M2（RLS 下で非 leakproof な述語が索引条件に使えるか＝PostGIS の && / <-> の leakproof 性）は
---   本ファイルの再実行時に必ず EXPLAIN 全文で確認すること。
+-- ⚠️ 本ファイルは PostGIS が必要。
+--   2026-08-13 に PostgreSQL 16.4＋PostGIS 3.4.3 で実行し、&& / <-> が非leakproofであること、
+--   bbox の空間条件が Filter に落ちること、KNN は明示的 tenant_id 等値で複合GiSTを使うことを確認した。
 -- =====================================================================
 -- S2: PostGIS 空間クエリ × RLS 性能
 -- 設計書 v4 §6 field を検証。合格基準（5.2.1）: 地図初期表示 2秒/p95。
---   ・gist(tenant_id, geom) 複合索引で「tenant 絞り → 空間」の順にプルーニング
+--   ・gist(tenant_id, geom) 複合索引で「tenant 絞り → 空間」の順に絞り込めるか
 --   ・RLS 述語込みで近傍/包含クエリが索引を使う
 --   ・R2-L1/R4-L1: gis_area_sqm = ST_Area(geom::geography) を生成列にできるか（IMMUTABLE性）
 -- =====================================================================
@@ -66,16 +66,36 @@ RESET ROLE;
 -- ============ 計測 ============
 SET ROLE app_user;
 \set T '00000000-0000-7000-8000-000000000005'
-SET app.allowed_tenants = '{' || :'T' || '}';
+SELECT set_config('app.allowed_tenants', '{' || :'T' || '}', false);
 
-\echo '--- (A) RLS + 空間 bbox クエリ（複合索引が効くか / プルーニング）---'
+\echo '--- PostGIS演算子のleakproof属性（RLSバリアを越えて索引条件へ入る前提）---'
+SELECT o.oid::regoperator AS operator, p.oid::regprocedure AS function, p.proleakproof
+FROM pg_operator o JOIN pg_proc p ON p.oid = o.oprcode
+WHERE o.oprname IN ('&&','<->')
+  AND o.oprleft = 'geometry'::regtype AND o.oprright = 'geometry'::regtype
+ORDER BY o.oprname;
+
+\echo '--- (A1) RLSのみ + 空間 bbox（複合索引の空間列までIndex Condへ入るか）---'
 EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING ON)
 SELECT id FROM field
 WHERE geom && ST_MakeEnvelope(140.2, 38.1, 140.5, 38.4, 4326);
 
-\echo '--- (B) 近傍（KNN）クエリ ---'
+\echo '--- (A2) tenant_id等値をアプリが明示 + 空間 bbox ---'
 EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING ON)
 SELECT id FROM field
+WHERE tenant_id = :'T'::uuid
+  AND geom && ST_MakeEnvelope(140.2, 38.1, 140.5, 38.4, 4326);
+
+\echo '--- (B1) RLSのみ + 近傍（KNN）---'
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING ON)
+SELECT id FROM field
+ORDER BY geom <-> ST_SetSRID(ST_MakePoint(140.3, 38.2),4326)
+LIMIT 20;
+
+\echo '--- (B2) tenant_id等値をアプリが明示 + 近傍（KNN）---'
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING ON)
+SELECT id FROM field
+WHERE tenant_id = :'T'::uuid
 ORDER BY geom <-> ST_SetSRID(ST_MakePoint(140.3, 38.2),4326)
 LIMIT 20;
 
@@ -83,4 +103,4 @@ LIMIT 20;
 SELECT count(*) AS n, round(avg(gis_area_sqm)::numeric,2) AS avg_area_sqm FROM field;
 
 RESET ROLE;
-\echo '===== S2 完了（(A)(B) の Index Scan 使用・実時間、tenant 絞りの効きを確認） ====='
+\echo '===== S2 完了（A1/A2/B1/B2 の索引条件・実時間・Rows Removed を比較） ====='

@@ -51,6 +51,9 @@ GRANT app_owner, app_user, admin_role, auth_role, bootstrap_owner, audit_writer 
 CREATE SCHEMA part;   -- パーティション子（USAGE を通常ロールに与えない）
 CREATE SCHEMA priv;   -- 特権経路専用（同上）
 GRANT USAGE ON SCHEMA public TO app_owner, app_user, admin_role, auth_role, bootstrap_owner, audit_writer;
+-- PostgreSQL 15+ は public スキーマの CREATE を PUBLIC へ既定付与しない。
+-- DDL所有者だけに明示し、バージョン既定に依存せず文書のDDLをそのまま実行できるようにする。
+GRANT CREATE ON SCHEMA public TO app_owner;
 -- part / priv は「テーブル所有者だけが作成・管理する」。
 --   通常ロール（app_user）・認証ロールには USAGE を与えない ← これが PG-H6 / A1g-H1 の防御。
 GRANT USAGE, CREATE ON SCHEMA part, priv TO app_owner;

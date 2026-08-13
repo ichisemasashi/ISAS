@@ -357,22 +357,46 @@ SELECT ck(count(*) = 0, '(13e) part スキーマに通常ロールの権限が�
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='part' AND has_table_privilege('app_user', c.oid, 'SELECT');
 SELECT ck(NOT has_schema_privilege('app_user','part','USAGE'), '(13f) app_user は part の USAGE を持たない');
-SELECT ck(count(*) = 0, '(13g) auth_role はいかなるテーブルにも直接権限を持たない')
+SELECT ck(count(*) = 0, '(13g) auth_role は app_owner 所有のアプリ表に直接権限を持たない')
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE c.relkind IN ('r','p') AND n.nspname IN ('public','part','priv')
+    AND pg_get_userbyid(c.relowner) = 'app_owner'
     AND has_table_privilege('auth_role', c.oid, 'SELECT,INSERT,UPDATE,DELETE');
 SELECT ck(count(*) <= 1, '(13h) rolsuper/rolbypassrls を持つロールが一覧内（audit_writer のみ）')
   FROM pg_roles WHERE (rolsuper OR rolbypassrls) AND rolname NOT IN ('postgres') AND rolname <> 'audit_writer';
 
 \echo '=== (14) security_invoker ビュー（PG15+ のみ・PG14 ではスキップ）==='
 DO $$
+DECLARE
+  visible_count bigint;
+  visible_name text;
 BEGIN
   IF current_setting('server_version_num')::int >= 150000 THEN
     EXECUTE 'CREATE VIEW ac_eff WITH (security_invoker = true) AS
              SELECT DISTINCT ON (reg_key) * FROM agro_chemical
              ORDER BY reg_key, (tenant_id IS NOT NULL) DESC';
     EXECUTE 'GRANT SELECT ON ac_eff TO app_user';
-    RAISE NOTICE 'PASS(準備) security_invoker ビューを作成（実試験は別途）';
+
+    -- ビュー所有者（postgres）ではなく呼出元 app_user のRLS文脈で評価されることを実証する。
+    -- Aではテナント上書き、BではAの上書きが不可視になり共有行へフォールバックする。
+    EXECUTE 'SET LOCAL ROLE app_user';
+    PERFORM set_config('app.allowed_tenants',
+      '{11111111-1111-7111-8111-111111111111}', true);
+    SELECT count(*), max(name) INTO visible_count, visible_name FROM ac_eff;
+    IF visible_count <> 1 OR visible_name <> 'Aの上書き' THEN
+      RAISE EXCEPTION 'FAIL  (14a) Aでは上書き1件が見えるべき: count=%, name=%',
+        visible_count, visible_name;
+    END IF;
+
+    PERFORM set_config('app.allowed_tenants',
+      '{22222222-2222-7222-8222-222222222222}', true);
+    SELECT count(*), max(name) INTO visible_count, visible_name FROM ac_eff;
+    IF visible_count <> 1 OR visible_name <> '共有マスタ' THEN
+      RAISE EXCEPTION 'FAIL  (14b) BではAの上書きが不可視で共有1件へ戻るべき: count=%, name=%',
+        visible_count, visible_name;
+    END IF;
+    EXECUTE 'RESET ROLE';
+    RAISE NOTICE 'PASS  (14) security_invoker が呼出元RLSで評価（A=上書き／B=共有）';
   ELSE
     RAISE WARNING 'SKIP  (14) security_invoker は PostgreSQL 15 以降が必要（現在 %）。本設計の最低要求は PG15（ADR-0004 §2.5）',
       current_setting('server_version');

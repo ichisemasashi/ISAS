@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 |---|---|
 | 目的 | 設計文書群に書かれた **PostgreSQL の挙動に関する主張**が、実際の PostgreSQL の動作と一致しているかを検証する。**設計の良し悪しではなく「書かれていることが技術的に成立するか」**だけを見る。あわせて **`spikes/*.sql`（実際に実行されたSQL）と文書化された設計（データモデル設計書 §4/§6）が同一か**を突き合わせる。 |
-| 検証日 | 2026-07-27 |
+| 検証日 | 2026-07-27（初回）／**2026-08-13（PostgreSQL 16＋PostGIS追試）** |
 | 検証者 | **独立エージェント**（設計者のレビュー履歴・教訓を与えず、ADR本文＋データモデル設計書＋スパイクSQLのみ）。**ローカルに PostgreSQL 14.23 の一時クラスタを立て、文書の主張を実際にSQLで再現して確認**。 |
 | 設計者による再検証 | **最も影響の大きい2件（PG-H1／PG-H6）を設計者自身が別の一時クラスタで再実測し、いずれも指摘が正しいことを確認**（下記「設計者による再実測」）。 |
 | 対象文書 | [ADR-0001](ADR/ADR-0001-マルチテナント分離-行レベル-RLS.md)／[ADR-0003](ADR/ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)／[ADR-0004](ADR/ADR-0004-DB-PostgreSQL-PostGIS.md)／[データモデル設計書](データモデル設計書.md)／[spikes/](../../spikes/README.md) |
@@ -58,7 +58,7 @@ DETAIL:  Array value must start with "{" or dimension information.
 | PG-H1（**対応済 v15**） | **「未設定/空/不正は偽＝全拒否」は成立しない**。空/不正は**プラン時例外**（SQLSTATE 22P02）。`SET LOCAL` を一度使った接続では以後「未設定」が NULL ではなく `''` になる | ❌ 誤り | 未対応 |
 | PG-H2 | **文書の述語は配列リテラル `{...}` を要求するが、スパイクの注入値はカンマ区切り**。文書の述語＋スパイクの値の組合せは100%エラー。**「全PASS」は文書 §4 の述語を一度も実行していない** | ❌ 別物 | 未対応 |
 | PG-H3 | **基本 permissive を `TO app_role, auth_role` に限定すると、テーブル所有者が FORCE RLS 下で自表に読み書きできない**。**版履歴（`*_history`）の SECURITY DEFINER トリガと所有者経由の一括投入が壊れる**。「RLSは親 field に追随」という機構は**存在しない** | ⚠️ 条件付き（帰結の適用漏れ） | 未対応 |
-| PG-H4（**対応済 v16**） | **`agro_chemical_effective` ビューは基底表の RLS を「ビュー所有者」の文脈で評価する**。v7 設計と組み合わせると**誰が読んでも0行**。`security_invoker`（PG15+）の記述がどの文書にも無い。**ビューは `pg_policies` にも `relrowsecurity` にも現れないので検査1〜8のどれにも引っかからない** | ❌ 誤り | 未対応 |
+| PG-H4（**対応済 v16**） | **`agro_chemical_effective` ビューは基底表の RLS を「ビュー所有者」の文脈で評価する**。v7 設計と組み合わせると**誰が読んでも0行**。`security_invoker`（PG15+）の記述がどの文書にも無い。**ビューは `pg_policies` にも `relrowsecurity` にも現れないので検査1〜8のどれにも引っかからない** | ❌ 誤り | **対応済・PG16実測PASS** |
 | PG-H5（**対応済 v16**） | **ブートストラップ例外が ADR-0001 内部で自己矛盾**。`current_user = auth_role` 判定は **auth_role が直接 SELECT する**場合のみ真。SECURITY DEFINER 経由では関数所有者になり**第2項が常に偽→0行→自己ブロック再発**。§2(3)「membership の SELECT のみ」と §2 3b/§5「テーブル権限ゼロ・EXECUTE のみ」が両立しない | ❌ 誤り | 未対応 |
 | PG-H6（**対応済 v16**） | **FORCE RLS はパーティション子に伝播せず、子直接参照で RLS が完全に無効**。防御は「子に GRANT しない」だけだが `GRANT … ON ALL TABLES IN SCHEMA` で露出する。**パーティションは月次で自動生成される＝無防備な子が毎月増える** | ❌ 誤り | 未対応 |
 
@@ -67,13 +67,13 @@ DETAIL:  Array value must start with "{" or dimension information.
 | ID | 表題 | 判定 | ステータス |
 |---|---|---|---|
 | PG-M1 | **tenant_id ハッシュ副軸による「RLSプルーニング」は成立しない**。ハッシュプルーニングはプラン時定数を要求し、`current_setting()`／STABLE関数は該当しない。**§7 の S1 結果自身が証拠**（「July月の h0/h1 **のみ**scan」＝ハッシュ副軸は両方スキャンされている） | ❌ 誤り | 未対応 |
-| PG-M2 | **RLS 下では非 leakproof な述語が索引条件に使えなくなる**。PostGIS の `&&`／`<->` が LEAKPROOF でなければ `gist(tenant_id, geom)` は **tenant_id 側しか効かず空間条件は Filter に落ちる**。S2 の 6.9ms は「1テナント5,000件を索引で取り出して空間フィルタ」でも説明が付く＝**「tenant絞り→空間」の証拠にならない** | ⚠️ 要確認（PostGIS の leakproof 性） | 未対応 |
+| PG-M2 | **RLS 下では非 leakproof な述語が索引条件に使えなくなる**。PostGIS 3.4.3 の `&&`／`<->` は実測で非leakproof。`gist(tenant_id, geom)` は **tenant_id 側しか効かず、bboxの空間条件は `Filter` に落ちた** | ❌ **実測確認** | **設計処置待ち** |
 | PG-M3 | **restrictive 形(e)（③共有＋上書き）を `USING` のみで書くと、一般テナント接続が共有行を作れる／自テナント行を共有行に昇格できる**（`WITH CHECK` 省略時は `USING` が書込検査に流用される）。**検査項目は USING と `TO` と本数しか見ておらず WITH CHECK を一切見ない**。スパイク S4 の restrictive は全て `USING` のみ | ⚠️ 条件付き | 未対応 |
 | PG-M4 | **検査4/5（qual に `current_user`／`app.user_id` が現れるか）は関数ラップで無効化される**。しかも**スパイクの実SQLがそのラップ形**（`allowed_tenants()` 等）。ADR-0001 自身が禁じた「文字列比較」でもある。**代替＝`pg_policy`→`pg_depend`→`pg_proc` を辿る**（実測で依存が記録されることを確認） | ⚠️ 判定不能 | 未対応 |
 | PG-M5 | **「RLSを迂回できる主体の全列挙」に superuser が入っていない**。`CREATE ROLE … SUPERUSER` は `rolbypassrls = false` のまま RLS を迂回する（実測）。**BYPASSRLS はロールメンバーシップで継承されない**（`SET ROLE` して初めて有効） | ⚠️ 不完全 | 未対応 |
 | PG-M6 | **`information_schema.role_table_grants` はカレントロール依存**で、CI が非特権ロールで走ると**静かに合格する**（実測：r_app からは r_other への付与が見えない）。**代替＝`pg_class.relacl` ＋ `aclexplode()`**。列単位権限・`pg_default_acl`・PUBLIC 付与・関数/シーケンス権限は別カタログ | ⚠️ 偽の合格 | 未対応 |
 | PG-M7 | **パーティション子があるため検査1／3／6は素朴に実装すると成立しない**。素朴走査＝毎月増える子が全部違反として出る（ノイズで検査が無効化）／`relispartition` 除外＝**PG-H6 の実際の穴が検査から消える**。検査3「1本以上」では **PG-H3/H4（所有者に permissive が無い）を検出できない** | ⚠️ 条件付き | 未対応 |
-| PG-M8 | **KNN + RLS の増幅がテナント数に比例する**。`ORDER BY geom <-> p LIMIT 20` は自テナントの20件が揃うまで索引を走り続ける。20テナントでの 3.1ms は数百テナントでは桁が変わる（外挿できない） | ⚠️ 条件付き | 未対応 |
+| PG-M8 | **KNN + RLS の増幅がテナント数に比例する**。`ORDER BY geom <-> p LIMIT 20` は自テナントの20件が揃うまで索引を走り続ける。20テナントで276行をRLS除外。明示的な `tenant_id` 等値で複合GiSTを選択し、増幅を回避できた | ⚠️ **実測確認** | **設計処置・本番規模再測待ち** |
 | PG-M9 | **監査の append-only が BYPASSRLS の「範囲」を誤解している**。「audit_writer は INSERT のみだから権限集中を抑えられる」は不正確——**BYPASSRLS はそのロールに切り替わっている間、全テーブルの RLS を迂回する**（テーブル権限とは独立）。BYPASSRLS 所有の SECURITY DEFINER 関数は**関数内の全ての文が RLS を迂回**する | ⚠️ 理由付けが不正確 | 未対応 |
 
 ## Low（表現の不正確・バージョン注記）
@@ -161,6 +161,17 @@ restrictive は AND・permissive は OR ／ permissive 0本＝0行 ／ `TO` な�
 | `gen_random_uuid()` 組込み | PG13 以降 | §6 |
 | PgBouncer のトランザクションプーリング＋prepared statements | PgBouncer **1.21 以降** | ADR-0001（PG-L6）。**プーラの製品・版が未指定** |
 | PostGIS 関数の volatility / leakproof | PostGIS 版依存 | §6 生成列（PG-L10）、S2 の索引利用（PG-M2） |
+
+---
+
+## 2026-08-13 追試（PostgreSQL 16.4・PostGIS 3.4.3・arm64）
+
+使い捨てDocker環境で S1／S2 を再実行した。全文は [`S1_2026-08-13_PG16.log`](../../spikes/results/S1_2026-08-13_PG16.log)／[`S2_2026-08-13_PG16_PostGIS.log`](../../spikes/results/S2_2026-08-13_PG16_PostGIS.log)。
+
+- **PG-H4**：`security_invoker` ビューが呼出元RLSで評価され、テナントAにはAの上書き、Bには共有マスタが見えることを確認。S1 (14) はPASS。
+- **PG-M2**：`&&`／`<->` の実体関数はともに `proleakproof = false`。bboxはRLSのみで7.502ms、明示的な `tenant_id` 等値付きで3.335msだったが、どちらも空間 `&&` は `Filter` に残り、1テナント5,000行のうち1,546行を除外した。**性能値はSLO内でも、意図した複合索引の構造的合格基準には未達**。
+- **PG-M8**：RLSのみのKNNは `geom` 単独GiSTを使い、20行を得るまで他テナント276行を除外（1.233ms）。明示的な `tenant_id` 等値付きでは複合GiSTを使い0.137msとなり、読み捨ては発生しなかった。
+- **判定の限界**：10万行・単一接続の合成データでは全ケースが地図2秒SLO内だが、本番規模・並行負荷への外挿はしない。bboxの緩和策、KNNのクエリ規約、再測条件を設計で確定する必要がある。
 
 ---
 

@@ -27,8 +27,8 @@
 | ファイル | 内容 | 状態 |
 |---|---|---|
 | `00_common.sql` | 拡張・**ロール6種**（app_owner／app_user／**admin_role**／auth_role／**bootstrap_owner**／audit_writer）・**スキーマ `part`・`priv`**・UUIDv7ヘルパ・**`clamp_event_ts`** | ✅ |
-| `S1_partition_rls_unique.sql` | パーティション×RLS×冪等×FORCE RLS×**受理台帳**×**capability**×**ブートストラップ**×**子直接参照**×**注入漏れ** | ✅ **全項目PASS**（(14) のみ PG15 必須でスキップ） |
-| `S2_spatial_rls.sql` | 空間索引×RLS（**PostGIS 必須**） | ⏸ **未実行**（PostGIS 未導入） |
+| `S1_partition_rls_unique.sql` | パーティション×RLS×冪等×FORCE RLS×**受理台帳**×**capability**×**ブートストラップ**×**子直接参照**×**注入漏れ** | ✅ **全項目PASS**（PG16で (14) `security_invoker` の可視性も実測） |
+| `S2_spatial_rls.sql` | 空間索引×RLS（**PostGIS 必須**） | ⚠️ **実行済**（合成10万行ではSLO内。ただし PG-M2／PG-M8 の構造的課題を確認） |
 | `S4_rls_scale.sql` | RLS×規模（10万行・スコープ restrictive） | ✅ 実行済 |
 | `results/` | **実行ログと EXPLAIN 全文**（教訓16） | — |
 
@@ -49,6 +49,44 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 ```
 
 > **最低要求 PostgreSQL バージョンは 15 以上**（`security_invoker` ビュー。ADR-0004 §2.5）。**S1 の項目(14) は PG15 未満ではスキップされる。**
+
+---
+
+## 2026-08-13 の実行結果（PostgreSQL 16.4・PostGIS 3.4.3・arm64）
+
+実行ログ：[`S1_2026-08-13_PG16.log`](results/S1_2026-08-13_PG16.log)／[`S2_2026-08-13_PG16_PostGIS.log`](results/S2_2026-08-13_PG16_PostGIS.log)
+
+### S1：全項目 PASS（`security_invoker` を含む）
+
+- (14) はビューの作成確認だけでなく、**テナントAにはAの上書き、テナントBには共有マスタが見えること**を呼出元RLSの文脈で実測した。
+- PostgreSQL 15+ で必要な `security_invoker` が、設計どおり③共有＋上書きの解決に使えることを確認した。
+
+### S2：テスト規模ではSLO内、構造的課題あり
+
+合成データは20テナント×5,000行＝10万行。PostGIS の `&&(geometry, geometry)` と `<->(geometry, geometry)` は、いずれも **`proleakproof = false`** だった。
+
+| ケース | 実行時間 | 実行プランの要点 |
+|---|---:|---|
+| A1 RLSのみ＋bbox | 7.502 ms | 複合GiSTの `Index Cond` は `tenant_id` のみ。空間 `&&` は `Filter`、1,546行を除外 |
+| A2 `tenant_id` 等値を明示＋bbox | 3.335 ms | `tenant_id` は複合GiSTに入るが、空間 `&&` は引き続き `Filter`、1,546行を除外 |
+| B1 RLSのみ＋KNN | 1.233 ms | `geom` 単独GiSTを全テナント横断で走査し、20行を得るまで276行をRLSで除外 |
+| B2 `tenant_id` 等値を明示＋KNN | 0.137 ms | 複合GiSTで `tenant_id` を `Index Cond`、距離を `Order By` に使用。RLS除外による増幅なし |
+
+判定：
+
+- **性能値**はすべて地図初期表示2秒の基準内。ただし合成10万行・単一接続の結果であり、**本番規模・並行負荷の合格根拠にはしない**。
+- **PG-M2 を実測確認**：bbox は明示的な `tenant_id` 等値を加えても、非leakproofな `&&` が空間列の `Index Cond` に入らない。意図した「テナント絞り→空間索引」の構造的合格基準を満たさず、設計上の緩和策と再測が必要。
+- **PG-M8 を実測確認**：RLSだけのKNNは他テナント行を読み捨てる。テナント単位のKNNでは**アプリクエリに `tenant_id` 等値を明示することが有力な緩和策**だが、本番テナント数で再測してから確定する。
+
+実行に伴い、ハーネスも PostgreSQL 16 で再現可能な形へ修正した：検証DBを毎回再作成して文書どおり `public` で実行、PG15+の `public` スキーマ既定権限を明示付与、S2 のGUC注入を `set_config` に統一した。
+
+### 現在残る未完了
+
+| 項目 | 次にやること |
+|---|---|
+| **PG-M2／PG-M8 の設計処置** | bbox の緩和策を設計し、KNNの明示的 `tenant_id` 条件とともに本番規模・並行負荷で再測する |
+| **所有者・トリガ経路（版履歴・監査）** | `*_history` の書き手と `audit_writer` 経路を S1 に追加する |
+| **S5（監査並行性）／S7（同期整合）** | ADR-0004 v8 の合格基準を満たすシナリオを作成・実行する |
 
 ---
 
@@ -83,7 +121,7 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 - スコープ restrictive 込みの一覧が**実時間 15.5ms**（10万行・合成データ・単一ノード）。
 - **PG-M1 を実測で確認**：**RLS 述語だけでは tenant_id ハッシュ副軸のプルーニングが起きない**（S1 の EXPLAIN：RLS述語のみ→**h0/h1 の両方**をスキャン／アプリが `tenant_id = $1` を明示→**h0 のみ**）。**副軸の目的は書込分散と局所性であり、プルーニングにはアプリが明示的な `tenant_id` 等値述語を付けることが必要。**
 
-### 未実行（環境制約）
+### 2026-07-27 時点の未実行（履歴）
 
 | 項目 | 理由 | 次にやること |
 |---|---|---|

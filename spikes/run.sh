@@ -16,7 +16,10 @@ until docker compose exec -T db pg_isready -U postgres -d spike >/dev/null 2>&1;
 done
 echo " ready"
 
-echo "== 3) 共通セットアップ（拡張・ロール・UUIDv7）: 1回だけ =="
+echo "== 3) 使い捨て検証DBを再作成（文書どおり public で実行） =="
+docker compose exec -T db dropdb --if-exists -U postgres spike
+docker compose exec -T db createdb -U postgres spike
+echo "== 4) 共通セットアップ（拡張・ロール・UUIDv7）: 1回だけ =="
 $PSQL -f - < 00_common.sql
 
 run_one () {
@@ -25,12 +28,9 @@ run_one () {
   echo "########################################################"
   echo "# 実行: $f"
   echo "########################################################"
-  # public/postgis には触れず、専用スキーマ spike を作り直して隔離
-  $PSQL -c "DROP SCHEMA IF EXISTS spike CASCADE;
-            CREATE SCHEMA spike AUTHORIZATION app_owner;
-            GRANT USAGE ON SCHEMA spike TO app_user;" >/dev/null
-  # search_path を spike,public に固定して実行（postgis 型/関数は public から解決）
-  { echo "SET search_path = spike, public;"; cat "$f"; } | $PSQL -f -
+  # DB自体が使い捨てなので、文書と同じ public スキーマでSQL本文をそのまま実行する。
+  # 別スキーマへ差し替えると、固定search_pathを持つSECURITY DEFINER関数の検証が別物になる。
+  $PSQL -f - < "$f"
 }
 
 case "$TARGET" in

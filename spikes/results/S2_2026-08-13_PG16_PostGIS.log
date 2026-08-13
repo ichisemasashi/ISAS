@@ -1,0 +1,144 @@
+Environment: PostgreSQL 16.4 (Debian 16.4-1.pgdg120+2), aarch64; PostGIS 3.4.3
+Command: ./run.sh S2
+Result: executed successfully; performance within SLO at 100k synthetic rows, with structural RLS/index findings documented in spikes/README.md
+
+== 1) DB 起動 ==
+ Container spikes-db-1  Running
+== 2) ヘルスチェック待ち ==
+ ready
+== 3) 使い捨て検証DBを再作成（文書どおり public で実行） ==
+== 4) 共通セットアップ（拡張・ロール・UUIDv7）: 1回だけ ==
+psql:<stdin>:22: NOTICE:  postgis/btree_gist: 有効（S2 実行可）
+DO
+DROP SCHEMA
+psql:<stdin>:27: NOTICE:  schema "part" does not exist, skipping
+DROP SCHEMA
+psql:<stdin>:28: NOTICE:  schema "priv" does not exist, skipping
+psql:<stdin>:29: NOTICE:  schema "spike" does not exist, skipping
+DROP SCHEMA
+DO
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+GRANT ROLE
+CREATE SCHEMA
+CREATE SCHEMA
+GRANT
+GRANT
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+psql:<stdin>:95: NOTICE:  uuidv7_time: IMMUTABLE かつ時刻復元一致（診断用として維持）
+DO
+
+########################################################
+# 実行: S2_spatial_rls.sql
+########################################################
+SET
+SET
+psql:<stdin>:28: NOTICE:  S2 probe PASS: ST_Area(geography) は生成列に採用可（IMMUTABLE）
+DO
+CREATE TABLE
+INSERT 0 100000
+CREATE INDEX
+CREATE INDEX
+ANALYZE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+GRANT
+RESET
+SET
+               set_config
+----------------------------------------
+ {00000000-0000-7000-8000-000000000005}
+(1 row)
+
+--- PostGIS演算子のleakproof属性（RLSバリアを越えて索引条件へ入る前提）---
+        operator        |                   function                    | proleakproof
+------------------------+-----------------------------------------------+--------------
+ &&(geometry,geometry)  | geometry_overlaps(geometry,geometry)          | f
+ <->(geometry,geometry) | geometry_distance_centroid(geometry,geometry) | f
+(2 rows)
+
+--- (A1) RLSのみ + 空間 bbox（複合索引の空間列までIndex Condへ入るか）---
+                                                                                                             QUERY PLAN
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on field (actual time=6.512..7.343 rows=3454 loops=1)
+   Recheck Cond: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+   Filter: (geom && '0103000020E610000001000000050000006666666666866140CDCCCCCCCC0C434066666666668661403333333333334340000000000090614033333333333343400000000000906140CDCCCCCCCC0C43406666666666866140CDCCCCCCCC0C4340'::geometry)
+   Rows Removed by Filter: 1546
+   Heap Blocks: exact=157
+   Buffers: shared hit=1235
+   ->  Bitmap Index Scan on field_tenant_geom_gix (actual time=6.459..6.462 rows=5000 loops=1)
+         Index Cond: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+         Buffers: shared hit=1078
+ Planning:
+   Buffers: shared hit=54
+ Planning Time: 0.494 ms
+ Execution Time: 7.502 ms
+(13 rows)
+
+--- (A2) tenant_id等値をアプリが明示 + 空間 bbox ---
+                                                                                                             QUERY PLAN
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on field (actual time=2.246..3.207 rows=3454 loops=1)
+   Recheck Cond: ((tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])) AND (tenant_id = '00000000-0000-7000-8000-000000000005'::uuid))
+   Filter: (geom && '0103000020E610000001000000050000006666666666866140CDCCCCCCCC0C434066666666668661403333333333334340000000000090614033333333333343400000000000906140CDCCCCCCCC0C43406666666666866140CDCCCCCCCC0C4340'::geometry)
+   Rows Removed by Filter: 1546
+   Heap Blocks: exact=157
+   Buffers: shared hit=1235
+   ->  Bitmap Index Scan on field_tenant_geom_gix (actual time=2.224..2.224 rows=5000 loops=1)
+         Index Cond: ((tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])) AND (tenant_id = '00000000-0000-7000-8000-000000000005'::uuid))
+         Buffers: shared hit=1078
+ Planning:
+   Buffers: shared hit=6
+ Planning Time: 0.151 ms
+ Execution Time: 3.335 ms
+(13 rows)
+
+--- (B1) RLSのみ + 近傍（KNN）---
+                                                                QUERY PLAN
+------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.326..1.200 rows=20 loops=1)
+   Buffers: shared hit=296 read=10
+   ->  Index Scan using field_geom_gix on field (actual time=0.325..1.197 rows=20 loops=1)
+         Order By: (geom <-> '0101000020E61000009A999999998961409A99999999194340'::geometry)
+         Filter: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+         Rows Removed by Filter: 276
+         Buffers: shared hit=296 read=10
+ Planning:
+   Buffers: shared hit=16
+ Planning Time: 0.161 ms
+ Execution Time: 1.233 ms
+(11 rows)
+
+--- (B2) tenant_id等値をアプリが明示 + 近傍（KNN）---
+                                                                QUERY PLAN
+------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.062..0.126 rows=20 loops=1)
+   Buffers: shared hit=38
+   ->  Index Scan using field_tenant_geom_gix on field (actual time=0.062..0.125 rows=20 loops=1)
+         Index Cond: (tenant_id = '00000000-0000-7000-8000-000000000005'::uuid)
+         Order By: (geom <-> '0101000020E61000009A999999998961409A99999999194340'::geometry)
+         Filter: (tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[]))
+         Buffers: shared hit=38
+ Planning Time: 0.076 ms
+ Execution Time: 0.137 ms
+(9 rows)
+
+--- (C) 生成列 gis_area_sqm のサンプル ---
+  n   | avg_area_sqm
+------+--------------
+ 5000 | 530668939.59
+(1 row)
+
+RESET
+===== S2 完了（A1/A2/B1/B2 の索引条件・実時間・Rows Removed を比較） =====
+
+== 完了。結果は上のログ（PASS/NOTICE, EXPLAIN）を参照。停止は: docker compose down -v ==
