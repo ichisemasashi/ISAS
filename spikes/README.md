@@ -31,7 +31,7 @@
 | `S2_spatial_rls.sql` | 空間索引×RLS（**PostGIS 必須**） | ⚠️ **実行済**（合成10万行ではSLO内。ただし PG-M2／PG-M8 の構造的課題を確認） |
 | `S4_rls_scale.sql` | RLS×規模（10万行・スコープ restrictive） | ✅ 実行済 |
 | `S7_offline_sync.py` | オフライン同期の参照状態機械（束原子性・冪等・競合・在庫・カーソル・権限失効・移送・旧版保全） | ✅ **15シナリオ PASS** |
-| `S8_auth_context.sql` | BFF候補集合を現在のmembership／role／scope／tenant関係／双方向確認済み雇用関係へ再照合するDB検証関数 | ✅ **PG16で12群PASS**。参照DDLであり、ADR-0005再クローズ後に本番migrationへ昇格 |
+| `S8_auth_context.sql` | BFF候補集合を現在のmembership／role／scope／tenant関係／双方向確認済み雇用関係へ再照合するDB検証関数 | ✅ **PG16で12群PASS**。ADR-0005 v8採用済み。次工程で本番migrationへ昇格 |
 | `results/` | **実行ログと EXPLAIN 全文**（教訓16） | — |
 
 ---
@@ -71,7 +71,7 @@ S8は`app_private.validate_auth_context`を実DDL化し、次を**12群すべて
 - `app_user`は検証関数だけを実行でき、`priv`の権限基表を直接参照できない。
 - 関数は`auth_context_owner`所有の`SECURITY DEFINER`＋固定`search_path`。所有者はNOLOGIN・非superuser・非BYPASSRLSで、ログインロールへ委譲しない。
 
-S1も全15項目に加えて、関数所有者／BYPASSRLSロールがログインロールへ委譲されないカタログ検査をPASSした。S8の権限基表は**ADR-0005再クローズ用の参照物理形**であり、このPASSだけで本番migration確定とは扱わない。
+S1も全15項目に加えて、関数所有者／BYPASSRLSロールがログインロールへ委譲されないカタログ検査をPASSした。S8の権限基表は**ADR-0005 v8で採用した参照物理形**である。次工程では、このPASSに加えて版管理・失効イベント・索引・backfillを含む本番migration回帰へ移す。
 
 ## 2026-08-14 の実行結果（S7・Python 3.14.6）
 

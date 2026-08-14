@@ -174,7 +174,7 @@ ADR-0009が要求する「候補集合をDB側で現在権限へ再照合して�
 - 関数所有者`auth_context_owner`はNOLOGIN・非superuser・非BYPASSRLS、関数は`SECURITY DEFINER`＋固定`search_path`で、所有者ロールをログインロールへ委譲しないことをカタログ検査した。
 - 共通ロール定義から`bootstrap_owner`／`auth_context_owner`／`audit_writer`のログインロールへの明示GRANTを除去してS1を再実行し、RLS、ブートストラップ、版履歴、監査経路に退行がないことを確認した。
 
-**限定**：S8の権限基表はADR-0005の概念を実行可能にした参照物理形である。ADR-0005は再オープン中のため、本番migrationへの昇格は同ADRの再レビューと命名・版管理・失効イベント設計の確定後に行う。
+**限定**：S8の権限基表はADR-0005 v8で採用した参照物理形である。本番migrationへの昇格時に、命名・版管理・失効イベント・索引・backfillを追加し、同じ12群を回帰テストとして実行する。
 
 ---
 
