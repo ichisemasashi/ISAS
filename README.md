@@ -16,6 +16,7 @@
 | [docs/開発工程.md](docs/開発工程.md) | 全体工程・マイルストーン・現在地 |
 | [docs/design/ADR/](docs/design/ADR/README.md) | アーキテクチャ決定記録（一覧・優先度・状態の参照先） |
 | [docs/design/データモデル設計書.md](docs/design/データモデル設計書.md) | 論理/物理ERD・RLSポリシー・パーティション設計 |
+| [docs/CSVデータ移行・出力ガイド.md](docs/CSVデータ移行・出力ガイド.md) | CSV取込の列・重複検査・確定手順と出力仕様 |
 | [docs/design/PostgreSQL実挙動検証記録.md](docs/design/PostgreSQL実挙動検証記録.md) | 設計文書の PostgreSQL に関する主張を実測で検証した記録（スパイクSQLと文書の差異を含む） |
 | [docs/design/UXデザインシステム.md](docs/design/UXデザインシステム.md) | Phase 1のUXデザインシステム、IA、主要導線、UT計画 |
 | [spikes/](spikes/README.md) | 技術検証（PostgreSQL＋PostGIS の PoC ハーネス） |

@@ -25,6 +25,9 @@ ADR-0009の同一オリジンBFF境界と、ADR-0007/0008のMVP REST・同期面
 - `GET /api/v1/pesticide-bootstrap`：担当圃場の農薬マスタrelease（version／有効期限／最終同期）、失効日、適用作物、希釈範囲、使用上限、収穫前日数、当年使用履歴、在庫を返す。端末は圃場単位で保存し、オンライン時に強制更新する。
 - `POST /api/v1/pesticide-master/releases`：`pesticide:manage`を持つ管理者だけが、楽観版確認付きで鮮度期限のあるマスタreleaseを公開する。
 - `GET /api/v1/inventory`：追記型`stock_event`から導出した残高と、管理者向けマイナス在庫アラートを返す。入庫・出庫・棚卸し調整は`stock`同期イベントとして受理し、調整には`inventory:adjust`を再検証する。
+- `POST/GET /api/v1/migration-jobs`：`migration:manage`を持つ管理者が圃場・作業記録・農薬履歴CSVの列をマッピングし、ファイル内／DB内の重複と行エラーを業務表へ書き込む前に検査する。
+- `POST /api/v1/migration-jobs/:id/commit`：検査済みジョブだけを楽観ロック付きで確定する。確定時にも同時登録との重複を再検査し、取込元ジョブと行番号を保持する。
+- `GET /api/v1/exports/{fields,journals,pesticide-records}.csv`：`export:read`とRLS適用後の圃場台帳・作業日誌・農薬記録をUTF-8 CSVで返す。日誌と農薬記録は`from`／`to`日付を指定できる。
 - `POST /api/v1/sync/push`：tenant内の依存束を原子受理し、`(tenant_id,event_uuid)`受理台帳で再送を排除する。現在のcapability、membership version、authorization snapshotを受理時に再検証する。
 - `GET /api/v1/sync/pull`：`(tenant,scope,priority)`別cursorと取得開始時の上限を使う。P0と通常差分は独立cursorである。
 - `GET /api/v1/sync/queues`：権限変更による差し戻しと、フィールド単位の楽観競合を返す。
@@ -45,6 +48,7 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0004_work_management.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0005_journal_capture.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0006_journal_review.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0007_pesticide_inventory.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0008_data_migration.sql
 ```
 
 業務表はすべて`ENABLE/FORCE ROW LEVEL SECURITY`である。tenant policyをpermissive基底、field scopeと競合裁定capabilityをrestrictive条件にしてAND合成する。アプリ接続は必ず`app_user`を使う。
@@ -62,10 +66,12 @@ PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
   -f apps/bff/migrations/0005_journal_capture.sql \
   -f apps/bff/migrations/0006_journal_review.sql \
   -f apps/bff/migrations/0007_pesticide_inventory.sql \
+  -f apps/bff/migrations/0008_data_migration.sql \
   -f apps/bff/migrations/verify/0001_mvp_sync_verify.sql \
   -f apps/bff/migrations/verify/0003_field_gis_verify.sql \
   -f apps/bff/migrations/verify/0006_work_journal_verify.sql \
-  -f apps/bff/migrations/verify/0007_pesticide_inventory_verify.sql
+  -f apps/bff/migrations/verify/0007_pesticide_inventory_verify.sql \
+  -f apps/bff/migrations/verify/0008_data_migration_verify.sql
 ```
 
 ## アダプタの保証条件
@@ -85,4 +91,4 @@ npm test
 npm run check
 ```
 
-2026-08-14時点でBFF 39テスト、Web 24テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群がPASSしている。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。
+2026-08-14時点でBFF 49テスト、Web 26テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群がPASSしている。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。
