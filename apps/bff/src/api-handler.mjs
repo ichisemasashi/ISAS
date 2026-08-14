@@ -58,6 +58,24 @@ function correlationId(request) {
   return supplied && /^[A-Za-z0-9._-]{1,128}$/.test(supplied) ? supplied : crypto.randomUUID();
 }
 
+function fieldSearch(url) {
+  const bboxText = url.searchParams.get("bbox");
+  let bbox = null;
+  if (bboxText) {
+    bbox = bboxText.split(",").map(Number);
+    if (bbox.length !== 4 || bbox.some((value) => !Number.isFinite(value))
+      || bbox[0] < -180 || bbox[2] > 180 || bbox[1] < -90 || bbox[3] > 90
+      || bbox[0] >= bbox[2] || bbox[1] >= bbox[3]) throw new TypeError("invalid bbox");
+  }
+  const query = (url.searchParams.get("q") || "").trim();
+  if (query.length > 100) throw new TypeError("invalid query");
+  const limit = Number(url.searchParams.get("limit") || 200);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new TypeError("invalid limit");
+  const cursor = url.searchParams.get("cursor");
+  if (cursor && !/^[0-9a-f-]{36}$/i.test(cursor)) throw new TypeError("invalid cursor");
+  return { bbox, query, limit, cursor };
+}
+
 export function createMvpApiHandler({ origin, resolveContext, database, repository }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
 
@@ -72,6 +90,12 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
     try {
       if (request.method === "GET" && url.pathname === "/api/v1/today") {
         const result = await database.transaction(trusted, (client, canonical) => repository.getToday(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/fields") {
+        const search = fieldSearch(url);
+        const result = await database.transaction(trusted, (client, canonical) => repository.searchFields(client, canonical ? { ...trusted, authContext: canonical } : trusted, search), { readOnly: true });
         return json(200, result, requestId);
       }
 

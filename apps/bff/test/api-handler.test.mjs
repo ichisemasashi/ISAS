@@ -12,7 +12,10 @@ function fixture(capabilities = ["journal:write"]) {
     authorizationSnapshotId: "snapshot-1",
     authContext: { tenantId: "tenant-1", scopeFieldGroups: ["field-group-1"], capabilities },
   };
-  const memory = createMemoryMvpRepository({ tasks: [{ id: "task-1", tenantId: "tenant-1", time: "08:30", field: "北圃場", crop: "米", work: "水位確認", status: "今日" }] });
+  const memory = createMemoryMvpRepository({
+    tasks: [{ id: "task-1", tenantId: "tenant-1", time: "08:30", field: "北圃場", crop: "米", work: "水位確認", status: "今日" }],
+    fields: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", tenantId: "tenant-1", geometry: { type: "MultiPolygon", coordinates: [[[[140.3, 38.2], [140.31, 38.2], [140.31, 38.21], [140.3, 38.2]]]] }, properties: { name: "北圃場", cropName: "つや姫", areaSqm: 1000 } }],
+  });
   const handle = createMvpApiHandler({ origin: ORIGIN, resolveContext: async (request) => request.headers.get("Cookie") ? trusted : null, ...memory });
   const request = (path, init = {}) => new Request(`${ORIGIN}${path}`, { ...init, headers: { Cookie: "session=1", ...init.headers } });
   return { ...memory, handle, request };
@@ -86,5 +89,15 @@ describe("MVP REST and synchronization API", () => {
       method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json" }, body: JSON.stringify({ bundles: [{ bundleId: "bundle-1", events: [event()] }] }),
     }));
     assert.equal(response.status, 403);
+  });
+
+  test("returns assigned fields as GeoJSON and rejects an invalid bounding box", async () => {
+    const fx = fixture();
+    const response = await fx.handle(fx.request("/api/v1/fields?bbox=140.2,38.1,140.5,38.4&q=%E5%8C%97"));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.type, "FeatureCollection");
+    assert.equal(body.features[0].properties.name, "北圃場");
+    assert.equal((await fx.handle(fx.request("/api/v1/fields?bbox=140,38,139,39"))).status, 400);
   });
 });

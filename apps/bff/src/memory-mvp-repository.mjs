@@ -8,7 +8,7 @@ function clone(value) {
   return structuredClone(value);
 }
 
-export function createMemoryMvpRepository({ tasks = [] } = {}) {
+export function createMemoryMvpRepository({ tasks = [], fields = [] } = {}) {
   const receipts = new Map();
   const changes = [];
   const rejections = [];
@@ -22,6 +22,14 @@ export function createMemoryMvpRepository({ tasks = [] } = {}) {
   const repository = {
     async getToday(_client, trusted) {
       return { tasks: clone(tasks.filter((task) => !task.tenantId || task.tenantId === trusted.authContext.tenantId)), serverTime: new Date().toISOString() };
+    },
+
+    async searchFields(_client, trusted, { query, limit, cursor }) {
+      const visible = fields.filter((field) => (!field.tenantId || field.tenantId === trusted.authContext.tenantId)
+        && (!query || field.properties.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+        && (!cursor || field.id > cursor)).sort((a, b) => a.id.localeCompare(b.id)).slice(0, limit + 1);
+      const page = visible.slice(0, limit);
+      return { type: "FeatureCollection", features: clone(page), nextCursor: visible.length > limit ? page.at(-1).id : null };
     },
 
     async pushBundle(_client, trusted, bundle) {

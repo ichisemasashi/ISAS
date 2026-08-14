@@ -54,6 +54,34 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return { tasks: result.rows, serverTime: new Date().toISOString() };
     },
 
+    async searchFields(client, trusted, { bbox, query, limit, cursor }) {
+      const result = await client.query(`
+        SELECT field_id::text AS id, field_group_id::text AS field_group_id,
+               name, crop_name, status, gis_area_sqm, version,
+               ST_AsGeoJSON(geom, 7, 0)::json AS geometry
+        FROM app.field
+        WHERE tenant_id = $1::uuid
+          AND deleted_at IS NULL
+          AND ($2::uuid IS NULL OR field_id > $2::uuid)
+          AND ($3::text = '' OR lower(name) LIKE lower($3::text) || '%')
+          AND ($4::boolean = false OR geom && ST_MakeEnvelope($5, $6, $7, $8, 4326))
+        ORDER BY field_id
+        LIMIT $9`, [trusted.authContext.tenantId, cursor, query, Boolean(bbox), bbox?.[0] || 0, bbox?.[1] || 0, bbox?.[2] || 0, bbox?.[3] || 0, limit + 1]);
+      const rows = result.rows.slice(0, limit);
+      return {
+        type: "FeatureCollection",
+        features: rows.map((row) => ({
+          type: "Feature", id: row.id, geometry: row.geometry,
+          properties: {
+            id: row.id, fieldGroupId: row.field_group_id, name: row.name,
+            cropName: row.crop_name, status: row.status,
+            areaSqm: Number(row.gis_area_sqm), version: Number(row.version),
+          },
+        })),
+        nextCursor: result.rows.length > limit ? rows.at(-1).id : null,
+      };
+    },
+
     async pushBundle(client, trusted, bundle) {
       const tenantId = trusted.authContext.tenantId;
       const allReceipts = await client.query(`

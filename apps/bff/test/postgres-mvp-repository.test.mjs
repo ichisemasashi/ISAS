@@ -15,6 +15,18 @@ test("PostgreSQL repository reads the task projection behind RLS", async () => {
   assert.doesNotMatch(calls[0].sql, /tenant_id\s*=\s*\$\d/);
 });
 
+test("PostGIS repository makes tenant equality and bbox explicit while returning GeoJSON", async () => {
+  const calls = [];
+  const client = { async query(sql, values) { calls.push({ sql, values }); return { rows: [{ id: "0198a6c0-0000-7000-8000-000000000101", field_group_id: "f1111111-1111-7111-8111-111111111111", name: "北圃場", crop_name: "つや姫", status: "active", gis_area_sqm: "1234.5", version: "1", geometry: { type: "MultiPolygon", coordinates: [] } }] }; } };
+  const repository = createPostgresMvpRepository();
+  const result = await repository.searchFields(client, { authContext: { tenantId: T1 } }, { bbox: [140.2, 38.1, 140.5, 38.4], query: "北", limit: 200, cursor: null });
+  assert.equal(result.type, "FeatureCollection");
+  assert.equal(result.features[0].properties.areaSqm, 1234.5);
+  assert.match(calls[0].sql, /tenant_id = \$1::uuid/);
+  assert.match(calls[0].sql, /geom && ST_MakeEnvelope/);
+  assert.deepEqual(calls[0].values.slice(0, 8), [T1, null, "北", true, 140.2, 38.1, 140.5, 38.4]);
+});
+
 test("PostgreSQL repository records an authorization change instead of dropping the event", async () => {
   const calls = [];
   const client = {
