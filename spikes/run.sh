@@ -1,11 +1,30 @@
 #!/usr/bin/env bash
 # M4 スパイク実行スクリプト
 # 前提: Docker Desktop 起動済み（docker info が通ること）
-# 使い方: cd spikes && ./run.sh [S1|S2|S4|all]
+# 使い方: cd spikes && ./run.sh [S1|S2|S4|S7|all]
 set -euo pipefail
 cd "$(dirname "$0")"
 
 TARGET="${1:-all}"
+
+run_s7 () {
+  echo ""
+  echo "########################################################"
+  echo "# 実行: S7_offline_sync.py"
+  echo "########################################################"
+  python3 S7_offline_sync.py
+}
+
+# S7 は同期プロトコルの状態機械スパイクで、DB/Docker に依存しない。
+if [[ "$TARGET" == "S7" ]]; then
+  run_s7
+  exit 0
+fi
+if [[ "$TARGET" != "S1" && "$TARGET" != "S2" && "$TARGET" != "S4" && "$TARGET" != "all" ]]; then
+  echo "unknown target: $TARGET (S1|S2|S4|S7|all)"
+  exit 1
+fi
+
 PSQL="docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d spike"
 
 echo "== 1) DB 起動 =="
@@ -41,8 +60,8 @@ case "$TARGET" in
   all)
      run_one S1_partition_rls_unique.sql
      run_one S2_spatial_rls.sql
-     run_one S4_rls_scale.sql ;;
-  *) echo "unknown target: $TARGET (S1|S2|S4|all)"; exit 1 ;;
+     run_one S4_rls_scale.sql
+     run_s7 ;;
 esac
 
 echo ""

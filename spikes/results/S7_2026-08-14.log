@@ -1,0 +1,29 @@
+----------------------------------------------------------------------
+Ran 15 tests in 0.050s
+
+OK
+S7 offline synchronization spike
+python: 3.14.6
+[PASS] test_01_minimal_bundle_is_atomic_and_tenant_local
+[PASS] test_02_retry_is_idempotent_and_key_is_stable
+[PASS] test_03_layer2_merges_disjoint_fields_and_preserves_conflicts
+[PASS] test_04_inventory_serializes_and_exposes_both_times
+[PASS] test_05_inventory_concurrency_never_goes_negative
+[PASS] test_06_pull_has_scope_cursor_snapshot_and_all_write_paths
+[PASS] test_07_priority_scheduler_keeps_p0_ahead_of_p2
+[PASS] test_08_revoked_permission_is_preserved_with_recovery_action
+[PASS] test_09_dependency_graph_propagates_releases_and_rejects_cycles
+[PASS] test_10_clock_skew_keeps_statutory_record_and_flags_business_time
+[PASS] test_11_scope_regrant_is_bounded_and_cursor_is_independent
+[PASS] test_12_move_freeze_redirect_retry_and_chain_verification
+[PASS] test_13_force_update_waits_for_outbox_or_export_and_quarantines_old_record
+[PASS] test_14_missing_shard_is_partial_never_complete
+[PASS] test_15_weak_reference_break_is_detected_without_cross_tenant_fk
+metrics:
+  inventory_500_requests_ms: 26.7
+  p0_select_amid_10000_p2_ms: 0.366
+  regrant_bytes: 8192
+  regrant_estimated_seconds_at_1mbps: 0.066
+  regrant_model_ms: 0.006
+  regrant_rows: 15
+RESULT: PASS (15/15)

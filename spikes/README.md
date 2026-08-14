@@ -30,6 +30,7 @@
 | `S1_partition_rls_unique.sql` | パーティション×RLS×冪等×FORCE RLS×**受理台帳**×**capability**×**ブートストラップ**×**子直接参照**×**注入漏れ**×**版履歴・監査トリガ** | ✅ **全項目PASS**（PG16で (14) `security_invoker`、(15) 所有者・トリガ・監査経路も実測） |
 | `S2_spatial_rls.sql` | 空間索引×RLS（**PostGIS 必須**） | ⚠️ **実行済**（合成10万行ではSLO内。ただし PG-M2／PG-M8 の構造的課題を確認） |
 | `S4_rls_scale.sql` | RLS×規模（10万行・スコープ restrictive） | ✅ 実行済 |
+| `S7_offline_sync.py` | オフライン同期の参照状態機械（束原子性・冪等・競合・在庫・カーソル・権限失効・移送・旧版保全） | ✅ **15シナリオ PASS** |
 | `results/` | **実行ログと EXPLAIN 全文**（教訓16） | — |
 
 ---
@@ -40,6 +41,9 @@
 # Docker（PostGIS 込み。S2 を含む全スパイク）
 open -a Docker && ./run.sh
 
+# S7だけ（Python 3のみ。Docker/DB不要）
+./run.sh S7
+
 # ローカル PostgreSQL（PostGIS 無しでも S1/S4 は実行可能）
 export PATH=/opt/homebrew/opt/postgresql@NN/bin:$PATH
 initdb -D /tmp/pg/data -U postgres -A trust
@@ -49,6 +53,22 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 ```
 
 > **最低要求 PostgreSQL バージョンは 15 以上**（`security_invoker` ビュー。ADR-0004 §2.5）。**S1 の項目(14) は PG15 未満ではスキップされる。**
+
+## 2026-08-14 の実行結果（S7・Python 3.14.6）
+
+実行ログ：[`S7_2026-08-14.log`](results/S7_2026-08-14.log)
+
+S7は、ADR-0007/0008の同期契約を実行可能な参照状態機械にし、次の15シナリオを検証して**全件PASS**した。
+
+- 最小依存束の全成功/全保留、tenant跨ぎ・最大サイズ超過の拒否、再送キー不変と重複ゼロ
+- ②の非競合フィールド自動マージ、競合候補の耐久保全、依存グラフの凍結・解除・循環/深さ上限
+- 在庫500並行要求の資材単位直列化（受理100、裁定400、残高0、負数なし）と、`occurred_at`/受理時刻の裁定材料保持
+- `(shard, scope)` カーソル、固定上限スナップショット、①/②の共通変更ログ、P2 10,000件中のP0先行
+- 権限失効時の法定記録保全、±1年の端末時計でも①-a受理、14日保持窓の再付与初回pull
+- 移送凍結中のoutbox保持、旧shardからのredirect、再送冪等、移送後チェーン再検証
+- 強制更新前のoutbox保護、変換不能旧版原文のquarantine、1 shard欠損時の`partial`、弱参照切れ検知
+
+計測値は、在庫500要求が26.7 ms、P2 10,000件からのP0選択が0.366 ms、再付与モデルが15行/8,192 bytes（1 Mbps換算0.066秒）だった。これは**インメモリ参照モデルの構造検証値**であり、実ネットワーク、写真、PostgreSQL、RLS、複数プロセスを含む本番SLOの合格根拠ではない。本番規模・並行負荷、P0予約プール、再付与頻度/実データ量はADR-0019/0020の数値確定後に統合負荷試験する。
 
 ---
 
@@ -88,7 +108,8 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 | 項目 | 次にやること |
 |---|---|
 | **PG-M2／PG-M8 の設計処置** | bbox の緩和策を設計し、KNNの明示的 `tenant_id` 条件とともに本番規模・並行負荷で再測する |
-| **S5（監査並行性）／S7（同期整合）** | ADR-0004 v8 の合格基準を満たすシナリオを作成・実行する |
+| **S5（監査並行性）** | ADR-0004 v8 の合格基準を満たすシナリオを作成・実行する |
+| **S7の統合負荷再測** | ADR-0019/0020で本番想定値を確定後、実DB・実ネットワーク・写真・複数プロセスでSLOを測る |
 
 ---
 
