@@ -10,6 +10,7 @@ ADR-0009の同一オリジンBFF境界を、Node.js標準APIだけで実装し�
 - `POST /api/bff/contexts`：Origin、CSRF、JSONを検証し、現在権限から短TTLのタブ用contextを発行する。
 - `POST /api/bff/logout`：session/contextを失効し、IdP token失効アダプタを呼ぶ。
 - `createContextResolver`：Cookieと`X-ISAS-Context`の束縛、期限、用途、現在権限を再検証し、業務API／DBアダプタだけが使う信頼済みAuthContextを返す。外部HTTPのuser／role／capabilityヘッダは入力に使わない。
+- `createPostgresAuthContextAdapter`：`app_user`が非所有者・非superuser・非BYPASSRLSであることを確認し、`app_private.validate_auth_context(...)`が返した正規値だけを同一トランザクション内のGUCへ注入する。業務コールバックには`SET`、`set_config`、transaction制御を許さない制限付きclientを渡す。
 
 ## アダプタの保証条件
 
@@ -18,6 +19,7 @@ ADR-0009の同一オリジンBFF境界を、Node.js標準APIだけで実装し�
 - `users.resolve`は`(issuer, subject)`だけを不変キーとして内部userを解決し、メールによる自動結合をしない。
 - `authorization.listTenants`と`deriveContext`は認証専用DB経路から現在の所属・role・scope・capabilityを導出する。context IDや過去のsnapshotを権限の真実源にしない。
 - `stores`の本番実装はsession ID、state、context IDのハッシュだけをキーとして保存し、絶対期限を持つ。メモリ実装は自動テスト専用であり、本番利用しない。
+- PostgreSQL poolは`app_user`へ直接接続し、`app_private.validate_auth_context(user_id, tenant_id, allowed_tenants, scope_field_groups, caps, employer_subject_users)`を呼べるものとする。この関数は現在のmembership／role／scopeから包含関係を検査して正規値を1行返し、不正・失効時は0行を返す。関数DDLと実DB試験は未実装であり、アダプタ単体テストの成功をDB権限検証済みとは扱わない。
 
 ## 検証
 

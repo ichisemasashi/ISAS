@@ -43,7 +43,7 @@ npm test
 npm run check
 ```
 
-本番HTTPサーバ、具体的なOIDC IdP、永続session store、PostgreSQL AuthContext注入はアダプタとして接続する。境界とアダプタ保証条件は[apps/bff/README.md](apps/bff/README.md)を参照する。
+PostgreSQL AuthContextトランザクションアダプタまでは実装済み。本番HTTPサーバ、具体的なOIDC IdP、永続session store、DB検証関数と実pool/driverを接続する必要がある。境界とアダプタ保証条件は[apps/bff/README.md](apps/bff/README.md)を参照する。
 
 ## 進め方（プロジェクトを貫く原則）
 

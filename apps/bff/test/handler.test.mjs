@@ -48,6 +48,7 @@ function fixture() {
         roleLabel: "現場チーム",
         membershipVersion: "membership-1",
         authorizationSnapshotId: "snapshot-1",
+        actorPseudonym: "actor-user-1",
         scopeFieldGroups: ["field-group-1"],
         capabilities: ["journal:write"],
       };
@@ -174,6 +175,7 @@ describe("BFF OIDC and session boundary", () => {
     }));
 
     assert.equal(trusted.userId, "user-1");
+    assert.equal(trusted.actorPseudonym, "actor-user-1");
     assert.deepEqual(trusted.authContext, {
       userId: "user-1",
       tenantId: "tenant-1",
