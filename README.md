@@ -17,8 +17,22 @@
 | [docs/design/ADR/](docs/design/ADR/README.md) | アーキテクチャ決定記録（一覧・優先度・状態の参照先） |
 | [docs/design/データモデル設計書.md](docs/design/データモデル設計書.md) | 論理/物理ERD・RLSポリシー・パーティション設計 |
 | [docs/design/PostgreSQL実挙動検証記録.md](docs/design/PostgreSQL実挙動検証記録.md) | 設計文書の PostgreSQL に関する主張を実測で検証した記録（スパイクSQLと文書の差異を含む） |
+| [docs/design/UXデザインシステム.md](docs/design/UXデザインシステム.md) | Phase 1のUXデザインシステム、IA、主要導線、UT計画 |
 | [spikes/](spikes/README.md) | 技術検証（PostgreSQL＋PostGIS の PoC ハーネス） |
+| [apps/web/](apps/web/) | React＋TypeScript＋PWAによるPhase 1 MVPフロントエンド |
 | `docs/**/レビュー記録_*.md`、`docs/要求仕様書_敵対的レビュー記録票_*.md` | 敵対的レビューの監査証跡 |
+
+## MVPフロントエンド
+
+```bash
+cd apps/web
+pnpm install
+pnpm dev       # http://127.0.0.1:4173
+pnpm test
+pnpm build
+```
+
+現時点では「今日の作業→打刻→日誌」「農薬安全確認」の最初の縦切りを実装している。Phase 1全体の完了状況は[開発工程.md §6](docs/開発工程.md#6-マイルストーンと現在地)を参照する。
 
 ## 進め方（プロジェクトを貫く原則）
 

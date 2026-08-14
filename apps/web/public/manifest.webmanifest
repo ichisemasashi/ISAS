@@ -1,0 +1,13 @@
+{
+  "name": "ISAS 現場作業",
+  "short_name": "ISAS",
+  "description": "圃場で使えるオフライン対応の営農支援アプリ",
+  "lang": "ja",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1e8",
+  "theme_color": "#174f3a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
