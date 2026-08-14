@@ -282,20 +282,27 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
                journal.field_id::text AS field_id, field.name AS field_name,
                journal.worker_user_id::text AS worker_user_id, journal.body, journal.status,
                journal.version, journal.submitted_at, journal.updated_at,
+               latest_return.reason AS return_reason,
                coalesce(jsonb_agg(jsonb_build_object('id', attachment.attachment_id::text,
                  'fileName', attachment.file_name, 'contentType', attachment.content_type))
                  FILTER (WHERE attachment.attachment_id IS NOT NULL), '[]'::jsonb) AS attachments
         FROM app.work_journal journal
         LEFT JOIN app.field field ON field.tenant_id = journal.tenant_id AND field.field_id = journal.field_id
         LEFT JOIN app.journal_attachment attachment ON attachment.tenant_id = journal.tenant_id AND attachment.journal_id = journal.journal_id
+        LEFT JOIN LATERAL (
+          SELECT revision.reason FROM app.journal_revision revision
+          WHERE revision.tenant_id = journal.tenant_id AND revision.journal_id = journal.journal_id
+            AND revision.action = 'returned'
+          ORDER BY revision.created_at DESC LIMIT 1
+        ) latest_return ON true
         WHERE journal.tenant_id = app.current_tenant_id()
           AND (journal.worker_user_id = app.current_user_id() OR app.has_capability('journal:review'))
-        GROUP BY journal.tenant_id, journal.journal_id, field.name
+        GROUP BY journal.tenant_id, journal.journal_id, field.name, latest_return.reason
         ORDER BY journal.updated_at DESC LIMIT 100`);
       return { journals: result.rows.map((row) => ({
         id: row.id, instructionId: row.instruction_id, fieldId: row.field_id, fieldName: row.field_name,
         workerUserId: row.worker_user_id, body: row.body, status: row.status, version: Number(row.version),
-        submittedAt: new Date(row.submitted_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(), attachments: row.attachments,
+        returnReason: row.return_reason, submittedAt: new Date(row.submitted_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(), attachments: row.attachments,
       })) };
     },
 

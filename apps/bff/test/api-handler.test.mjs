@@ -176,6 +176,8 @@ describe("MVP REST and synchronization API", () => {
     }));
     assert.equal(returned.status, 200);
     assert.equal((await returned.json()).status, "returned");
+    const listed = await fx.handle(fx.request("/api/v1/journals")).then((response) => response.json());
+    assert.equal(listed.journals[0].returnReason, "終了時刻を確認してください");
 
     const corrected = await fx.handle(pushRequest(fx, [{ bundleId: "bundle-correction", events: [event({ eventUuid: "0198a6c0-0000-7000-8000-000000000302", payload: { aggregateId: journalId, baseVersion: 2, baseValue: { memo: "旧値" }, correctionReason: "終了時刻を訂正", changes: { memo: "訂正値" } } })] }])).then((response) => response.json());
     assert.equal(corrected.results[0].status, "accepted");

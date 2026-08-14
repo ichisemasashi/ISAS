@@ -79,7 +79,7 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       const item = journals.find((row) => row.id === journalId && row.tenantId === trusted.authContext.tenantId);
       if (!item) throw new TypeError("unknown journal");
       if (item.version !== input.expectedVersion) { const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = item.version; throw error; }
-      item.status = input.action === "approve" ? "approved" : "returned"; item.version += 1;
+      item.status = input.action === "approve" ? "approved" : "returned"; item.returnReason = input.action === "return" ? input.reason : null; item.version += 1;
       return { id: item.id, status: item.status, version: item.version, updatedAt: new Date().toISOString() };
     },
 
