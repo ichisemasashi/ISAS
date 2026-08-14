@@ -1,0 +1,121 @@
+import { timingSafeEqual } from "node:crypto";
+
+const MAX_PUSH_BYTES = 1024 * 1024;
+const MAX_BUNDLES = 100;
+const MAX_EVENTS_PER_BUNDLE = 100;
+
+function json(status, body, correlationId, contentType = "application/json; charset=utf-8") {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": contentType,
+      "X-Correlation-ID": correlationId,
+    },
+  });
+}
+
+function problem(status, type, title, correlationId, detail, extra = {}) {
+  return json(status, { type, title, status, detail, correlationId, ...extra }, correlationId, "application/problem+json; charset=utf-8");
+}
+
+function equalSecret(left, right) {
+  const a = Buffer.from(left || "");
+  const b = Buffer.from(right || "");
+  return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
+}
+
+function validWrite(request, origin, csrfToken) {
+  const fetchSite = request.headers.get("Sec-Fetch-Site");
+  return request.headers.get("Origin") === origin
+    && (!fetchSite || fetchSite === "same-origin")
+    && equalSecret(request.headers.get("X-CSRF-Token"), csrfToken);
+}
+
+async function readPush(request) {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("Content-Type") || "")) throw new TypeError("content_type");
+  const declared = Number(request.headers.get("Content-Length") || 0);
+  if (declared > MAX_PUSH_BYTES) throw new RangeError("push_too_large");
+  const text = await request.text();
+  if (Buffer.byteLength(text) > MAX_PUSH_BYTES) throw new RangeError("push_too_large");
+  const body = JSON.parse(text || "{}");
+  if (!body || !Array.isArray(body.bundles) || body.bundles.length < 1 || body.bundles.length > MAX_BUNDLES) throw new TypeError("bundles");
+  for (const bundle of body.bundles) {
+    if (!bundle || typeof bundle.bundleId !== "string" || !bundle.bundleId || !Array.isArray(bundle.events)
+      || bundle.events.length < 1 || bundle.events.length > MAX_EVENTS_PER_BUNDLE) throw new TypeError("bundle");
+    for (const event of bundle.events) {
+      if (!event || typeof event.eventUuid !== "string" || !event.eventUuid || typeof event.kind !== "string"
+        || typeof event.occurredAt !== "string" || !event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
+        throw new TypeError("event");
+      }
+    }
+  }
+  return body;
+}
+
+function correlationId(request) {
+  const supplied = request.headers.get("X-Correlation-ID");
+  return supplied && /^[A-Za-z0-9._-]{1,128}$/.test(supplied) ? supplied : crypto.randomUUID();
+}
+
+export function createMvpApiHandler({ origin, resolveContext, database, repository }) {
+  if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
+
+  return async function handle(request) {
+    const requestId = correlationId(request);
+    const url = new URL(request.url);
+    if (url.origin !== origin || !url.pathname.startsWith("/api/v1/")) return problem(404, "not_found", "Not found", requestId);
+
+    const trusted = await resolveContext(request);
+    if (!trusted) return problem(401, "authentication_required", "Authentication required", requestId);
+
+    try {
+      if (request.method === "GET" && url.pathname === "/api/v1/today") {
+        const result = await database.transaction(trusted, (client) => repository.getToday(client, trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/sync/push") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const input = await readPush(request);
+        const results = [];
+        // Each dependency bundle is its own atomic unit. One rejected bundle must not roll back an independent bundle.
+        for (const bundle of input.bundles) {
+          results.push(await database.transaction(trusted, (client) => repository.pushBundle(client, trusted, bundle)));
+        }
+        return json(200, { results }, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/sync/pull") {
+        const scope = url.searchParams.get("scope");
+        const priority = url.searchParams.get("priority") || "normal";
+        const cursor = url.searchParams.get("cursor");
+        if (!scope || !["priority", "normal"].includes(priority)) return problem(400, "invalid_request", "Invalid pull request", requestId);
+        const result = await database.transaction(trusted, (client) => repository.pull(client, trusted, { scope, priority, cursor }), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/sync/queues") {
+        const result = await database.transaction(trusted, (client) => repository.getQueues(client, trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      const conflictMatch = url.pathname.match(/^\/api\/v1\/sync\/conflicts\/([^/]+)\/resolve$/);
+      if (request.method === "POST" && conflictMatch) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await request.json();
+        if (!body || typeof body.resolution !== "object" || Array.isArray(body.resolution)) return problem(400, "invalid_request", "Invalid conflict resolution", requestId);
+        const result = await database.transaction(trusted, (client) => repository.resolveConflict(client, trusted, decodeURIComponent(conflictMatch[1]), body.resolution));
+        return json(200, result, requestId);
+      }
+
+      return problem(404, "not_found", "Not found", requestId);
+    } catch (error) {
+      if (error instanceof SyntaxError || error instanceof TypeError) return problem(400, "invalid_request", "Invalid request", requestId);
+      if (error instanceof RangeError) return problem(413, "request_too_large", "Request too large", requestId);
+      if (error?.code === "scope_revoked") return problem(409, "scope_revoked", "Scope was revoked", requestId, undefined, { purgeScope: error.scope });
+      if (error?.code === "forbidden") return problem(403, "forbidden", "Forbidden", requestId);
+      return problem(500, "request_failed", "Request failed", requestId);
+    }
+  };
+}

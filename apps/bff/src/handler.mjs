@@ -272,6 +272,7 @@ export function createContextResolver({ stores, authorization, clock = () => Dat
       authorizationSnapshotId: current.authorizationSnapshotId,
       membershipVersion: current.membershipVersion,
       actorPseudonym: current.actorPseudonym,
+      csrfToken: session.csrfToken,
       authContext: {
         userId: session.user.id,
         tenantId: context.tenantId,

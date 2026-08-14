@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/handler.mjs && node --check src/memory-stores.mjs && node --check src/postgres-auth-context.mjs && node --check test/handler.test.mjs && node --check test/postgres-auth-context.test.mjs"
+    "check": "node --check src/*.mjs && node --check test/*.test.mjs"
   }
 }
