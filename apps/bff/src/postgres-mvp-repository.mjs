@@ -142,6 +142,9 @@ async function projectStockEvent(client, tenantId, event, eventTs, uuid) {
   const stockEventId = isUuid(payload.aggregateId) ? payload.aggregateId : uuid();
   const delta = payload.eventType === "withdrawal" ? -Math.abs(payload.quantity)
     : payload.eventType === "receipt" ? Math.abs(payload.quantity) : payload.quantity;
+  // Serialize one material balance before the INSERT statement takes its MVCC snapshot.
+  // This prevents two concurrent withdrawals from both missing the negative-balance transition.
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))", [tenantId, payload.chemicalId]);
   await client.query(`INSERT INTO app.stock_event
     (tenant_id, stock_event_id, event_uuid, chemical_id, event_type, quantity_delta, reason, occurred_at, event_ts, actor_user_id)
     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8::timestamptz, $9::timestamptz, app.current_user_id())
