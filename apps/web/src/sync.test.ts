@@ -11,9 +11,9 @@ function fixture(status: "accepted" | "duplicate" | "rejected" | "conflict" = "a
     saveDraft: vi.fn(), enqueue: vi.fn(), pendingCount: vi.fn(async () => outbox.length), listOutbox: vi.fn(async () => [...outbox]),
     acknowledge: vi.fn(async (ids) => { for (const id of ids) { const index = outbox.findIndex((row) => row.eventUuid === id); if (index >= 0) outbox.splice(index, 1); } }),
     quarantine: vi.fn(async (records, queue) => { quarantined.push(queue); for (const record of records) { const index = outbox.findIndex((row) => row.eventUuid === record.eventUuid); if (index >= 0) outbox.splice(index, 1); } }),
-    getCursor: vi.fn(async () => null), setCursor: vi.fn(), applyChanges: vi.fn(), purgeScope: vi.fn(), saveToday: vi.fn(), getToday: vi.fn(async () => []), saveServerQueues: vi.fn(), queueCounts: vi.fn(async () => ({ rejections: 0, conflicts: 0 })),
+    getCursor: vi.fn(async () => null), setCursor: vi.fn(), applyChanges: vi.fn(), purgeScope: vi.fn(), saveToday: vi.fn(), getToday: vi.fn(async () => []), saveFields: vi.fn(), getFields: vi.fn(async () => []), saveServerQueues: vi.fn(), queueCounts: vi.fn(async () => ({ rejections: 0, conflicts: 0 })),
   };
-  const api: MvpGateway = { getToday: vi.fn(), push: vi.fn(async () => ({ results: [{ bundleId: "bundle-1", status, rejection: status === "rejected" ? { reason: "authorization_changed", recoveryAction: "manager_review" } : undefined }] })), pull: vi.fn(async () => ({ changes: [], nextCursor: "0", hasMore: false })), getQueues: vi.fn(async () => ({ rejections: [], conflicts: [] })), resolveConflict: vi.fn() };
+  const api: MvpGateway = { getToday: vi.fn(), getFields: vi.fn(), push: vi.fn(async () => ({ results: [{ bundleId: "bundle-1", status, rejection: status === "rejected" ? { reason: "authorization_changed", recoveryAction: "manager_review" } : undefined }] })), pull: vi.fn(async () => ({ changes: [], nextCursor: "0", hasMore: false })), getQueues: vi.fn(async () => ({ rejections: [], conflicts: [] })), resolveConflict: vi.fn() };
   return { api, storage, outbox, quarantined };
 }
 

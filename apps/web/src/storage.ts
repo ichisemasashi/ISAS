@@ -1,4 +1,4 @@
-import type { PullChange, QueueSnapshot, TodayTask } from "./api";
+import type { FieldFeature, PullChange, QueueSnapshot, TodayTask } from "./api";
 
 export type JournalDraft = { id: string; aggregateId: string; baseVersion: number; baseValue: Record<string, unknown>; field: string; workType: string; startedAt: string; endedAt: string; memo: string; updatedAt: string };
 export type OutboxRecord = {
@@ -21,13 +21,15 @@ export interface StorageGateway {
   purgeScope(tenantId: string, scope: string): Promise<void>;
   saveToday(tenantId: string, tasks: TodayTask[]): Promise<void>;
   getToday(tenantId: string): Promise<TodayTask[]>;
+  saveFields(tenantId: string, fields: FieldFeature[]): Promise<void>;
+  getFields(tenantId: string): Promise<FieldFeature[]>;
   saveServerQueues(tenantId: string, queues: QueueSnapshot): Promise<void>;
   queueCounts(tenantId: string): Promise<{ rejections: number; conflicts: number }>;
 }
 
 const DB_NAME = "isas-field-ops";
-const DB_VERSION = 2;
-const STORES = ["drafts", "outbox", "rejections", "conflicts", "cursors", "changes", "today", "serverQueues"] as const;
+const DB_VERSION = 3;
+const STORES = ["drafts", "outbox", "rejections", "conflicts", "cursors", "changes", "today", "fields", "serverQueues"] as const;
 type StoreName = typeof STORES[number];
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -35,7 +37,7 @@ function openDatabase(): Promise<IDBDatabase> {
     const value = indexedDB.open(DB_NAME, DB_VERSION);
     value.onupgradeneeded = () => {
       const db = value.result;
-      for (const [name, keyPath] of [["drafts", "id"], ["outbox", "eventUuid"], ["rejections", "eventUuid"], ["conflicts", "eventUuid"], ["cursors", "key"], ["changes", "key"], ["today", "tenantId"], ["serverQueues", "tenantId"]] as const) {
+      for (const [name, keyPath] of [["drafts", "id"], ["outbox", "eventUuid"], ["rejections", "eventUuid"], ["conflicts", "eventUuid"], ["cursors", "key"], ["changes", "key"], ["today", "tenantId"], ["fields", "key"], ["serverQueues", "tenantId"]] as const) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath });
       }
     };
@@ -77,12 +79,18 @@ export const browserStorage: StorageGateway = {
   getCursor: (tenantId, scope, priority) => inTransaction("cursors", "readonly", async ({ cursors }) => (await idbRequest<{ cursor: string } | undefined>(cursors.get(cursorKey(tenantId, scope, priority))))?.cursor || null),
   setCursor: (tenantId, scope, priority, cursor) => inTransaction("cursors", "readwrite", ({ cursors }) => idbRequest(cursors.put({ key: cursorKey(tenantId, scope, priority), tenantId, scope, priority, cursor })).then(() => undefined)),
   applyChanges: (tenantId, scope, changes) => inTransaction("changes", "readwrite", ({ changes: store }) => { for (const change of changes) store.put({ ...change, key: `${tenantId}:${scope}:${change.type}:${change.entityId || change.eventUuid || change.serverSeq}`, tenantId, scope }); }),
-  purgeScope: (tenantId, scope) => inTransaction(["cursors", "changes"], "readwrite", async ({ cursors, changes }) => {
+  purgeScope: (tenantId, scope) => inTransaction(["cursors", "changes", "fields"], "readwrite", async ({ cursors, changes, fields }) => {
     for (const row of await idbRequest<Array<{ key: string; tenantId: string; scope: string }>>(cursors.getAll())) if (row.tenantId === tenantId && row.scope === scope) cursors.delete(row.key);
     for (const row of await idbRequest<Array<{ key: string; tenantId: string; scope: string }>>(changes.getAll())) if (row.tenantId === tenantId && row.scope === scope) changes.delete(row.key);
+    for (const row of await idbRequest<Array<{ key: string; tenantId: string; properties: { fieldGroupId: string } }>>(fields.getAll())) if (row.tenantId === tenantId && row.properties.fieldGroupId === scope) fields.delete(row.key);
   }),
   saveToday: (tenantId, tasks) => inTransaction("today", "readwrite", ({ today }) => idbRequest(today.put({ tenantId, tasks, savedAt: new Date().toISOString() })).then(() => undefined)),
   getToday: (tenantId) => inTransaction("today", "readonly", async ({ today }) => (await idbRequest<{ tasks: TodayTask[] } | undefined>(today.get(tenantId)))?.tasks || []),
+  saveFields: (tenantId, fields) => inTransaction("fields", "readwrite", async ({ fields: store }) => {
+    for (const row of await idbRequest<Array<{ key: string; tenantId: string }>>(store.getAll())) if (row.tenantId === tenantId) store.delete(row.key);
+    for (const field of fields) store.put({ ...field, key: `${tenantId}:${field.id}`, tenantId, cachedAt: new Date().toISOString() });
+  }),
+  getFields: (tenantId) => inTransaction("fields", "readonly", async ({ fields }) => (await idbRequest<Array<FieldFeature & { tenantId: string }>>(fields.getAll())).filter((field) => field.tenantId === tenantId).map(({ tenantId: _tenantId, ...field }) => field)),
   saveServerQueues: (tenantId, queues) => inTransaction("serverQueues", "readwrite", ({ serverQueues }) => idbRequest(serverQueues.put({ tenantId, ...queues, savedAt: new Date().toISOString() })).then(() => undefined)),
   queueCounts: (tenantId) => inTransaction(["rejections", "conflicts", "serverQueues"], "readonly", async ({ rejections, conflicts, serverQueues }) => {
     const localRejections = (await idbRequest<LocalQueueRecord[]>(rejections.getAll())).filter((row) => row.tenantId === tenantId).length;

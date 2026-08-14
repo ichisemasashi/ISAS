@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { MvpGateway, QueueSnapshot, TodayTask } from "./api";
 import { demoAuthorization, type AppAuthorization, type TenantOption } from "./auth";
 import { browserStorage, type JournalDraft, type StorageGateway } from "./storage";
 import { synchronize } from "./sync";
+
+const FieldsPage = lazy(() => import("./FieldsPage").then((module) => ({ default: module.FieldsPage })));
 
 type Route = "today" | "journal" | "pesticide" | "fields" | "more";
 type PunchState = "idle" | "working" | "break";
@@ -168,7 +170,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
           {route === "today" && <TodayPage tasks={tasks} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} />}
           {route === "journal" && <JournalPage storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
           {route === "pesticide" && <PesticidePage queue={queue} navigate={navigate} />}
-          {route === "fields" && <PlaceholderPage title="圃場" description="担当圃場の一覧・地図は、次の縦切りでPostGIS APIへ接続します。" />}
+          {route === "fields" && <Suspense fallback={<div className="page-content"><p role="status">圃場地図を読み込んでいます。</p></div>}><FieldsPage api={api} storage={storage} authorization={authorization} online={online} /></Suspense>}
           {route === "more" && <MorePage theme={theme} locale={locale} queueCounts={queueCounts} queues={queues} resolveConflict={async (id, choice) => {
             await api.resolveConflict(authorization.context.contextId, csrfToken, id, { choice });
             const next = await api.getQueues(authorization.context.contextId);
@@ -297,7 +299,6 @@ function PesticidePage({ queue, navigate }: { queue: (kind: "pesticide", payload
 }
 
 function PageBack({ onBack }: { onBack: () => void }) { return <button className="back-button" onClick={onBack}>← 今日の作業へ戻る</button>; }
-function PlaceholderPage({ title, description }: { title: string; description: string }) { return <div className="page-content empty-page"><span className="empty-icon"><Icon name="field"/></span><h1>{title}</h1><p>{description}</p><button className="secondary-action">実装バックログを見る</button></div>; }
 function MorePage({ theme, locale, queueCounts, queues, resolveConflict }: { theme: Theme; locale: Locale; queueCounts: { rejections: number; conflicts: number }; queues: QueueSnapshot; resolveConflict: (id: string, choice: "server" | "device") => Promise<void> }) {
   return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態、同期で判断が必要な項目を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{locale === "ja" ? "日本語" : "English"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div><div><span>差し戻しキュー</span><strong>{queueCounts.rejections}件</strong></div><div><span>競合キュー</span><strong>{queueCounts.conflicts}件</strong></div></div>
     {queues.rejections.length > 0 && <section className="queue-panel"><h2>差し戻し</h2>{queues.rejections.map((item) => <article key={item.id}><strong>{item.reason}</strong><p>束: {item.bundleId}</p><p>回復操作: {item.recoveryAction}</p></article>)}</section>}

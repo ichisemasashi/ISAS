@@ -17,6 +17,7 @@ function gateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
 
 const api: MvpGateway = {
   async getToday() { return { tasks: [], serverTime: new Date().toISOString() }; },
+  async getFields() { return { type: "FeatureCollection", features: [], nextCursor: null }; },
   async push() { return { results: [] }; }, async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
   async getQueues() { return { rejections: [], conflicts: [] }; }, async resolveConflict() { return {}; },
 };

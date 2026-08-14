@@ -21,6 +21,8 @@ function memoryStorage() {
     async purgeScope() {},
     async saveToday() {},
     async getToday() { return []; },
+    async saveFields() {},
+    async getFields() { return []; },
     async saveServerQueues() {},
     async queueCounts() { return { rejections: 0, conflicts: 0 }; },
   };
@@ -34,6 +36,7 @@ const tasks = [
 ];
 const api: MvpGateway = {
   async getToday() { return { tasks, serverTime: new Date().toISOString() }; },
+  async getFields() { return { type: "FeatureCollection", features: [], nextCursor: null }; },
   async push() { throw new Error("offline test transport"); },
   async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
   async getQueues() { return { rejections: [], conflicts: [] }; },
