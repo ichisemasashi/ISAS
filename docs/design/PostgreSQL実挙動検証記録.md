@@ -3,11 +3,11 @@
 | 項目 | 内容 |
 |---|---|
 | 目的 | 設計文書群に書かれた **PostgreSQL の挙動に関する主張**が、実際の PostgreSQL の動作と一致しているかを検証する。**設計の良し悪しではなく「書かれていることが技術的に成立するか」**だけを見る。あわせて **`spikes/*.sql`（実際に実行されたSQL）と文書化された設計（データモデル設計書 §4/§6）が同一か**を突き合わせる。 |
-| 検証日 | 2026-07-27（初回）／**2026-08-13（PostgreSQL 16＋PostGIS追試）**／**2026-08-14（AuthContext DB検証）** |
+| 検証日 | 2026-07-27（初回）／**2026-08-13（PostgreSQL 16＋PostGIS追試）**／**2026-08-14（AuthContext・S2本番規模・S5/S7並行負荷）** |
 | 検証者 | **独立エージェント**（設計者のレビュー履歴・教訓を与えず、ADR本文＋データモデル設計書＋スパイクSQLのみ）。**ローカルに PostgreSQL 14.23 の一時クラスタを立て、文書の主張を実際にSQLで再現して確認**。 |
 | 設計者による再検証 | **最も影響の大きい2件（PG-H1／PG-H6）を設計者自身が別の一時クラスタで再実測し、いずれも指摘が正しいことを確認**（下記「設計者による再実測」）。 |
 | 対象文書 | [ADR-0001](ADR/ADR-0001-マルチテナント分離-行レベル-RLS.md)／[ADR-0003](ADR/ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)／[ADR-0004](ADR/ADR-0004-DB-PostgreSQL-PostGIS.md)／[データモデル設計書](データモデル設計書.md)／[spikes/](../../spikes/README.md) |
-| 結果 | 初回 **High 6／Medium 9／Low 13**。2026-08-14までにHigh 6件を全件処置し、Medium 9件は全件設計裁定済み。LowはPG-L13の同一tenant FKを含め規範文書へ反映または実装注意へ分類した。**ADR-0001 v19の残存High 0／Medium 0**。S2本番規模再測とS5は性能／運用受入として継続する。 |
+| 結果 | 初回 **High 6／Medium 9／Low 13**。2026-08-14までにHigh 6件を全件処置し、Medium 9件は全件設計裁定済み。LowはPG-L13の同一tenant FKを含め規範文書へ反映または実装注意へ分類した。**ADR-0001 v19の残存High 0／Medium 0**。S2本番規模再測、S5監査並行負荷、S7実DB・HTTP統合負荷はPASS。S2の数値bbox列を本番migrationへ昇格することを実装条件とする。 |
 | 最重要の結論 | 初回の3つの反証（空GUC、パーティション子、スパイクと本文の差異）は、正規化形、`part`スキーマ、S1文書同一DDLへの改訂で解消した。以後は「包含の外側でも成立するか」を、構造検査＋振る舞いテストで確認する。 |
 
 ---
@@ -180,7 +180,7 @@ ADR-0009が要求する「候補集合をDB側で現在権限へ再照合して�
 
 - **PG-H2**：配列はBFFで`$n::uuid[]::text`／`text[]::text`へ正規化し、S1もPostgreSQL配列リテラルを使用。文書と実行値を統一した。
 - **PG-H3／M3〜M7**：正当な全主体をpermissiveの`TO`へ含め、WITH CHECK、superuser／BYPASSRLS、ACL、`part`、ビュー依存をカタログ検査。S1 (13)〜(15)で主要経路を実測した。
-- **PG-M1／M2／M8**：単一tenant SQLは検証済み`tenant_id`等値を冗長に明示する。空間は複合GiST、複数tenant KNNはtenant別候補をマージし、非leakproof演算子をラップしない。本番規模再測だけを性能受入へ残す。
+- **PG-M1／M2／M8**：単一tenant SQLは検証済み`tenant_id`等値を冗長に明示する。複数tenant KNNはtenant別候補をマージし、非leakproof演算子をラップしない。S2本番規模再測で、数値bbox事前絞込＋厳密PostGIS判定を採用しPASSした。本番`field` migrationへのbbox列・索引昇格を残す。
 - **PG-M9**：BYPASSRLSの射程を「対象表だけ」と誤解しない。`audit_writer`／`audit_reader`をNOLOGIN・非委譲・限定ACL・固定関数で分離し、越境readを再監査する。
 - **PG-L13**：`labor_summary.corrects`を`(tenant_id, corrects)`複合FKへ変更し、他tenantの訂正元を参照できない形にした。
 - その他のLowは、NULLの3値論理、UUIDv7／PgBouncer版、明示列ビュー、受理台帳、コマンド別期待値、PostGIS upgrade注意として規範文書または後続運用へ反映した。
@@ -198,6 +198,16 @@ ADR-0009が要求する「候補集合をDB側で現在権限へ再照合して�
 - **PG-M2**：`&&`／`<->` の実体関数はともに `proleakproof = false`。bboxはRLSのみで7.502ms、明示的な `tenant_id` 等値付きで3.335msだったが、どちらも空間 `&&` は `Filter` に残り、1テナント5,000行のうち1,546行を除外した。**性能値はSLO内でも、意図した複合索引の構造的合格基準には未達**。
 - **PG-M8**：RLSのみのKNNは `geom` 単独GiSTを使い、20行を得るまで他テナント276行を除外（1.233ms）。明示的な `tenant_id` 等値付きでは複合GiSTを使い0.137msとなり、読み捨ては発生しなかった。
 - **判定の限界**：10万行・単一接続の合成データでは全ケースが地図2秒SLO内だが、本番規模・並行負荷への外挿はしない。bboxの緩和策、KNNのクエリ規約、再測条件を設計で確定する必要がある。
+
+---
+
+## 2026-08-14 本番規模・並行負荷追試（PostgreSQL 16.4・PostGIS 3.4.3・arm64）
+
+全文は [`S2_LOAD_2026-08-14_PG16_PostGIS.log`](../../spikes/results/S2_LOAD_2026-08-14_PG16_PostGIS.log)／[`S5_2026-08-14_PG16.log`](../../spikes/results/S5_2026-08-14_PG16.log)／[`S7_INTEGRATION_2026-08-14_PG16_HTTP.log`](../../spikes/results/S7_INTEGRATION_2026-08-14_PG16_HTTP.log)。
+
+- **S2**：100万ポリゴン、FORCE RLS、64接続、各200 query/秒。PostGIS `&&`だけではp95 2,499.26msで不合格。数値bbox 4列をtenant B-treeで事前絞込してから厳密PostGIS判定する方式へ変更し、bbox p95 80.71ms、KNN p95 54.41ms、他tenant漏洩0でPASS。本番`field` migrationへの列・索引昇格を合格条件に含める。
+- **S5**：32接続、500監査書込/秒、15秒。同一最大テナント集中でも504.7 tps、p95 6.60ms、失敗・skip 0、14,985行の`prev_hash`／`row_hash`不一致0でPASS。このレートはADR-0019/0020確定前の暫定受入値であり、配備プロファイル確定時に再受入する。
+- **S7**：2 HTTPプロセス、16 DB接続、100ms RTT／10Mbps模擬回線。push p95 135.73ms、pull p95 78.05ms、50記録＋写真10枚0.632秒、再送重複0、DB整合不一致0でPASS。実HTTP/TCPと実DBは含むが、キャリア実測、TLS ingress、pooler、オブジェクトストレージはリリース受入へ残す。
 
 ---
 
