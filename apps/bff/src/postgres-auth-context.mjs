@@ -75,6 +75,15 @@ function normalizeValidated(row) {
   });
 }
 
+function assertNoWidening(requested, canonical) {
+  for (const field of ["allowedTenants", "scopeFieldGroups", "capabilities", "employerSubjectUsers"]) {
+    const candidates = new Set(requested[field]);
+    if (canonical[field].some((value) => !candidates.has(value))) {
+      throw new Error(`PostgreSQL widened the AuthContext: ${field}`);
+    }
+  }
+}
+
 function operationClient(client) {
   return Object.freeze({
     query(text, values) {
@@ -97,6 +106,7 @@ export function createPostgresAuthContextAdapter(pool, { expectedRole = "app_use
       const requested = normalizeInput(trusted);
       const client = await pool.connect();
       let began = false;
+      let discardError;
       try {
         await client.query(readOnly ? "BEGIN READ ONLY" : "BEGIN");
         began = true;
@@ -115,6 +125,7 @@ export function createPostgresAuthContextAdapter(pool, { expectedRole = "app_use
         ]);
         const canonical = normalizeValidated(validation.rows?.[0]);
         if (canonical.userId !== requested.userId || canonical.tenantId !== requested.tenantId) throw new Error("PostgreSQL changed the AuthContext subject or write tenant");
+        assertNoWidening(requested, canonical);
 
         await client.query(INJECT_SQL, [
           canonical.userId,
@@ -132,11 +143,11 @@ export function createPostgresAuthContextAdapter(pool, { expectedRole = "app_use
         return result;
       } catch (error) {
         if (began) {
-          try { await client.query("ROLLBACK"); } catch { /* Connection disposal belongs to the pool adapter. */ }
+          try { await client.query("ROLLBACK"); } catch (rollbackError) { discardError = rollbackError; }
         }
         throw error;
       } finally {
-        client.release();
+        client.release(discardError);
       }
     },
   };

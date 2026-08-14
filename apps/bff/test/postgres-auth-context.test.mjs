@@ -22,12 +22,14 @@ function trusted(overrides = {}) {
   };
 }
 
-function fakePool({ role = { role_name: "app_user", rolsuper: false, rolbypassrls: false }, validation = undefined } = {}) {
+function fakePool({ role = { role_name: "app_user", rolsuper: false, rolbypassrls: false }, validation = undefined, rollbackFails = false } = {}) {
   const calls = [];
   let released = false;
+  let releaseError;
   const client = {
     async query(sql, values) {
       calls.push({ sql, values });
+      if (sql === "ROLLBACK" && rollbackFails) throw new Error("rollback failed");
       if (sql.includes("FROM pg_roles")) return { rows: role ? [role] : [] };
       if (sql.includes("validate_auth_context")) {
         if (validation === null) return { rows: [] };
@@ -42,9 +44,9 @@ function fakePool({ role = { role_name: "app_user", rolsuper: false, rolbypassrl
       }
       return { rows: [{ ok: true }] };
     },
-    release() { released = true; },
+    release(error) { released = true; releaseError = error; },
   };
-  return { pool: { async connect() { return client; } }, client, calls, released: () => released };
+  return { pool: { async connect() { return client; } }, client, calls, released: () => released, releaseError: () => releaseError };
 }
 
 describe("PostgreSQL AuthContext transaction adapter", () => {
@@ -52,7 +54,7 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
     const db = fakePool({ validation: {
       user_id: U1,
       tenant_id: T1,
-      allowed_tenants: [T1, T2],
+      allowed_tenants: [T1],
       scope_field_groups: [],
       capabilities: ["journal:write"],
       employer_subject_users: [],
@@ -60,7 +62,7 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
     const adapter = createPostgresAuthContextAdapter(db.pool);
 
     const result = await adapter.transaction(trusted(), async (client, canonical) => {
-      assert.deepEqual(canonical.allowedTenants, [T1, T2]);
+    assert.deepEqual(canonical.allowedTenants, [T1]);
       return client.query("SELECT count(*) FROM field_record");
     }, { readOnly: true });
 
@@ -69,7 +71,7 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
     assert.match(db.calls[1].sql, /FROM pg_roles/);
     assert.match(db.calls[2].sql, /validate_auth_context/);
     assert.match(db.calls[3].sql, /set_config\('app\.allowed_tenants'/);
-    assert.deepEqual(db.calls[3].values, [U1, T1, [T1, T2], [], ["journal:write"], [], "actor-u1"]);
+    assert.deepEqual(db.calls[3].values, [U1, T1, [T1], [], ["journal:write"], [], "actor-u1"]);
     assert.equal(db.calls[4].sql, "SELECT count(*) FROM field_record");
     assert.equal(db.calls[5].sql, "COMMIT");
     assert.equal(db.released(), true);
@@ -103,6 +105,43 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
       await assert.rejects(() => adapter.transaction(trusted(), async () => undefined), /changed the AuthContext subject or write tenant/);
       assert.equal(db.calls.some(({ sql }) => sql.includes("set_config")), false);
       assert.equal(db.calls.at(-1).sql, "ROLLBACK");
+    }
+  });
+
+  test("allows PostgreSQL to narrow candidate sets but never widen them", async () => {
+    const narrowed = fakePool({ validation: {
+      user_id: U1,
+      tenant_id: T1,
+      allowed_tenants: [T1],
+      scope_field_groups: [],
+      capabilities: [],
+      employer_subject_users: [],
+    } });
+    const narrowedAdapter = createPostgresAuthContextAdapter(narrowed.pool);
+    await narrowedAdapter.transaction(trusted(), async (_client, canonical) => {
+      assert.deepEqual(canonical.scopeFieldGroups, []);
+      assert.deepEqual(canonical.capabilities, []);
+    });
+
+    for (const [field, value] of [
+      ["allowed_tenants", [T1, T2]],
+      ["scope_field_groups", [F1, "f2222222-2222-7222-8222-222222222222"]],
+      ["capabilities", ["journal:write", "admin:write"]],
+      ["employer_subject_users", ["bbbbbbbb-0000-7000-8000-000000000002"]],
+    ]) {
+      const row = {
+        user_id: U1,
+        tenant_id: T1,
+        allowed_tenants: [T1],
+        scope_field_groups: [F1],
+        capabilities: ["journal:write"],
+        employer_subject_users: [],
+        [field]: value,
+      };
+      const db = fakePool({ validation: row });
+      const adapter = createPostgresAuthContextAdapter(db.pool);
+      await assert.rejects(() => adapter.transaction(trusted(), async () => undefined), /widened the AuthContext/);
+      assert.equal(db.calls.some(({ sql }) => sql.includes("set_config")), false);
     }
   });
 
@@ -144,6 +183,17 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
 
     assert.equal(db.calls.at(-1).sql, "ROLLBACK");
     assert.equal(db.released(), true);
+    assert.equal(db.releaseError(), undefined);
+  });
+
+  test("discards a connection when rollback fails", async () => {
+    const db = fakePool({ rollbackFails: true });
+    const adapter = createPostgresAuthContextAdapter(db.pool);
+
+    await assert.rejects(() => adapter.transaction(trusted(), async () => { throw new Error("command failed"); }), /command failed/);
+
+    assert.equal(db.released(), true);
+    assert.match(db.releaseError()?.message || "", /rollback failed/);
   });
 
   test("does not expose transaction or session control to application operations", async () => {

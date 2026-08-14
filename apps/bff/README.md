@@ -10,7 +10,7 @@ ADR-0009の同一オリジンBFF境界を、Node.js標準APIだけで実装し�
 - `POST /api/bff/contexts`：Origin、CSRF、JSONを検証し、現在権限から短TTLのタブ用contextを発行する。
 - `POST /api/bff/logout`：session/contextを失効し、IdP token失効アダプタを呼ぶ。
 - `createContextResolver`：Cookieと`X-ISAS-Context`の束縛、期限、用途、現在権限を再検証し、業務API／DBアダプタだけが使う信頼済みAuthContextを返す。外部HTTPのuser／role／capabilityヘッダは入力に使わない。
-- `createPostgresAuthContextAdapter`：`app_user`が非所有者・非superuser・非BYPASSRLSであることを確認し、`app_private.validate_auth_context(...)`が返した正規値だけを同一トランザクション内のGUCへ注入する。業務コールバックには`SET`、`set_config`、transaction制御を許さない制限付きclientを渡す。
+- `createPostgresAuthContextAdapter`：`app_user`が非所有者・非superuser・非BYPASSRLSであることを確認し、`app_private.validate_auth_context(...)`が返した正規値だけを同一トランザクション内のGUCへ注入する。DBはBFFが提示したtenant／scope／capability集合を拒否または縮小できるが、主体・書込tenantの置換や集合の拡張はできない。業務コールバックには`SET`、`set_config`、transaction制御を許さない制限付きclientを渡し、ROLLBACK失敗時は接続を破棄する。
 
 ## アダプタの保証条件
 

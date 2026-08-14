@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ） v3**（第1回9件＝High 3／Medium 5／Low 1をv2で処置。第2回のMedium 1件＝BFF主体とDB注入の信頼境界をv3で明文化。第3回で残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0009.md)） |
+| ステータス | **採用（再クローズ） v4**（v3のBFF主体／DB注入境界を、公開HTTP入力→context再導出→DB正規化→`SET LOCAL`→RLSの単一経路として確定。S8はPostgreSQL 16.4で12群PASS、BFFアダプタは集合拡張拒否とROLLBACK失敗時の接続破棄を検証済み。第4回で残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0009.md)） |
 | 日付 | 2026-08-14 |
 | 由来 | 要裁定（要求仕様5.4「MFAを選択可」、7章「認証基盤」。PWA・RLS・複数法域を成立させる具体方式を確定する） |
 | 関連 | [要求仕様5.4](../../農業営農支援システム_要求仕様書.md)、[ADR-0001 RLS](ADR-0001-マルチテナント分離-行レベル-RLS.md)、[ADR-0002 法域・シャード](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0005 RBAC](ADR-0005-権限モデル-RBAC-メンバーシップ.md)、[ADR-0006 PWA](ADR-0006-フロントエンド構成-React-PWA.md)、[ADR-0007 同期](ADR-0007-オフライン同期方式.md)、[ADR-0008 API](ADR-0008-API方式.md)、[ADR-0017 セキュリティ] |
@@ -85,6 +85,23 @@ OIDC claimやBFFセッションへ業務権限集合を焼き込まない。tena
 - 機微操作は権限キャッシュを使わず権威DBで都度検証する。一般操作は60秒キャッシュを許すが、変更イベントで即時無効化する。
 - 認証強度・step-upはアプリ層で操作可否を守り、RLSは行可視性・capability・tenant/scopeを最終防波堤として守る。どちらか一方だけに責務を寄せない。
 
+### 2.5.1 【v4】tenant／scope注入の単一経路
+
+tenant／scopeの注入は、次の順序以外を禁止する。各段はfail closedとし、検証失敗時に前段の値へフォールバックしない。
+
+| 境界 | 受け入れる値 | 生成／検証 | 禁止事項 |
+|---|---|---|---|
+| ブラウザ→BFF | `__Host-isas_session` Cookie、`X-ISAS-Context`、context発行時の単一`tenantId` | Cookieとcontext IDのハッシュ参照、session束縛、TTL、用途を検証 | `user_id`、role、scope、capability、`allowed_tenants`、actor、認証強度の公開HTTP申告を使わない |
+| BFF内部 | sessionから得た`user_id`とcontextの`tenantId`／用途 | 認証専用経路の現在membership/role/scopeからAuthContext候補を**毎リクエスト再導出** | context発行時の古いscope/capabilityを再利用しない |
+| BFF→業務コー | 信頼済みAuthContextオブジェクト | 同一プロセス内はメモリ上で受け渡す。別プロセス化する場合は短寿命・audience束縛・リプレイ防止付き内部envelope＋mTLSとする | 公開入口と同名の主体ヘッダを素通ししない。エッジで同名外部ヘッダを削除する |
+| 業務コア→PostgreSQL | 正規化したUUID/capability集合とactor仮名ID | 非特権`app_user`で明示transactionを開き、`app_private.validate_auth_context(...)`に候補を渡す | 生SQLから`SET`／`set_config`／transaction制御を実行させない |
+| PostgreSQL検証→RLS | DBが拒否または縮小した正規集合 | 主体と書込tenantの一致、各集合がBFF候補の部分集合であることを再確認し、`set_config(..., true)`でtransaction-local GUCへ注入 | DBは候補を**拡張しない**。主体／書込tenantを置換しない |
+| 業務SQL→終了 | RLS通過行のみ | 業務SQLと監査を同一transactionで実行しCOMMIT/ROLLBACK | ROLLBACKに失敗した接続をプールへ戻さない |
+
+context用途は形を固定する。Phase 1の`tenant`用途は`allowed_tenants=[tenant_id]`、`employer_subject_users=[]`とする。将来の`group_read`、`self_labor_read`、`employer_labor_read`は別の発行API／必要capability／集合上限を持ち、汎用の「任意集合context」は作らない。権限・scope・membership変更時はセッションを必ずしも切断せず、関連contextとOffline Authorization Snapshotを即時無効化し、次リクエストの再導出で新権限へ収束させる。
+
+S8はPostgreSQL 16.4で通常tenant、scope、capability、group横断、雇用主横断、失効、空／重複集合、権限基表の直接参照拒否、関数所有者／`search_path`／非委譲を含む12群をPASSした。BFFアダプタは上記の部分集合条件と接続破棄を自動テストする。
+
 ### 2.6 オフライン認証継続
 
 オンラインセッションと、オフライン継続資格を分離する。端末へ渡す**署名付きOffline Authorization Snapshot**は、`user_id`、法域、tenant、許可する最小offline capability/scope、membership version、発行・失効時刻、認証時刻、端末installation ID、鍵世代、snapshot IDを持つ。
@@ -141,6 +158,6 @@ OIDC claimやBFFセッションへ業務権限集合を焼き込まない。tena
 
 - BFF/IdP製品の選定とHA、Cookie暗号鍵・token暗号鍵、セッションストア、back-channel logoutの配備はADR-0019/0017。
 - WebAuthn共有端末、passkey同期可否、TOTP回復、管理者回復の運用テストはADR-0017/0021。
-- AuthContext導出／DB検証関数は、通常1tenant、グループ横断、受託者、本人、雇用主、失効、空注入、外部serviceの各ケースをS1系ポリシーテストへ追加する。
+- AuthContext導出／DB検証関数の参照DDLはS8で12群PASS、BFFトランザクションアダプタも実装済み。残りは版管理・索引・backfill・失効イベントを含む本番migrationへの昇格と、`group_read`／労務横断contextの専用発行API実装。
 - オフラインSnapshotの署名検証、24h/72h/14d境界、時計ずれ、logout、失効後の未同期回復をS7へ追加する。
 - ログインp95 2秒、全シャードpartial、キャッシュ無効化、認証P1プール枯渇をADR-0020の統合負荷試験で測る。
