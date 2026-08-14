@@ -20,6 +20,7 @@
 | [docs/design/UXデザインシステム.md](docs/design/UXデザインシステム.md) | Phase 1のUXデザインシステム、IA、主要導線、UT計画 |
 | [spikes/](spikes/README.md) | 技術検証（PostgreSQL＋PostGIS の PoC ハーネス） |
 | [apps/web/](apps/web/) | React＋TypeScript＋PWAによるPhase 1 MVPフロントエンド |
+| [apps/bff/](apps/bff/) | ADR-0009のOIDC／Cookie session／context／AuthContext境界を担うBFFコア |
 | `docs/**/レビュー記録_*.md`、`docs/要求仕様書_敵対的レビュー記録票_*.md` | 敵対的レビューの監査証跡 |
 
 ## MVPフロントエンド
@@ -33,6 +34,16 @@ pnpm build
 ```
 
 現時点では「今日の作業→打刻→日誌」「農薬安全確認」の最初の縦切りを実装している。Phase 1全体の完了状況は[開発工程.md §6](docs/開発工程.md#6-マイルストーンと現在地)を参照する。
+
+## BFFコア
+
+```bash
+cd apps/bff
+npm test
+npm run check
+```
+
+本番HTTPサーバ、具体的なOIDC IdP、永続session store、PostgreSQL AuthContext注入はアダプタとして接続する。境界とアダプタ保証条件は[apps/bff/README.md](apps/bff/README.md)を参照する。
 
 ## 進め方（プロジェクトを貫く原則）
 

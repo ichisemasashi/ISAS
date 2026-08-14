@@ -1,0 +1,10 @@
+{
+  "name": "@isas/bff",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/handler.mjs && node --check src/memory-stores.mjs && node --check test/handler.test.mjs"
+  }
+}

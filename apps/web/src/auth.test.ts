@@ -53,4 +53,18 @@ describe("BFF authentication gateway", () => {
 
     expect(assign).toHaveBeenCalledWith("/api/bff/login?return_to=%2F");
   });
+
+  test("logs out through a same-origin JSON request with CSRF proof", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+    const gateway = createBffAuthGateway(fetcher);
+
+    await gateway.logout("csrf-1");
+
+    expect(fetcher).toHaveBeenCalledWith("/api/bff/logout", expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+      body: "{}",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+    }));
+  });
 });

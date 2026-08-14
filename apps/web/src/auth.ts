@@ -144,7 +144,8 @@ export function createBffAuthGateway(fetcher: FetchLike = fetch, navigation: Pic
         method: "POST",
         credentials: "include",
         cache: "no-store",
-        headers: { "X-CSRF-Token": csrfToken },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        body: "{}",
       });
       if (!response.ok) throw new Error(`Logout failed (${response.status})`);
     },

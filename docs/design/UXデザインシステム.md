@@ -168,7 +168,7 @@ ISAS
 
 | 領域 | 残作業 |
 |---|---|
-| 認証/権限 | クライアント境界は実装済み。BFF/IdP session、contextからDB AuthContextへのtenant/scope注入、失効通知と端末パージを実装 |
+| 認証/権限 | クライアントとBFFコア（OIDC試行・Cookie session・CSRF・context発行／再検証）は実装済み。具体IdP、永続store、DB AuthContext注入、失効通知と端末パージを実装 |
 | API/同期 | S7参照状態機械を本番command path・pull/push API・Service Workerへ接続 |
 | 圃場GIS | MapLibre＋PostGIS API、オフライン担当圃場/タイル |
 | 作業指示/ガント | 管理者編集、担当割当、基本タイムライン |
