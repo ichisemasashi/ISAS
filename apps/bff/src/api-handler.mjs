@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { parseCsv } from "./csv.mjs";
+import { createCsv, parseCsv } from "./csv.mjs";
 import { mapMigrationRows } from "./migration.mjs";
 
 const MAX_PUSH_BYTES = 1024 * 1024;
@@ -22,6 +22,19 @@ function json(status, body, correlationId, contentType = "application/json; char
 
 function problem(status, type, title, correlationId, detail, extra = {}) {
   return json(status, { type, title, status, detail, correlationId, ...extra }, correlationId, "application/problem+json; charset=utf-8");
+}
+
+function csvResponse({ fileName, headers, rows }, correlationId) {
+  return new Response(createCsv(headers, rows), {
+    status: 200,
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      "X-Content-Type-Options": "nosniff",
+      "X-Correlation-ID": correlationId,
+    },
+  });
 }
 
 function equalSecret(left, right) {
@@ -79,6 +92,13 @@ function fieldSearch(url) {
   const cursor = url.searchParams.get("cursor");
   if (cursor && !/^[0-9a-f-]{36}$/i.test(cursor)) throw new TypeError("invalid cursor");
   return { bbox, query, limit, cursor };
+}
+
+function exportSearch(url) {
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) || (from && to && from > to)) throw new TypeError("invalid export range");
+  return { from, to };
 }
 
 async function readJsonObject(request) {
@@ -197,6 +217,13 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         const body = await readJsonObject(request);
         const result = await database.transaction(trusted, (client, canonical) => repository.commitMigrationJob(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(migrationCommitMatch[1]), body));
         return json(200, result, requestId);
+      }
+
+      const exportMatch = url.pathname.match(/^\/api\/v1\/exports\/(fields|journals|pesticide-records)\.csv$/);
+      if (request.method === "GET" && exportMatch) {
+        const search = exportSearch(url);
+        const result = await database.transaction(trusted, (client, canonical) => repository.exportCsv(client, canonical ? { ...trusted, authContext: canonical } : trusted, exportMatch[1], search), { readOnly: true });
+        return csvResponse(result, requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/api/v1/pesticide-master/releases") {

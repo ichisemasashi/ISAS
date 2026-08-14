@@ -156,6 +156,14 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       return clone(job);
     },
 
+    async exportCsv(_client, trusted, dataset) {
+      if (!trusted.authContext.capabilities.includes("export:read")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      if (dataset === "fields") return { fileName: "fields.csv", headers: ["圃場コード", "圃場名", "作物"], rows: fields.filter((item) => !item.tenantId || item.tenantId === trusted.authContext.tenantId).map((item) => ({ "圃場コード": item.externalKey || item.id, "圃場名": item.properties.name, "作物": item.properties.cropName || "" })) };
+      if (dataset === "journals") return { fileName: "work-journals.csv", headers: ["記録コード", "圃場名", "作業種別", "メモ"], rows: journals.filter((item) => item.tenantId === trusted.authContext.tenantId).map((item) => ({ "記録コード": item.externalKey || item.id, "圃場名": item.fieldName || "", "作業種別": item.body.workType || "", "メモ": item.body.memo || "" })) };
+      if (dataset === "pesticide-records") return { fileName: "pesticide-records.csv", headers: ["散布日", "作物", "薬剤名"], rows: pesticideUsages.filter((item) => item.tenantId === trusted.authContext.tenantId).map((item) => ({ "散布日": item.appliedOn || "", "作物": item.cropName || "", "薬剤名": chemicals.find((chemical) => chemical.id === item.chemicalId)?.name || "" })) };
+      throw new TypeError("invalid export dataset");
+    },
+
     async pushBundle(_client, trusted, bundle) {
       const tenantId = trusted.authContext.tenantId;
       const duplicate = bundle.events.every((event) => receipts.has(`${tenantId}:${event.eventUuid}`));

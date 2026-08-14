@@ -124,6 +124,9 @@ DROP POLICY work_journal_self_insert ON app.work_journal;
 CREATE POLICY work_journal_self_insert ON app.work_journal AS RESTRICTIVE FOR INSERT TO app_user
   WITH CHECK ((worker_user_id = app.current_user_id() AND app.has_capability('journal:write'))
     OR (app.has_capability('migration:manage') AND app.can_read_scope(field_group_id)));
+DROP POLICY work_journal_visibility ON app.work_journal;
+CREATE POLICY work_journal_visibility ON app.work_journal AS RESTRICTIVE FOR SELECT TO app_user
+  USING (worker_user_id = app.current_user_id() OR app.has_capability('journal:review') OR app.has_capability('export:read'));
 
 GRANT SELECT, INSERT, UPDATE ON app.migration_job, app.migration_row TO app_user;
 GRANT SELECT, INSERT ON app.pesticide_usage_summary TO app_user;

@@ -87,5 +87,10 @@ DO $$ BEGIN
   END;
 END $$;
 
+SELECT set_config('app.user_id', :'M', false);
+SELECT set_config('app.caps', '{scope_all,export:read}', false);
+SELECT pg_temp.ck(count(*) = 1, '(6) export:readは他作業者の日誌をRLS適用後に出力可能')
+FROM app.work_journal WHERE journal_id = :'JOURNAL';
+
 RESET ROLE;
-\echo 'Data migration: 5 groups PASS'
+\echo 'Data migration and CSV export: 6 groups PASS'

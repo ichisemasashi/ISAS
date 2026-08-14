@@ -741,6 +741,61 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return migrationJobDto(completed.rows[0]);
     },
 
+    async exportCsv(client, _trusted, dataset, { from, to }) {
+      await requireCapability(client, "export:read");
+      const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+      let result;
+      let headers;
+      let fileName;
+      if (dataset === "fields") {
+        headers = ["圃場コード", "圃場名", "作物", "状態", "面積㎡", "タイムゾーン", "境界WKT"];
+        fileName = `fields-${stamp}.csv`;
+        result = await client.query(`SELECT coalesce(external_key, field_id::text) AS "圃場コード",
+            name AS "圃場名", coalesce(crop_name, '') AS "作物", status AS "状態",
+            gis_area_sqm::text AS "面積㎡", timezone AS "タイムゾーン", ST_AsText(geom) AS "境界WKT"
+          FROM app.field WHERE tenant_id = app.current_tenant_id() AND deleted_at IS NULL
+          ORDER BY name, field_id LIMIT 100001`);
+      } else if (dataset === "journals") {
+        headers = ["記録コード", "圃場コード", "圃場名", "作業者ID", "作業日", "作業種別", "開始", "終了", "メモ", "状態", "提出日時"];
+        fileName = `work-journals-${stamp}.csv`;
+        result = await client.query(`SELECT coalesce(journal.external_key, journal.journal_id::text) AS "記録コード",
+            coalesce(field.external_key, field.field_id::text) AS "圃場コード", field.name AS "圃場名",
+            journal.worker_user_id::text AS "作業者ID",
+            CASE WHEN journal.body->>'workedOn' ~ '^\d{4}-\d{2}-\d{2}$' THEN journal.body->>'workedOn'
+              ELSE (journal.submitted_at AT TIME ZONE field.timezone)::date::text END AS "作業日",
+            coalesce(journal.body->>'workType', '') AS "作業種別",
+            coalesce(journal.body->>'startedAt', '') AS "開始", coalesce(journal.body->>'endedAt', '') AS "終了",
+            coalesce(journal.body->>'memo', '') AS "メモ", journal.status AS "状態",
+            journal.submitted_at::text AS "提出日時"
+          FROM app.work_journal journal JOIN app.field field
+            ON field.tenant_id = journal.tenant_id AND field.field_id = journal.field_id
+          WHERE journal.tenant_id = app.current_tenant_id()
+            AND ($1::date IS NULL OR (CASE WHEN journal.body->>'workedOn' ~ '^\d{4}-\d{2}-\d{2}$' THEN (journal.body->>'workedOn')::date
+              ELSE (journal.submitted_at AT TIME ZONE field.timezone)::date END) >= $1::date)
+            AND ($2::date IS NULL OR (CASE WHEN journal.body->>'workedOn' ~ '^\d{4}-\d{2}-\d{2}$' THEN (journal.body->>'workedOn')::date
+              ELSE (journal.submitted_at AT TIME ZONE field.timezone)::date END) <= $2::date)
+          ORDER BY "作業日", journal.journal_id LIMIT 100001`, [from, to]);
+      } else if (dataset === "pesticide-records") {
+        headers = ["散布日", "圃場コード", "圃場名", "作物", "登録番号", "薬剤名", "希釈倍率", "散布量", "対象病害虫", "作業者", "使用器具", "収穫予定日", "サーバ判定"];
+        fileName = `pesticide-records-${stamp}.csv`;
+        result = await client.query(`SELECT usage.applied_on::text AS "散布日",
+            coalesce(field.external_key, field.field_id::text) AS "圃場コード", field.name AS "圃場名",
+            usage.crop_name AS "作物", chemical.registration_number AS "登録番号", chemical.name AS "薬剤名",
+            usage.dilution::text AS "希釈倍率", usage.amount::text AS "散布量",
+            usage.target_pest AS "対象病害虫", usage.worker_name AS "作業者", usage.equipment AS "使用器具",
+            coalesce(usage.planned_harvest_on::text, '') AS "収穫予定日", usage.server_safety->>'status' AS "サーバ判定"
+          FROM app.pesticide_usage usage
+          JOIN app.field field ON field.tenant_id = usage.tenant_id AND field.field_id = usage.field_id
+          JOIN app.agrochemical chemical ON chemical.tenant_id = usage.tenant_id AND chemical.chemical_id = usage.chemical_id
+          WHERE usage.tenant_id = app.current_tenant_id()
+            AND ($1::date IS NULL OR usage.applied_on >= $1::date)
+            AND ($2::date IS NULL OR usage.applied_on <= $2::date)
+          ORDER BY usage.applied_on, usage.usage_id LIMIT 100001`, [from, to]);
+      } else throw new TypeError("invalid export dataset");
+      if (result.rows.length > 100000) throw new RangeError("export_too_large");
+      return { fileName, headers, rows: result.rows };
+    },
+
     async pushBundle(client, trusted, bundle) {
       const tenantId = trusted.authContext.tenantId;
       const allReceipts = await client.query(`

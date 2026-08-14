@@ -254,4 +254,21 @@ describe("MVP REST and synchronization API", () => {
     }));
     assert.equal(commit.status, 400);
   });
+
+  test("exports an RLS-filtered UTF-8 CSV and neutralizes spreadsheet formulas", async () => {
+    const fx = fixture(["export:read"], { fields: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", tenantId: "tenant-1", geometry: { type: "MultiPolygon", coordinates: [] }, properties: { name: "=HYPERLINK(\"bad\")", cropName: "つや姫", areaSqm: 1000 } }] });
+    const response = await fx.handle(fx.request("/api/v1/exports/fields.csv"));
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("Content-Type"), /^text\/csv/);
+    assert.match(response.headers.get("Content-Disposition"), /attachment/);
+    const csv = await response.text();
+    assert.match(csv, /^\uFEFF?圃場コード,圃場名,作物/);
+    assert.match(csv, /'=HYPERLINK/);
+    assert.equal((await fx.handle(fx.request("/api/v1/exports/journals.csv?from=2026-08-20&to=2026-08-01"))).status, 400);
+  });
+
+  test("rejects CSV export without the current export capability", async () => {
+    const fx = fixture([]);
+    assert.equal((await fx.handle(fx.request("/api/v1/exports/fields.csv"))).status, 403);
+  });
 });
