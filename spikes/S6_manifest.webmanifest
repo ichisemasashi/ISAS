@@ -1,0 +1,18 @@
+{
+  "name": "ISAS S6 端末能力スパイク",
+  "short_name": "ISAS S6",
+  "description": "iOS／Android PWAの端末能力を実測するためのスパイク",
+  "start_url": "./S6_device_capabilities.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f1e8",
+  "theme_color": "#174f3a",
+  "icons": [
+    {
+      "src": "./S6_icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

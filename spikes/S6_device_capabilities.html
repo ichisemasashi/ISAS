@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#174f3a">
+  <link rel="manifest" href="./S6_manifest.webmanifest">
+  <link rel="icon" href="./S6_icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./S6_icon.svg">
+  <title>ISAS S6 端末能力スパイク</title>
+  <style>
+    :root { font-family: system-ui,sans-serif; color:#17211c; background:#f4f1e8; }
+    body { max-width:860px; margin:auto; padding:24px 16px 80px; }
+    h1 { font-size:clamp(26px,6vw,40px); } p { line-height:1.7; }
+    .panel { margin:16px 0; padding:18px; border:1px solid #ccd3cd; border-radius:16px; background:#fffefa; }
+    label { display:grid; gap:6px; margin:10px 0; font-weight:700; }
+    input { min-height:46px; padding:0 12px; border:1px solid #8b9890; border-radius:10px; font:inherit; }
+    button { min-height:48px; margin:5px; padding:0 16px; border:0; border-radius:12px; background:#174f3a; color:white; font-weight:800; }
+    button.secondary { border:1px solid #8b9890; background:white; color:#17211c; }
+    button:disabled { opacity:.5; } pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
+    table { width:100%; border-collapse:collapse; } th,td { padding:9px; border-bottom:1px solid #dde2dd; text-align:left; vertical-align:top; }
+    .pass { color:#12643d; font-weight:800; } .fail { color:#a23e1b; font-weight:800; }
+  </style>
+</head>
+<body>
+  <h1>S6 iOS／Android端末能力</h1>
+  <p>実機のブラウザまたはホーム画面へ追加したPWAで実行し、JSONを証跡として保存します。権限要求は明示ボタンからだけ行います。</p>
+  <section class="panel">
+    <label>端末識別名<input id="deviceLabel" placeholder="例: iPhone 15 / iOS 18.x / standalone"></label>
+    <button id="run">自動能力・32MiB保存性能を測定</button>
+    <button id="location" class="secondary">位置取得を開始／停止</button>
+    <button id="verify" class="secondary">再起動後の保存データを確認</button>
+    <button id="download" class="secondary" disabled>結果JSONを保存</button>
+  </section>
+  <section class="panel"><h2>結果</h2><table><tbody id="summary"></tbody><pre id="output" aria-live="polite">未実行</pre></section>
+  <section class="panel"><h2>実機での手順</h2><ol>
+    <li>通常ブラウザとホーム画面追加後の両方で自動測定する。</li>
+    <li>位置取得を開始し、画面表示中に2分、その後画面ロック／別アプリで5分、復帰後2分を記録する。</li>
+    <li>端末を再起動し、同じ配布形態でこのページを開いて「再起動後の保存データを確認」を押す。</li>
+    <li>空き容量を減らした状態でも再確認し、OSによるeviction有無を記録する。</li>
+  </ol></section>
+<script>
+const MiB = 1024 * 1024;
+let result = null;
+let locationWatch = null;
+let locationSamples = [];
+const output = document.querySelector('#output');
+const summary = document.querySelector('#summary');
+function row(name, value, ok) { return `<tr><th>${name}</th><td class="${ok === true ? 'pass' : ok === false ? 'fail' : ''}">${String(value)}</td></tr>`; }
+function openDb() { return new Promise((resolve,reject) => { const request=indexedDB.open('isas-s6-probe',1); request.onupgradeneeded=()=>request.result.createObjectStore('probe'); request.onsuccess=()=>resolve(request.result); request.onerror=()=>reject(request.error); }); }
+function transaction(db, mode, action) { return new Promise((resolve,reject) => { const tx=db.transaction('probe',mode); const store=tx.objectStore('probe'); action(store); tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error); }); }
+async function writeProbe() {
+  const db=await openDb(); const block=new Uint8Array(MiB); crypto.getRandomValues(block.subarray(0,65536));
+  const started=performance.now();
+  await transaction(db,'readwrite',store=>{ for(let i=0;i<32;i++) store.put({bytes:block,sequence:i},`block-${i}`); store.put({createdAt:new Date().toISOString(),bytes:32*MiB},'marker'); });
+  const elapsed=performance.now()-started; db.close(); return {bytes:32*MiB,elapsedMs:elapsed,writeMiBPerSecond:32/(elapsed/1000)};
+}
+async function readMarker() { const db=await openDb(); return new Promise((resolve,reject)=>{ const tx=db.transaction('probe'); const request=tx.objectStore('probe').get('marker'); request.onsuccess=()=>{db.close();resolve(request.result||null)}; request.onerror=()=>reject(request.error); }); }
+async function run() {
+  output.textContent='測定中…'; document.querySelector('#run').disabled=true;
+  try {
+    const registration = 'serviceWorker' in navigator ? await navigator.serviceWorker.register('./S6_service_worker.js') : null;
+    const persistedBefore = navigator.storage?.persisted ? await navigator.storage.persisted() : null;
+    const persistGranted = navigator.storage?.persist ? await navigator.storage.persist() : null;
+    const estimateBefore = navigator.storage?.estimate ? await navigator.storage.estimate() : {};
+    const indexedDb = await writeProbe();
+    const estimateAfter = navigator.storage?.estimate ? await navigator.storage.estimate() : {};
+    result = {
+      schemaVersion:1, measuredAt:new Date().toISOString(), deviceLabel:document.querySelector('#deviceLabel').value,
+      userAgent:navigator.userAgent, platform:navigator.platform, language:navigator.language,
+      displayModeStandalone:matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
+      secureContext:isSecureContext, online:navigator.onLine,
+      capabilities:{serviceWorker:Boolean(registration), backgroundSync:'SyncManager' in window, periodicBackgroundSync:'PeriodicSyncManager' in window,
+        webPush:'PushManager' in window, notifications:'Notification' in window, indexedDB:'indexedDB' in window,
+        storageManager:Boolean(navigator.storage), storagePersistApi:Boolean(navigator.storage?.persist), geolocation:'geolocation' in navigator,
+        mediaDevices:Boolean(navigator.mediaDevices), webCrypto:Boolean(crypto?.subtle)},
+      storage:{persistedBefore,persistGranted,quotaBytes:estimateAfter.quota??estimateBefore.quota??null,usageBeforeBytes:estimateBefore.usage??null,usageAfterBytes:estimateAfter.usage??null,indexedDb},
+      location:{samples:locationSamples}, restartVerification:null
+    };
+    render(); document.querySelector('#download').disabled=false;
+  } catch(error) { output.textContent=`ERROR: ${error.stack||error}`; }
+  finally { document.querySelector('#run').disabled=false; }
+}
+function render() {
+  if(!result)return; const c=result.capabilities,s=result.storage;
+  const rows=[];
+  if(typeof result.displayModeStandalone==='boolean') rows.push(row('配布形態',result.displayModeStandalone?'standalone PWA':'browser',null));
+  if(c) rows.push(row('Service Worker',c.serviceWorker,c.serviceWorker),row('Background Sync',c.backgroundSync,c.backgroundSync),row('Web Push',c.webPush,c.webPush),row('位置API',c.geolocation,c.geolocation));
+  if(s) rows.push(row('永続化要求',s.persistGranted,s.persistGranted),row('推定quota',s.quotaBytes?`${(s.quotaBytes/MiB).toFixed(1)} MiB`:'不明',null),row('IndexedDB 32MiB',`${s.indexedDb.elapsedMs.toFixed(1)}ms / ${s.indexedDb.writeMiBPerSecond.toFixed(1)} MiB/s`,s.indexedDb.elapsedMs<30000));
+  if(result.restartVerification) rows.push(row('再起動後marker',result.restartVerification.markerPresent,result.restartVerification.markerPresent));
+  summary.innerHTML=rows.join('');
+  output.textContent=JSON.stringify(result,null,2);
+}
+document.querySelector('#run').addEventListener('click',run);
+document.querySelector('#location').addEventListener('click',()=>{
+  if(locationWatch!==null){navigator.geolocation.clearWatch(locationWatch);locationWatch=null; if(result){result.location.samples=locationSamples;render();} return;}
+  locationWatch=navigator.geolocation.watchPosition(position=>{locationSamples.push({at:new Date().toISOString(),visibility:document.visibilityState,latitude:position.coords.latitude,longitude:position.coords.longitude,accuracy:position.coords.accuracy});if(result){result.location.samples=locationSamples;render();}},error=>{locationSamples.push({at:new Date().toISOString(),visibility:document.visibilityState,error:error.message});},{enableHighAccuracy:true,maximumAge:0,timeout:30000});
+});
+document.querySelector('#verify').addEventListener('click',async()=>{ const marker=await readMarker(); if(!result)result={schemaVersion:1,measuredAt:new Date().toISOString(),deviceLabel:document.querySelector('#deviceLabel').value,userAgent:navigator.userAgent,location:{samples:locationSamples}}; result.restartVerification={checkedAt:new Date().toISOString(),markerPresent:Boolean(marker),marker};render();document.querySelector('#download').disabled=false; });
+document.querySelector('#download').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`S6-${Date.now()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);});
+</script>
+</body></html>

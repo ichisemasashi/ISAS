@@ -1,0 +1,46 @@
+{
+  "evidenceClass": "desktop-diagnostic-only",
+  "acceptanceScope": "Harness動作確認。iOS／Android実機のS6合格証跡には使用しない。",
+  "automaticProbe": {
+    "schemaVersion": 1,
+    "measuredAt": "2026-08-14T10:01:06.052Z",
+    "deviceLabel": "Codex In-app Browser / desktop diagnostic",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "platform": "MacIntel",
+    "displayModeStandalone": false,
+    "secureContext": true,
+    "capabilities": {
+      "serviceWorker": true,
+      "backgroundSync": true,
+      "periodicBackgroundSync": true,
+      "webPush": true,
+      "notifications": true,
+      "indexedDB": true,
+      "storageManager": true,
+      "storagePersistApi": true,
+      "geolocation": true,
+      "mediaDevices": true,
+      "webCrypto": true
+    },
+    "storage": {
+      "persistedBefore": false,
+      "persistGranted": false,
+      "quotaBytes": 10741021814,
+      "usageBeforeBytes": 0,
+      "usageAfterBytes": 3603574,
+      "indexedDb": {
+        "bytes": 33554432,
+        "elapsedMs": 45.599999994039536,
+        "writeMiBPerSecond": 701.75438605664
+      }
+    }
+  },
+  "reloadVerification": {
+    "checkedAt": "2026-08-14T10:01:50.713Z",
+    "markerPresent": true,
+    "marker": {
+      "createdAt": "2026-08-14T10:01:06.028Z",
+      "bytes": 33554432
+    }
+  }
+}

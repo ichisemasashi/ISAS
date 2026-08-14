@@ -31,6 +31,7 @@
 | `S2_spatial_rls.sql`＋`S2_spatial_concurrency.sql` | 空間索引×RLSと100万ポリゴン・64接続の本番規模負荷（**PostGIS 必須**） | ✅ **数値bbox事前絞込＋明示tenantでPASS**。本番field migrationへの昇格が必要 |
 | `S4_rls_scale.sql` | RLS×規模（10万行・スコープ restrictive） | ✅ 実行済 |
 | `S5_audit_chain.sql`＋`load/S5_*.sql` | `(tenant_id, 月)`監査ハッシュチェーンの同一テナント集中／テナント分散並行負荷と鎖検証 | ✅ **PG16・32接続・500書込/秒でPASS** |
+| `S6_device_capabilities.html`＋`S6_DEVICE_TEST.md` | iOS／Android PWAのStorage・SW・Background Sync・Push・位置・再起動後生存の実機証跡 | 🟡 **ハーネス完成、実機マトリクス未実測** |
 | `S7_offline_sync.py` | オフライン同期の参照状態機械（束原子性・冪等・競合・在庫・カーソル・権限失効・移送・旧版保全） | ✅ **15シナリオ PASS** |
 | `S7_integration.sql`＋`load/S7_integration_load.py` | 実PostgreSQL/FORCE RLS＋2 HTTPプロセス＋16 DB接続＋100ms/10Mbps模擬回線の統合負荷 | ✅ **push/pull・写真・冪等整合PASS** |
 | `S8_auth_context.sql` | BFF候補集合を現在のmembership／role／scope／tenant関係／双方向確認済み雇用関係へ再照合するDB検証関数 | ✅ **PG16で12群PASS**。ADR-0005 v8採用済み。次工程で本番migrationへ昇格 |
