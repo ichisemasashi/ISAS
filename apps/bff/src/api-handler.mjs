@@ -71,7 +71,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
 
     try {
       if (request.method === "GET" && url.pathname === "/api/v1/today") {
-        const result = await database.transaction(trusted, (client) => repository.getToday(client, trusted), { readOnly: true });
+        const result = await database.transaction(trusted, (client, canonical) => repository.getToday(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
         return json(200, result, requestId);
       }
 
@@ -81,7 +81,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         const results = [];
         // Each dependency bundle is its own atomic unit. One rejected bundle must not roll back an independent bundle.
         for (const bundle of input.bundles) {
-          results.push(await database.transaction(trusted, (client) => repository.pushBundle(client, trusted, bundle)));
+          results.push(await database.transaction(trusted, (client, canonical) => repository.pushBundle(client, canonical ? { ...trusted, authContext: canonical } : trusted, bundle)));
         }
         return json(200, { results }, requestId);
       }
@@ -91,12 +91,12 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         const priority = url.searchParams.get("priority") || "normal";
         const cursor = url.searchParams.get("cursor");
         if (!scope || !["priority", "normal"].includes(priority)) return problem(400, "invalid_request", "Invalid pull request", requestId);
-        const result = await database.transaction(trusted, (client) => repository.pull(client, trusted, { scope, priority, cursor }), { readOnly: true });
+        const result = await database.transaction(trusted, (client, canonical) => repository.pull(client, canonical ? { ...trusted, authContext: canonical } : trusted, { scope, priority, cursor }), { readOnly: true });
         return json(200, result, requestId);
       }
 
       if (request.method === "GET" && url.pathname === "/api/v1/sync/queues") {
-        const result = await database.transaction(trusted, (client) => repository.getQueues(client, trusted), { readOnly: true });
+        const result = await database.transaction(trusted, (client, canonical) => repository.getQueues(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
         return json(200, result, requestId);
       }
 
@@ -105,7 +105,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
         const body = await request.json();
         if (!body || typeof body.resolution !== "object" || Array.isArray(body.resolution)) return problem(400, "invalid_request", "Invalid conflict resolution", requestId);
-        const result = await database.transaction(trusted, (client) => repository.resolveConflict(client, trusted, decodeURIComponent(conflictMatch[1]), body.resolution));
+        const result = await database.transaction(trusted, (client, canonical) => repository.resolveConflict(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(conflictMatch[1]), body.resolution));
         return json(200, result, requestId);
       }
 
