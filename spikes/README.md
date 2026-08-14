@@ -30,6 +30,7 @@
 | `S1_partition_rls_unique.sql` | パーティション×RLS×冪等×FORCE RLS×**受理台帳**×**capability**×**ブートストラップ**×**子直接参照**×**注入漏れ**×**版履歴・監査トリガ** | ✅ **全項目PASS**（PG16で (14) `security_invoker`、(15) 所有者・トリガ・監査経路も実測） |
 | `S2_spatial_rls.sql` | 空間索引×RLS（**PostGIS 必須**） | ⚠️ **実行済**（合成10万行ではSLO内。ただし PG-M2／PG-M8 の構造的課題を確認） |
 | `S4_rls_scale.sql` | RLS×規模（10万行・スコープ restrictive） | ✅ 実行済 |
+| `S5_audit_chain.sql`＋`load/S5_*.sql` | `(tenant_id, 月)`監査ハッシュチェーンの同一テナント集中／テナント分散並行負荷と鎖検証 | ✅ **PG16・32接続・500書込/秒でPASS** |
 | `S7_offline_sync.py` | オフライン同期の参照状態機械（束原子性・冪等・競合・在庫・カーソル・権限失効・移送・旧版保全） | ✅ **15シナリオ PASS** |
 | `S8_auth_context.sql` | BFF候補集合を現在のmembership／role／scope／tenant関係／双方向確認済み雇用関係へ再照合するDB検証関数 | ✅ **PG16で12群PASS**。ADR-0005 v8採用済み。次工程で本番migrationへ昇格 |
 | `results/` | **実行ログと EXPLAIN 全文**（教訓16） | — |
@@ -48,6 +49,9 @@ open -a Docker && ./run.sh
 # AuthContext DB検証だけ
 ./run.sh S8
 
+# 監査ハッシュチェーン並行性能（PostgreSQL over TCP + pgbench）
+./run.sh S5
+
 # ローカル PostgreSQL（PostGIS 無しでも S1/S4 は実行可能）
 export PATH=/opt/homebrew/opt/postgresql@NN/bin:$PATH
 initdb -D /tmp/pg/data -U postgres -A trust
@@ -57,6 +61,12 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 ```
 
 > **最低要求 PostgreSQL バージョンは 15 以上**（`security_invoker` ビュー。ADR-0004 §2.5）。**S1 の項目(14) は PG15 未満ではスキップされる。**
+
+## 2026-08-14 の実行結果（S5・監査ハッシュチェーン並行性能）
+
+実行ログ：[`S5_2026-08-14_PG16.log`](results/S5_2026-08-14_PG16.log)。既定の`(tenant_id, 月)`チェーンを行ロックで直列化し、PostgreSQL TCP接続32本から**500監査書込/秒を15秒**投入した。同一最大テナント集中ケースは504.7 tps、p95 6.60 ms、失敗・遅延スキップ0で、14,985行の`prev_hash`連続性と全`row_hash`再計算も不一致0だった。テナント分散ケースだけでなく、同一テナント集中ケースを規範的な合格条件としている。
+
+この500書込/秒はADR-0019/0020未起票中の**暫定受入プロファイル**である。要求のオンライン保存1秒/p95を十分下回るため月次チェーンを維持し、日／時間分割やMerkleサブチェーンは現時点で導入しない。配備時の最大テナント書込率が確定したら同じハーネスの`rate`を置換して再受入する。外部アンカ署名は期間クローズの非同期処理であり、このホットパス測定には含めない。
 
 ## 2026-08-14 の実行結果（S8・PostgreSQL 16.4／PostGIS 3.4.3）
 

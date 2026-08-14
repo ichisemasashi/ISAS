@@ -1,0 +1,28 @@
+S5 audit hash-chain concurrency
+Date: 2026-08-14 Asia/Tokyo
+Environment: PostgreSQL 16.4 (Debian 16.4-1.pgdg120+2), arm64 Docker; client pgbench 14.23; TCP 127.0.0.1:55432
+Command: ./run.sh S5
+
+Acceptance profile (provisional until ADR-0019/0020 fixes production rates):
+- Chain unit: (tenant_id, calendar month)
+- 32 clients / 8 pgbench workers
+- offered 500 audit writes/s for 15 seconds per case
+- 256-byte synthetic body plus audit metadata
+- PASS: achieved >= 95% of offered rate, p95 <= 1000 ms, skipped=0, failed=0
+- Normative case: all clients contend on one maximum tenant. Multi-tenant is diagnostic only.
+
+S5-same-tenant: PASS
+samples=7537 tps=504.7 p50=2.98ms p95=6.60ms p99=8.13ms skipped=0 failed=0
+
+S5-multi-tenant-diagnostic: PASS
+samples=7448 tps=500.1 p50=2.92ms p95=6.57ms p99=8.43ms skipped=0 failed=0
+
+S5-integrity: PASS
+rows=14985 broken_prev=0 broken_hash=0
+same/multi p95 ratio=1.00x
+
+Conclusion:
+- Same-tenant row locking did not violate the 1-second online-write SLO at the provisional 500 writes/s rate.
+- The chain remained gap-free and every row hash recomputed exactly after concurrent insertion.
+- Monthly (tenant_id, period) chains remain the default. No daily/hourly split or Merkle sub-chain is justified by this profile.
+- This local single-node result does not set the final maximum-tenant write rate or cover synchronous external anchor signing. ADR-0019/0020 must replace the provisional offered rate with deployment figures; anchor creation remains an asynchronous period-close operation.
