@@ -84,10 +84,41 @@ def run_s5() -> None:
     print(f"S5 diagnostic same/multi p95 ratio: {improvement:.2f}x")
 
 
+def run_s2() -> None:
+    print("S2 production-scale PostGIS concurrency")
+    print("profile: 1,000,000 polygons, 100 tenants, PostgreSQL over TCP, 64 clients, offered 200 queries/s per case")
+    pgbench_case("S2-bbox-1000", ROOT / "load/S2_bbox.sql", clients=64, jobs=8, seconds=15, rate=200, p95_budget_ms=2000)
+    pgbench_case("S2-knn-20", ROOT / "load/S2_knn.sql", clients=64, jobs=8, seconds=15, rate=200, p95_budget_ms=500)
+    isolation = psql("""
+      SET ROLE app_user;
+      SELECT set_config('app.allowed_tenants', '{20000000-0000-7000-8000-000000000001}', false);
+      SELECT count(*) || '|' || count(*) FILTER (WHERE tenant_id = s2_tenant(2))
+      FROM field_load;
+    """).splitlines()[-1]
+    visible, leaked = map(int, isolation.split("|"))
+    if visible != 10000 or leaked != 0:
+        raise RuntimeError(f"S2 RLS isolation failed: visible={visible}, leaked={leaked}")
+    print(f"S2-isolation: PASS visible={visible} leaked_other_tenant={leaked}")
+    explain = psql("""
+      SET ROLE app_user;
+      SELECT set_config('app.allowed_tenants', '{20000000-0000-7000-8000-000000000001}', false);
+      EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, FORMAT TEXT)
+      SELECT id FROM field_load
+      WHERE tenant_id = s2_tenant(1)
+        AND bbox_min_x <= 140.25 AND bbox_max_x >= 140.10
+        AND bbox_min_y <= 38.25 AND bbox_max_y >= 38.10
+        AND geom && ST_MakeEnvelope(140.10, 38.10, 140.25, 38.25, 4326)
+      ORDER BY id LIMIT 1000;
+    """)
+    print("S2-bbox-plan:\n" + explain)
+
+
 def main() -> None:
     target = sys.argv[1].upper() if len(sys.argv) > 1 else "S5"
     if target == "S5":
         run_s5()
+    elif target == "S2":
+        run_s2()
     else:
         raise SystemExit(f"unknown load target: {target}")
 

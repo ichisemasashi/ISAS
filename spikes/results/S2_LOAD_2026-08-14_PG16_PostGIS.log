@@ -1,0 +1,48 @@
+S2 production-scale concurrent PostGIS load
+Date: 2026-08-14 Asia/Tokyo
+Environment: PostgreSQL 16.4 / PostGIS 3.4.3, arm64 Docker; client pgbench 14.23; TCP 127.0.0.1:55432
+Command: ./run.sh S2LOAD
+
+Dataset and profile:
+- 100 tenants x 10,000 fields = 1,000,000 Polygon(4326) rows
+- FORCE RLS; explicit tenant equality in every application query
+- gist(tenant_id, geom) for KNN
+- write-time bbox_min_x/max_x/min_y/max_y with tenant B-tree indexes for bbox prefilter
+- 64 clients / 8 workers / offered 200 queries/s / 15 seconds per case
+- bbox returns up to 1,000 rows: p95 <= 2,000ms (map initial display SLO)
+- KNN returns 20 rows: p95 <= 500ms (general API DB/network budget)
+- achieved >=95% offered rate; skipped=0; failed=0
+
+Baseline before numeric bbox prefilter (same dataset/profile): FAIL
+- first run with 500ms limit: tps=163.3 p50=718.97ms p95=1005.24ms, skipped=452
+- second run with 2s limit: tps=155.3 p50=1804.52ms p95=2499.26ms, skipped=286
+- single-query EXPLAIN: PostGIS && remained Filter under FORCE RLS; 10,000 tenant rows read, 9,039 removed; execution 84.135ms
+
+Mitigated result:
+S2-bbox-1000: PASS samples=2965 tps=199.9 p50=5.53ms p95=80.71ms p99=508.07ms skipped=0 failed=0
+S2-knn-20: PASS samples=2886 tps=194.5 p50=10.27ms p95=54.41ms p99=179.97ms skipped=0 failed=0
+S2-isolation: PASS visible=10000 leaked_other_tenant=0
+
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) — mitigated bbox:
+Limit (actual time=1.222..1.325 rows=961 loops=1)
+  Buffers: shared hit=153 read=28
+  ->  Sort (actual time=1.221..1.262 rows=961 loops=1)
+        Sort Key: id
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=153 read=28
+        ->  Index Scan using field_load_tenant_min_y_idx on field_load (actual time=0.456..1.172 rows=961 loops=1)
+              Index Cond: ((tenant_id = ANY ((COALESCE(NULLIF(current_setting('app.allowed_tenants'::text, true), ''::text), '{}'::text))::uuid[])) AND (tenant_id = '20000000-0000-7000-8000-000000000001'::uuid) AND (bbox_min_y <= '38.25'::double precision))
+              Filter: ((bbox_min_x <= '140.25'::double precision) AND (bbox_max_x >= '140.1'::double precision) AND (bbox_max_y >= '38.1'::double precision) AND (geom && '0103000020E610000001000000050000003333333333836140CDCCCCCCCC0C434033333333338361400000000000204340000000000088614000000000002043400000000000886140CDCCCCCCCC0C43403333333333836140CDCCCCCCCC0C4340'::geometry))
+              Rows Removed by Filter: 4139
+              Buffers: shared hit=150 read=28
+Planning:
+  Buffers: shared hit=319 read=23
+Planning Time: 9.927 ms
+Execution Time: 1.381 ms
+
+Conclusion:
+- The original PostGIS-only bbox plan is rejected at production scale under FORCE RLS.
+- Do not mark PostGIS operators LEAKPROOF and do not bypass RLS.
+- Persist numeric bounding coordinates at write time, apply explicit tenant equality plus leakproof float comparisons first, then exact PostGIS &&.
+- KNN keeps explicit tenant equality and the composite GiST.
+- The spike passes. The bbox columns/indexes must be promoted into the production field migration before production-scale acceptance of the application API.
