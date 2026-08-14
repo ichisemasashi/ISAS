@@ -32,7 +32,7 @@ DROP SCHEMA IF EXISTS spike CASCADE;
 DO $$
 DECLARE r text;
 BEGIN
-  FOREACH r IN ARRAY ARRAY['app_owner','app_user','admin_role','auth_role','bootstrap_owner','audit_writer'] LOOP
+  FOREACH r IN ARRAY ARRAY['app_owner','app_user','admin_role','auth_role','bootstrap_owner','auth_context_owner','audit_writer'] LOOP
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
       EXECUTE format('DROP OWNED BY %I CASCADE', r);
       EXECUTE format('DROP ROLE %I', r);
@@ -45,12 +45,15 @@ CREATE ROLE app_user        NOLOGIN NOSUPERUSER NOBYPASSRLS;  -- 業務ロール
 CREATE ROLE admin_role      NOLOGIN NOSUPERUSER NOBYPASSRLS;  -- 管理用の別接続（共有マスタ書込＝A1c-L2）
 CREATE ROLE auth_role       NOLOGIN NOSUPERUSER NOBYPASSRLS;  -- 認証専用（テーブル権限ゼロ・EXECUTE のみ）
 CREATE ROLE bootstrap_owner NOLOGIN NOSUPERUSER NOBYPASSRLS;  -- ブートストラップ関数の所有者（IND3-H1/PG-H5）
+CREATE ROLE auth_context_owner NOLOGIN NOSUPERUSER NOBYPASSRLS; -- AuthContext検証関数と権限基表の所有者
 CREATE ROLE audit_writer    NOLOGIN NOSUPERUSER BYPASSRLS;    -- 監査書込専用（R3-L1・INSERT のみ）
-GRANT app_owner, app_user, admin_role, auth_role, bootstrap_owner, audit_writer TO postgres;  -- SET ROLE 用
+-- superuserはmembership無しでSET ROLEできる。関数所有者・BYPASSRLSロールを
+-- ログインロールへGRANTした検証環境を本番形と誤認しないよう、通常試験ロールだけを委譲する。
+GRANT app_owner, app_user, admin_role, auth_role TO postgres;  -- SET ROLE 用
 
 CREATE SCHEMA part;   -- パーティション子（USAGE を通常ロールに与えない）
 CREATE SCHEMA priv;   -- 特権経路専用（同上）
-GRANT USAGE ON SCHEMA public TO app_owner, app_user, admin_role, auth_role, bootstrap_owner, audit_writer;
+GRANT USAGE ON SCHEMA public TO app_owner, app_user, admin_role, auth_role, bootstrap_owner, auth_context_owner, audit_writer;
 -- PostgreSQL 15+ は public スキーマの CREATE を PUBLIC へ既定付与しない。
 -- DDL所有者だけに明示し、バージョン既定に依存せず文書のDDLをそのまま実行できるようにする。
 GRANT CREATE ON SCHEMA public TO app_owner;

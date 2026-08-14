@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 |---|---|
 | 目的 | 設計文書群に書かれた **PostgreSQL の挙動に関する主張**が、実際の PostgreSQL の動作と一致しているかを検証する。**設計の良し悪しではなく「書かれていることが技術的に成立するか」**だけを見る。あわせて **`spikes/*.sql`（実際に実行されたSQL）と文書化された設計（データモデル設計書 §4/§6）が同一か**を突き合わせる。 |
-| 検証日 | 2026-07-27（初回）／**2026-08-13（PostgreSQL 16＋PostGIS追試）** |
+| 検証日 | 2026-07-27（初回）／**2026-08-13（PostgreSQL 16＋PostGIS追試）**／**2026-08-14（AuthContext DB検証）** |
 | 検証者 | **独立エージェント**（設計者のレビュー履歴・教訓を与えず、ADR本文＋データモデル設計書＋スパイクSQLのみ）。**ローカルに PostgreSQL 14.23 の一時クラスタを立て、文書の主張を実際にSQLで再現して確認**。 |
 | 設計者による再検証 | **最も影響の大きい2件（PG-H1／PG-H6）を設計者自身が別の一時クラスタで再実測し、いずれも指摘が正しいことを確認**（下記「設計者による再実測」）。 |
 | 対象文書 | [ADR-0001](ADR/ADR-0001-マルチテナント分離-行レベル-RLS.md)／[ADR-0003](ADR/ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)／[ADR-0004](ADR/ADR-0004-DB-PostgreSQL-PostGIS.md)／[データモデル設計書](データモデル設計書.md)／[spikes/](../../spikes/README.md) |
@@ -161,6 +161,20 @@ restrictive は AND・permissive は OR ／ permissive 0本＝0行 ／ `TO` な�
 | `gen_random_uuid()` 組込み | PG13 以降 | §6 |
 | PgBouncer のトランザクションプーリング＋prepared statements | PgBouncer **1.21 以降** | ADR-0001（PG-L6）。**プーラの製品・版が未指定** |
 | PostGIS 関数の volatility / leakproof | PostGIS 版依存 | §6 生成列（PG-L10）、S2 の索引利用（PG-M2） |
+
+---
+
+## 2026-08-14 追試（AuthContext DB検証・PostgreSQL 16.4）
+
+ADR-0009が要求する「候補集合をDB側で現在権限へ再照合してから`SET LOCAL`する」境界を、[`S8_auth_context.sql`](../../spikes/S8_auth_context.sql)で実DDL化した。全文ログは[`S8_2026-08-14_PG16.log`](../../spikes/results/S8_2026-08-14_PG16.log)、共通ロール変更後のS1回帰は[`S1_2026-08-14_PG16.log`](../../spikes/results/S1_2026-08-14_PG16.log)。
+
+- active membership、role由来capability、membership scope、activeな親子tenant、双方向確認済み雇用関係の包含だけを1行で返し、不正・失効時は0行とした。
+- role外capability、scope外、revoked membership／tenant関係、片側確認だけの雇用関係、空／重複集合を拒否した。
+- 権限基表は`priv`へ置き、`app_user`から直接参照不可。公開するのは`app_private.validate_auth_context`の`EXECUTE`だけとした。
+- 関数所有者`auth_context_owner`はNOLOGIN・非superuser・非BYPASSRLS、関数は`SECURITY DEFINER`＋固定`search_path`で、所有者ロールをログインロールへ委譲しないことをカタログ検査した。
+- 共通ロール定義から`bootstrap_owner`／`auth_context_owner`／`audit_writer`のログインロールへの明示GRANTを除去してS1を再実行し、RLS、ブートストラップ、版履歴、監査経路に退行がないことを確認した。
+
+**限定**：S8の権限基表はADR-0005の概念を実行可能にした参照物理形である。ADR-0005は再オープン中のため、本番migrationへの昇格は同ADRの再レビューと命名・版管理・失効イベント設計の確定後に行う。
 
 ---
 

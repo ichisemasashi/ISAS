@@ -20,8 +20,8 @@ if [[ "$TARGET" == "S7" ]]; then
   run_s7
   exit 0
 fi
-if [[ "$TARGET" != "S1" && "$TARGET" != "S2" && "$TARGET" != "S4" && "$TARGET" != "all" ]]; then
-  echo "unknown target: $TARGET (S1|S2|S4|S7|all)"
+if [[ "$TARGET" != "S1" && "$TARGET" != "S2" && "$TARGET" != "S4" && "$TARGET" != "S8" && "$TARGET" != "all" ]]; then
+  echo "unknown target: $TARGET (S1|S2|S4|S7|S8|all)"
   exit 1
 fi
 
@@ -30,7 +30,10 @@ PSQL="docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d spike"
 echo "== 1) DB 起動 =="
 docker compose up -d
 echo "== 2) ヘルスチェック待ち =="
-until docker compose exec -T db pg_isready -U postgres -d spike >/dev/null 2>&1; do
+# PostGIS imageの初回起動は、entrypoint内の一時postgresもpg_isreadyへ応答する。
+# PID 1が本起動postgresへexecされる前にDBを再作成するとinit scriptと競合するため、両方を見る。
+until docker compose exec -T db sh -c '[ "$(cat /proc/1/comm)" = "postgres" ]' >/dev/null 2>&1 \
+   && docker compose exec -T db pg_isready -U postgres -d spike >/dev/null 2>&1; do
   sleep 1; echo -n "."
 done
 echo " ready"
@@ -57,10 +60,12 @@ case "$TARGET" in
   S1) run_one S1_partition_rls_unique.sql ;;
   S2) run_one S2_spatial_rls.sql ;;
   S4) run_one S4_rls_scale.sql ;;
+  S8) run_one S8_auth_context.sql ;;
   all)
      run_one S1_partition_rls_unique.sql
      run_one S2_spatial_rls.sql
      run_one S4_rls_scale.sql
+     run_one S8_auth_context.sql
      run_s7 ;;
 esac
 

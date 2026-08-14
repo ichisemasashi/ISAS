@@ -168,7 +168,7 @@ ISAS
 
 | 領域 | 残作業 |
 |---|---|
-| 認証/権限 | クライアント、BFFコア、DB検証値だけを`SET LOCAL`するトランザクション境界は実装済み。具体IdP、永続store、DB検証関数／実pool、失効通知と端末パージを実装 |
+| 認証/権限 | クライアント、BFFコア、DB検証関数の参照DDL、検証値だけを`SET LOCAL`する境界は実装・PG16検証済み。具体IdP、永続store、実pool、本番migration、失効通知と端末パージを実装 |
 | API/同期 | S7参照状態機械を本番command path・pull/push API・Service Workerへ接続 |
 | 圃場GIS | MapLibre＋PostGIS API、オフライン担当圃場/タイル |
 | 作業指示/ガント | 管理者編集、担当割当、基本タイムライン |

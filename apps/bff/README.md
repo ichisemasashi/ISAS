@@ -19,7 +19,7 @@ ADR-0009の同一オリジンBFF境界を、Node.js標準APIだけで実装し�
 - `users.resolve`は`(issuer, subject)`だけを不変キーとして内部userを解決し、メールによる自動結合をしない。
 - `authorization.listTenants`と`deriveContext`は認証専用DB経路から現在の所属・role・scope・capabilityを導出する。context IDや過去のsnapshotを権限の真実源にしない。
 - `stores`の本番実装はsession ID、state、context IDのハッシュだけをキーとして保存し、絶対期限を持つ。メモリ実装は自動テスト専用であり、本番利用しない。
-- PostgreSQL poolは`app_user`へ直接接続し、`app_private.validate_auth_context(user_id, tenant_id, allowed_tenants, scope_field_groups, caps, employer_subject_users)`を呼べるものとする。この関数は現在のmembership／role／scopeから包含関係を検査して正規値を1行返し、不正・失効時は0行を返す。関数DDLと実DB試験は未実装であり、アダプタ単体テストの成功をDB権限検証済みとは扱わない。
+- PostgreSQL poolは`app_user`へ直接接続し、`app_private.validate_auth_context(user_id, tenant_id, allowed_tenants, scope_field_groups, caps, employer_subject_users)`を呼べるものとする。この関数の参照DDLは[`spikes/S8_auth_context.sql`](../../spikes/S8_auth_context.sql)にあり、PostgreSQL 16で12群PASS済み。ただしADR-0005が再オープン中のため、本番migrationへの昇格前に権限基表の物理形を再レビューする。
 
 ## 検証
 
@@ -29,4 +29,4 @@ npm test
 npm run check
 ```
 
-次の実装単位は、具体的なOIDCアダプタ、永続session/context store、PostgreSQLのAuthContext検証・`SET LOCAL`トランザクションアダプタである。
+次の実装単位は、具体的なOIDCアダプタ、永続session/context store、PostgreSQL実pool、S8参照DDLの本番migration化である。

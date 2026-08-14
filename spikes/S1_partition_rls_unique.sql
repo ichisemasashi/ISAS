@@ -481,6 +481,13 @@ SELECT ck(count(*) = 0, '(13g) auth_role は app_owner 所有のアプリ表に�
     AND has_table_privilege('auth_role', c.oid, 'SELECT,INSERT,UPDATE,DELETE');
 SELECT ck(count(*) <= 1, '(13h) rolsuper/rolbypassrls を持つロールが一覧内（audit_writer のみ）')
   FROM pg_roles WHERE (rolsuper OR rolbypassrls) AND rolname NOT IN ('postgres') AND rolname <> 'audit_writer';
+SELECT ck(NOT EXISTS (
+  SELECT 1 FROM pg_auth_members membership
+  JOIN pg_roles owner_role ON owner_role.oid = membership.roleid
+  JOIN pg_roles member_role ON member_role.oid = membership.member
+  WHERE owner_role.rolname IN ('bootstrap_owner', 'auth_context_owner', 'audit_writer')
+    AND member_role.rolcanlogin
+), '(13i) 関数所有者・BYPASSRLSロールをログインロールへ委譲しない');
 
 \echo '=== (14) security_invoker ビュー（PG15+ のみ・PG14 ではスキップ）==='
 DO $$

@@ -43,7 +43,7 @@ npm test
 npm run check
 ```
 
-PostgreSQL AuthContextトランザクションアダプタまでは実装済み。本番HTTPサーバ、具体的なOIDC IdP、永続session store、DB検証関数と実pool/driverを接続する必要がある。境界とアダプタ保証条件は[apps/bff/README.md](apps/bff/README.md)を参照する。
+PostgreSQL AuthContextトランザクションアダプタとDB検証関数の参照DDLまでは実装・PG16検証済み。本番HTTPサーバ、具体的なOIDC IdP、永続session store、実pool/driverと本番migrationを接続する必要がある。境界とアダプタ保証条件は[apps/bff/README.md](apps/bff/README.md)を参照する。
 
 ## 進め方（プロジェクトを貫く原則）
 

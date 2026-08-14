@@ -26,11 +26,12 @@
 
 | ファイル | 内容 | 状態 |
 |---|---|---|
-| `00_common.sql` | 拡張・**ロール6種**（app_owner／app_user／**admin_role**／auth_role／**bootstrap_owner**／audit_writer）・**スキーマ `part`・`priv`**・UUIDv7ヘルパ・**`clamp_event_ts`** | ✅ |
+| `00_common.sql` | 拡張・**ロール7種**（app_owner／app_user／admin_role／auth_role／bootstrap_owner／**auth_context_owner**／audit_writer）・**スキーマ `part`・`priv`**・UUIDv7ヘルパ・**`clamp_event_ts`** | ✅ |
 | `S1_partition_rls_unique.sql` | パーティション×RLS×冪等×FORCE RLS×**受理台帳**×**capability**×**ブートストラップ**×**子直接参照**×**注入漏れ**×**版履歴・監査トリガ** | ✅ **全項目PASS**（PG16で (14) `security_invoker`、(15) 所有者・トリガ・監査経路も実測） |
 | `S2_spatial_rls.sql` | 空間索引×RLS（**PostGIS 必須**） | ⚠️ **実行済**（合成10万行ではSLO内。ただし PG-M2／PG-M8 の構造的課題を確認） |
 | `S4_rls_scale.sql` | RLS×規模（10万行・スコープ restrictive） | ✅ 実行済 |
 | `S7_offline_sync.py` | オフライン同期の参照状態機械（束原子性・冪等・競合・在庫・カーソル・権限失効・移送・旧版保全） | ✅ **15シナリオ PASS** |
+| `S8_auth_context.sql` | BFF候補集合を現在のmembership／role／scope／tenant関係／双方向確認済み雇用関係へ再照合するDB検証関数 | ✅ **PG16で12群PASS**。参照DDLであり、ADR-0005再クローズ後に本番migrationへ昇格 |
 | `results/` | **実行ログと EXPLAIN 全文**（教訓16） | — |
 
 ---
@@ -44,6 +45,9 @@ open -a Docker && ./run.sh
 # S7だけ（Python 3のみ。Docker/DB不要）
 ./run.sh S7
 
+# AuthContext DB検証だけ
+./run.sh S8
+
 # ローカル PostgreSQL（PostGIS 無しでも S1/S4 は実行可能）
 export PATH=/opt/homebrew/opt/postgresql@NN/bin:$PATH
 initdb -D /tmp/pg/data -U postgres -A trust
@@ -53,6 +57,21 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 ```
 
 > **最低要求 PostgreSQL バージョンは 15 以上**（`security_invoker` ビュー。ADR-0004 §2.5）。**S1 の項目(14) は PG15 未満ではスキップされる。**
+
+## 2026-08-14 の実行結果（S8・PostgreSQL 16.4／PostGIS 3.4.3）
+
+実行ログ：[`S8_2026-08-14_PG16.log`](results/S8_2026-08-14_PG16.log)。共通ロール定義変更後のS1回帰ログ：[`S1_2026-08-14_PG16.log`](results/S1_2026-08-14_PG16.log)。
+
+S8は`app_private.validate_auth_context`を実DDL化し、次を**12群すべてPASS**した。
+
+- 通常tenantのactive membership、付与scope、role由来capabilityを受理。
+- role外capability、membership外scope、revoked membership、空／重複集合を拒否。
+- group管理者はactiveな配下tenantだけ横断でき、revokedなtenant関係は拒否。
+- 雇用主横断はtenant・管理者・従業員の組について双方確認済みかつ未失効の場合だけ受理。
+- `app_user`は検証関数だけを実行でき、`priv`の権限基表を直接参照できない。
+- 関数は`auth_context_owner`所有の`SECURITY DEFINER`＋固定`search_path`。所有者はNOLOGIN・非superuser・非BYPASSRLSで、ログインロールへ委譲しない。
+
+S1も全15項目に加えて、関数所有者／BYPASSRLSロールがログインロールへ委譲されないカタログ検査をPASSした。S8の権限基表は**ADR-0005再クローズ用の参照物理形**であり、このPASSだけで本番migration確定とは扱わない。
 
 ## 2026-08-14 の実行結果（S7・Python 3.14.6）
 

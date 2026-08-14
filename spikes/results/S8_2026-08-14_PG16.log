@@ -1,0 +1,176 @@
+== 1) DB 起動 ==
+ Container spikes-db-1  Running
+== 2) ヘルスチェック待ち ==
+ ready
+== 3) 使い捨て検証DBを再作成（文書どおり public で実行） ==
+== 4) 共通セットアップ（拡張・ロール・UUIDv7）: 1回だけ ==
+psql:<stdin>:22: NOTICE:  postgis/btree_gist: 有効（S2 実行可）
+DO
+DROP SCHEMA
+psql:<stdin>:27: NOTICE:  schema "part" does not exist, skipping
+psql:<stdin>:28: NOTICE:  schema "priv" does not exist, skipping
+DROP SCHEMA
+DROP SCHEMA
+psql:<stdin>:29: NOTICE:  schema "spike" does not exist, skipping
+DO
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+GRANT ROLE
+CREATE SCHEMA
+CREATE SCHEMA
+GRANT
+GRANT
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+psql:<stdin>:98: NOTICE:  uuidv7_time: IMMUTABLE かつ時刻復元一致（診断用として維持）
+DO
+
+########################################################
+# 実行: S8_auth_context.sql
+########################################################
+                                                          version                                                          
+---------------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 16.4 (Debian 16.4-1.pgdg120+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 12.2.0-14) 12.2.0, 64-bit
+(1 row)
+
+ postgis_version 
+-----------------
+ 3.4.3
+(1 row)
+
+CREATE SCHEMA
+GRANT
+GRANT
+SET
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE FUNCTION
+RESET
+REVOKE
+REVOKE
+REVOKE
+GRANT
+SET
+INSERT 0 3
+INSERT 0 4
+INSERT 0 4
+INSERT 0 1
+INSERT 0 2
+INSERT 0 2
+RESET
+CREATE FUNCTION
+SET
+psql:<stdin>:205: NOTICE:  PASS  (1) 通常tenant＋付与scope/capabilityを受理
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:207: NOTICE:  PASS  (2) role由来でないcapabilityを拒否
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:209: NOTICE:  PASS  (3) membership外scopeを拒否
+ ck 
+----
+ 
+(1 row)
+
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:211: NOTICE:  PASS  (4) group管理者のactive配下tenant横断を受理
+psql:<stdin>:213: NOTICE:  PASS  (5) revokedな配下tenant横断を拒否
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:215: NOTICE:  PASS  (6) 双方向確認済み雇用関係だけを受理
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:217: NOTICE:  PASS  (7) 片側確認だけの雇用関係を拒否
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:219: NOTICE:  PASS  (8) revoked membershipを拒否
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:221: NOTICE:  PASS  (9) 空allowed_tenantsを拒否
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:223: NOTICE:  PASS  (10) 重複集合を拒否
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:232: NOTICE:  PASS  (11) app_userの権限基表直接参照を拒否
+DO
+RESET
+psql:<stdin>:235: NOTICE:  PASS  (12a) app_userは検証関数だけ実行可
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:236: NOTICE:  PASS  (12b) auth_roleに業務AuthContext関数を付与しない
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:237: NOTICE:  PASS  (12c) auth_context_ownerはNOLOGIN・非特権
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:240: NOTICE:  PASS  (12d) SECURITY DEFINER＋固定search_path
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:241: NOTICE:  PASS  (12e) app_userはpriv schemaを利用不可
+ ck 
+----
+ 
+(1 row)
+
+psql:<stdin>:247: NOTICE:  PASS  (12f) auth_context_ownerをログインロールへ委譲しない
+ ck 
+----
+ 
+(1 row)
+
+
+S8: AuthContext DB検証 12群 PASS
+
+== 完了。結果は上のログ（PASS/NOTICE, EXPLAIN）を参照。停止は: docker compose down -v ==
