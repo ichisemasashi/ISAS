@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 import { App } from "./App";
 import type { MvpGateway } from "./api";
 import { demoAuthorization } from "./auth";
@@ -48,13 +49,15 @@ const api: MvpGateway = {
   async createWorkInstruction() { throw new Error("not used"); },
   async reassignWorkInstruction() { throw new Error("not used"); },
   async getJournalBootstrap() { return { instruction: null, punchSuggestion: { startedAt: "08:12", endedAt: "09:36", warning: null }, templates: [{ id: "template-1", name: "水管理", workType: "水管理", defaults: {}, version: 1 }], previous: { id: "previous-1", body: { field: "北の1号圃場", workType: "水管理" }, version: 1, updatedAt: new Date().toISOString() } }; },
+  async getJournals() { return { journals: [] }; },
+  async reviewJournal() { throw new Error("not used"); },
   async uploadJournalAttachment() { throw new Error("not used"); },
   async push() { throw new Error("offline test transport"); },
   async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
   async getQueues() { return { rejections: [], conflicts: [] }; },
   async resolveConflict() { return {}; },
 };
-const renderApp = (storage: StorageGateway, authorization = demoAuthorization) => render(<App api={api} csrfToken="csrf-1" storage={storage} authorization={authorization} />);
+const renderApp = (storage: StorageGateway, authorization = demoAuthorization, gateway = api) => render(<App api={gateway} csrfToken="csrf-1" storage={storage} authorization={authorization} />);
 
 describe("ISAS MVP field flow", () => {
   test("shows today's work and persistent synchronization state", async () => {
@@ -127,5 +130,23 @@ describe("ISAS MVP field flow", () => {
     expect(await screen.findByText(/再認証するまで新しい記録は確定できません/)).toBeInTheDocument();
     expect(store.outbox).toHaveLength(0);
     expect(screen.getByRole("heading", { name: "まだ作業を開始していません" })).toBeInTheDocument();
+  });
+
+  test("shows online manager controls for issuing and reassigning work", async () => {
+    const user = userEvent.setup();
+    const store = memoryStorage();
+    const manager = { ...demoAuthorization, context: { ...demoAuthorization.context, capabilities: [...demoAuthorization.context.capabilities, "instruction:manage", "journal:review"] } };
+    const createWorkInstruction = vi.fn(async () => ({ id: "instruction-1", fieldId: "0198a6c0-0000-7000-8000-000000000101", fieldGroupId: "f1111111-1111-7111-8111-111111111111", fieldName: "北圃場", cropName: "つや姫", title: "水位確認", workType: "水管理", details: "", scheduledStart: "2026-08-14T00:00:00Z", scheduledEnd: "2026-08-14T01:00:00Z", priority: 1, status: "issued" as const, version: 1, assignment: { id: "assignment-1", assigneeUserId: "22222222-2222-7222-8222-222222222222", version: 1 } }));
+    const gateway = { ...api, createWorkInstruction };
+    renderApp(store.gateway, manager, gateway);
+    await user.click(screen.getAllByRole("button", { name: "その他" })[0]);
+    await user.type(screen.getByLabelText("圃場ID"), "0198a6c0-0000-7000-8000-000000000101");
+    await user.type(screen.getByLabelText("担当者ID"), "22222222-2222-7222-8222-222222222222");
+    await user.type(screen.getByLabelText("指示名"), "水位確認");
+    await user.type(screen.getByLabelText("作業種別"), "水管理");
+    await user.type(screen.getByLabelText("開始予定"), "2026-08-14T08:00");
+    await user.type(screen.getByLabelText("終了予定"), "2026-08-14T09:00");
+    await user.click(screen.getByRole("button", { name: "オンラインで発行" }));
+    await waitFor(() => expect(createWorkInstruction).toHaveBeenCalled());
   });
 });

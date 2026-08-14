@@ -8,7 +8,7 @@ function clone(value) {
   return structuredClone(value);
 }
 
-export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [] } = {}) {
+export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [] } = {}) {
   const receipts = new Map();
   const changes = [];
   const rejections = [];
@@ -16,6 +16,8 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   let sequence = 0;
   const instructions = clone(workInstructions);
   const attachments = [];
+  const journals = clone(workJournals);
+  const revisions = [];
 
   const database = {
     async transaction(_trusted, operation) { return operation({}); },
@@ -66,6 +68,21 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       attachments.push(item); return clone(item);
     },
 
+    async listJournals(_client, trusted) {
+      const reviewer = trusted.authContext.capabilities.includes("journal:review");
+      return { journals: clone(journals.filter((item) => item.tenantId === trusted.authContext.tenantId && (reviewer || item.workerUserId === trusted.userId))) };
+    },
+
+    async reviewJournal(_client, trusted, journalId, input) {
+      if (!trusted.authContext.capabilities.includes("journal:review")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      if (!["approve", "return"].includes(input.action) || !Number.isInteger(input.expectedVersion) || (input.action === "return" && (typeof input.reason !== "string" || !input.reason.trim()))) throw new TypeError("invalid review");
+      const item = journals.find((row) => row.id === journalId && row.tenantId === trusted.authContext.tenantId);
+      if (!item) throw new TypeError("unknown journal");
+      if (item.version !== input.expectedVersion) { const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = item.version; throw error; }
+      item.status = input.action === "approve" ? "approved" : "returned"; item.version += 1;
+      return { id: item.id, status: item.status, version: item.version, updatedAt: new Date().toISOString() };
+    },
+
     async pushBundle(_client, trusted, bundle) {
       const tenantId = trusted.authContext.tenantId;
       const duplicate = bundle.events.every((event) => receipts.has(`${tenantId}:${event.eventUuid}`));
@@ -79,13 +96,14 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
           || event.membershipVersion !== trusted.membershipVersion
           || event.authorizationSnapshotId !== trusted.authorizationSnapshotId;
       });
-      if (invalid) {
+      const lockedJournal = bundle.events.find((event) => event.kind === "journal" && journals.some((journal) => journal.id === event.payload.aggregateId && journal.tenantId === tenantId && journal.status === "approved"));
+      if (invalid || lockedJournal) {
         const rejection = {
           id: `rejection-${rejections.length + 1}`,
           tenantId,
           bundleId: bundle.bundleId,
           eventUuids: bundle.events.map((event) => event.eventUuid),
-          reason: CAPABILITY_BY_KIND[invalid.kind] ? "authorization_changed" : "unsupported_event",
+          reason: lockedJournal ? "journal_locked" : CAPABILITY_BY_KIND[invalid.kind] ? "authorization_changed" : "unsupported_event",
           recoveryAction: "reauthenticate_or_request_manager_review",
           createdAt: new Date().toISOString(),
         };
@@ -106,6 +124,13 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
         receipts.set(key, receipt);
         const change = { serverSeq: String(++sequence), scope: event.scope || "tenant", priority: "normal", type: event.kind, operation: "upsert", data: clone(event.payload), eventUuid: event.eventUuid };
         changes.push(change);
+        if (event.kind === "journal" && event.payload.aggregateId) {
+          const journal = journals.find((item) => item.id === event.payload.aggregateId && item.tenantId === tenantId);
+          if (journal?.status === "returned") {
+            revisions.push({ journalId: journal.id, action: "corrected", reason: event.payload.correctionReason || null, body: clone(event.payload.changes || event.payload) });
+            journal.status = "corrected"; journal.version += 1; journal.body = clone(event.payload.changes || event.payload);
+          }
+        }
         accepted.push(receipt);
       }
       return { bundleId: bundle.bundleId, status: "accepted", events: accepted };
@@ -145,5 +170,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments } };
+  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments, journals, revisions } };
 }

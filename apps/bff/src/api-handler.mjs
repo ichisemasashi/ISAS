@@ -134,7 +134,21 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (request.method === "GET" && url.pathname === "/api/v1/journal-bootstrap") {
         const instructionId = url.searchParams.get("instructionId");
         const fieldId = url.searchParams.get("fieldId");
-        const result = await database.transaction(trusted, (client, canonical) => repository.getJournalBootstrap(client, canonical ? { ...trusted, authContext: canonical } : trusted, { instructionId, fieldId }), { readOnly: true });
+        const journalId = url.searchParams.get("journalId");
+        const result = await database.transaction(trusted, (client, canonical) => repository.getJournalBootstrap(client, canonical ? { ...trusted, authContext: canonical } : trusted, { instructionId, fieldId, journalId }), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/journals") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.listJournals(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      const reviewMatch = url.pathname.match(/^\/api\/v1\/journals\/([^/]+)\/review$/);
+      if (request.method === "POST" && reviewMatch) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.reviewJournal(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(reviewMatch[1]), body));
         return json(200, result, requestId);
       }
 

@@ -207,9 +207,10 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return { id: instructionId, assignmentId, assigneeUserId: input.assigneeUserId, version: Number(updated.rows[0].version) };
     },
 
-    async getJournalBootstrap(client, _trusted, { instructionId, fieldId }) {
+    async getJournalBootstrap(client, _trusted, { instructionId, fieldId, journalId }) {
       if (instructionId && !isUuid(instructionId)) throw new TypeError("invalid instruction");
       if (fieldId && !isUuid(fieldId)) throw new TypeError("invalid field");
+      if (journalId && !isUuid(journalId)) throw new TypeError("invalid journal");
       const instruction = instructionId ? await client.query(`
         SELECT instruction.instruction_id::text AS id, instruction.field_id::text AS field_id,
                instruction.field_group_id::text AS field_group_id, field.name AS field_name,
@@ -231,10 +232,13 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           WHERE tenant_id = app.current_tenant_id() AND active
             AND ($1::uuid IS NULL OR field_group_id IS NULL OR field_group_id = $1::uuid)
           ORDER BY sort_order, name LIMIT 20`, [selectedScope]),
-        client.query(`SELECT journal_id::text AS id, body, version, updated_at FROM app.work_journal
+        client.query(`SELECT journal_id::text AS id, instruction_id::text AS instruction_id,
+            field_id::text AS field_id, field_group_id::text AS field_group_id, body, status, version, updated_at
+          FROM app.work_journal
           WHERE tenant_id = app.current_tenant_id() AND worker_user_id = app.current_user_id()
-            AND ($1::uuid IS NULL OR field_id = $1::uuid)
-          ORDER BY updated_at DESC LIMIT 1`, [selectedFieldId]),
+            AND ($1::uuid IS NULL OR journal_id = $1::uuid)
+            AND ($2::uuid IS NULL OR field_id = $2::uuid)
+          ORDER BY updated_at DESC LIMIT 1`, [journalId || null, selectedFieldId]),
       ]);
       return {
         instruction: instruction.rows[0] ? {
@@ -244,7 +248,7 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         } : null,
         punchSuggestion: derivePunchSuggestion(punches.rows),
         templates: templates.rows.map((row) => ({ id: row.id, name: row.name, workType: row.work_type, defaults: row.defaults, version: Number(row.version) })),
-        previous: previous.rows[0] ? { id: previous.rows[0].id, body: previous.rows[0].body, version: Number(previous.rows[0].version), updatedAt: new Date(previous.rows[0].updated_at).toISOString() } : null,
+        previous: previous.rows[0] ? { id: previous.rows[0].id, instructionId: previous.rows[0].instruction_id, fieldId: previous.rows[0].field_id, fieldGroupId: previous.rows[0].field_group_id, body: previous.rows[0].body, status: previous.rows[0].status, version: Number(previous.rows[0].version), updatedAt: new Date(previous.rows[0].updated_at).toISOString() } : null,
       };
     },
 
@@ -272,6 +276,59 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return { id: result.rows[0].id, journalId: result.rows[0].journal_id, byteSize: Number(result.rows[0].byte_size), sha256: result.rows[0].sha256 };
     },
 
+    async listJournals(client) {
+      const result = await client.query(`
+        SELECT journal.journal_id::text AS id, journal.instruction_id::text AS instruction_id,
+               journal.field_id::text AS field_id, field.name AS field_name,
+               journal.worker_user_id::text AS worker_user_id, journal.body, journal.status,
+               journal.version, journal.submitted_at, journal.updated_at,
+               coalesce(jsonb_agg(jsonb_build_object('id', attachment.attachment_id::text,
+                 'fileName', attachment.file_name, 'contentType', attachment.content_type))
+                 FILTER (WHERE attachment.attachment_id IS NOT NULL), '[]'::jsonb) AS attachments
+        FROM app.work_journal journal
+        LEFT JOIN app.field field ON field.tenant_id = journal.tenant_id AND field.field_id = journal.field_id
+        LEFT JOIN app.journal_attachment attachment ON attachment.tenant_id = journal.tenant_id AND attachment.journal_id = journal.journal_id
+        WHERE journal.tenant_id = app.current_tenant_id()
+          AND (journal.worker_user_id = app.current_user_id() OR app.has_capability('journal:review'))
+        GROUP BY journal.tenant_id, journal.journal_id, field.name
+        ORDER BY journal.updated_at DESC LIMIT 100`);
+      return { journals: result.rows.map((row) => ({
+        id: row.id, instructionId: row.instruction_id, fieldId: row.field_id, fieldName: row.field_name,
+        workerUserId: row.worker_user_id, body: row.body, status: row.status, version: Number(row.version),
+        submittedAt: new Date(row.submitted_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(), attachments: row.attachments,
+      })) };
+    },
+
+    async reviewJournal(client, _trusted, journalId, input) {
+      if (!isUuid(journalId) || !["approve", "return"].includes(input.action)
+        || !Number.isInteger(input.expectedVersion) || input.expectedVersion < 1
+        || (input.action === "return" && (typeof input.reason !== "string" || !input.reason.trim()))) throw new TypeError("invalid review");
+      await requireCapability(client, "journal:review");
+      const locked = await client.query(`SELECT journal_id::text AS id, worker_user_id::text AS worker_user_id,
+          body, status, version FROM app.work_journal
+        WHERE tenant_id = app.current_tenant_id() AND journal_id = $1::uuid FOR UPDATE`, [journalId]);
+      if (!locked.rows[0]) throw new TypeError("unknown journal");
+      if (Number(locked.rows[0].version) !== input.expectedVersion) {
+        const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = Number(locked.rows[0].version); throw error;
+      }
+      if (!["submitted", "corrected"].includes(locked.rows[0].status)) throw new TypeError("journal is not reviewable");
+      const nextStatus = input.action === "approve" ? "approved" : "returned";
+      const revisionId = uuid();
+      await client.query(`INSERT INTO app.journal_revision
+        (tenant_id, revision_id, journal_id, worker_user_id, action, from_status, to_status,
+         reason, body_snapshot, actor_user_id)
+        VALUES (app.current_tenant_id(), $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::jsonb, app.current_user_id())`,
+      [revisionId, journalId, locked.rows[0].worker_user_id, nextStatus, locked.rows[0].status, nextStatus, input.reason || null, JSON.stringify(locked.rows[0].body)]);
+      const updated = await client.query(`UPDATE app.work_journal SET status = $2, version = version + 1, updated_at = clock_timestamp()
+        WHERE tenant_id = app.current_tenant_id() AND journal_id = $1::uuid AND version = $3
+        RETURNING status, version, updated_at`, [journalId, nextStatus, input.expectedVersion]);
+      await client.query(`INSERT INTO app.sync_change (tenant_id, priority, entity_type, operation, entity_id, data)
+        VALUES (app.current_tenant_id(), 0, 'journal_review', 'upsert', $1::uuid,
+          jsonb_build_object('journalId', $1::text, 'status', $2::text, 'reason', $3::text, 'version', $4::bigint))`,
+      [journalId, nextStatus, input.reason || null, updated.rows[0].version]);
+      return { id: journalId, status: updated.rows[0].status, version: Number(updated.rows[0].version), updatedAt: new Date(updated.rows[0].updated_at).toISOString() };
+    },
+
     async pushBundle(client, trusted, bundle) {
       const tenantId = trusted.authContext.tenantId;
       const allReceipts = await client.query(`
@@ -290,6 +347,10 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         if (!allowed.rows[0]?.allowed || event.membershipVersion !== trusted.membershipVersion || event.authorizationSnapshotId !== trusted.authorizationSnapshotId) {
           rejectionReason = "authorization_changed";
           break;
+        }
+        if (event.kind === "journal" && isUuid(event.payload.aggregateId)) {
+          const currentJournal = await client.query("SELECT status FROM app.work_journal WHERE tenant_id = $1::uuid AND journal_id = $2::uuid", [tenantId, event.payload.aggregateId]);
+          if (currentJournal.rows[0]?.status === "approved") { rejectionReason = "journal_locked"; break; }
         }
       }
       if (rejectionReason) {
@@ -337,6 +398,8 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         if (event.kind === "journal" && isUuid(event.payload.aggregateId) && Number.isInteger(event.payload.baseVersion)) {
           const proposed = event.payload.changes && typeof event.payload.changes === "object" ? event.payload.changes : event.payload;
           let journalBody = proposed;
+          const currentJournal = await client.query(`SELECT worker_user_id::text AS worker_user_id, body, status
+            FROM app.work_journal WHERE tenant_id = $1::uuid AND journal_id = $2::uuid FOR UPDATE`, [tenantId, event.payload.aggregateId]);
           const updated = await client.query(`
             UPDATE app.sync_document SET body = $3::jsonb, version = version + 1, updated_at = clock_timestamp()
             WHERE tenant_id = $1::uuid AND document_id = $2::uuid AND version = $4::bigint
@@ -373,6 +436,15 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
                 AND app.work_journal.status IN ('submitted', 'returned', 'corrected')`,
           [tenantId, event.payload.aggregateId, isUuid(event.payload.instructionId) ? event.payload.instructionId : null,
             isUuid(event.payload.fieldId) ? event.payload.fieldId : null, event.scope || null, JSON.stringify(journalBody)]);
+          if (currentJournal.rows[0]?.status === "returned") {
+            await client.query(`INSERT INTO app.journal_revision
+              (tenant_id, revision_id, journal_id, worker_user_id, action, from_status, to_status,
+               reason, body_snapshot, actor_user_id)
+              VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'corrected', 'returned', 'corrected',
+                $5, $6::jsonb, app.current_user_id())`,
+            [tenantId, uuid(), event.payload.aggregateId, currentJournal.rows[0].worker_user_id,
+              typeof event.payload.correctionReason === "string" ? event.payload.correctionReason : null, JSON.stringify(journalBody)]);
+          }
         }
 
         await client.query(`

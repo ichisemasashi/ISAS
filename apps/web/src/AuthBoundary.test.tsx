@@ -22,6 +22,8 @@ const api: MvpGateway = {
   async createWorkInstruction() { throw new Error("not used"); },
   async reassignWorkInstruction() { throw new Error("not used"); },
   async getJournalBootstrap() { return { instruction: null, punchSuggestion: { startedAt: null, endedAt: null, warning: "missing_start" }, templates: [], previous: null }; },
+  async getJournals() { return { journals: [] }; },
+  async reviewJournal() { throw new Error("not used"); },
   async uploadJournalAttachment() { throw new Error("not used"); },
   async push() { return { results: [] }; }, async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
   async getQueues() { return { rejections: [], conflicts: [] }; }, async resolveConflict() { return {}; },
@@ -53,6 +55,7 @@ describe("AuthBoundary", () => {
         roleLabel: "管理者",
         membershipVersion: "membership-1",
         authorizationSnapshotId: "snapshot-1",
+        capabilities: ["instruction:manage", "journal:review"],
         expiresAt: "2026-08-14T12:00:00+09:00",
       }),
     });

@@ -20,6 +20,7 @@ export type RequestContext = {
   roleLabel: string;
   membershipVersion: string;
   authorizationSnapshotId: string;
+  capabilities: string[];
   expiresAt: string;
 };
 
@@ -103,6 +104,7 @@ function parseContext(value: unknown): RequestContext {
     roleLabel: requireString(value.roleLabel, "roleLabel"),
     membershipVersion: requireString(value.membershipVersion, "membershipVersion"),
     authorizationSnapshotId: requireString(value.authorizationSnapshotId, "authorizationSnapshotId"),
+    capabilities: Array.isArray(value.capabilities) ? value.capabilities.filter((item): item is string => typeof item === "string") : [],
     expiresAt: requireString(value.expiresAt, "expiresAt"),
   };
 }
@@ -163,6 +165,7 @@ export const demoAuthorization: AppAuthorization = {
     roleLabel: demoTenant.roleLabel,
     membershipVersion: "membership-demo-v1",
     authorizationSnapshotId: "snapshot-demo-v1",
+    capabilities: ["journal:write", "pesticide:write", "punch:write"],
     expiresAt: "2026-08-14T12:00:00+09:00",
   },
   accessMode: "online",

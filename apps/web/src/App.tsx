@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import type { JournalBootstrap, MvpGateway, QueueSnapshot, TodayTask, WorkInstruction } from "./api";
+import type { JournalBootstrap, JournalEntry, MvpGateway, QueueSnapshot, TodayTask, WorkInstruction } from "./api";
 import { demoAuthorization, type AppAuthorization, type TenantOption } from "./auth";
 import { browserStorage, type JournalDraft, type StorageGateway } from "./storage";
 import { synchronize } from "./sync";
@@ -59,6 +59,8 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
   const [tasks, setTasks] = useState<TodayTask[]>([]);
   const [instructions, setInstructions] = useState<WorkInstruction[]>([]);
   const [selectedInstructionId, setSelectedInstructionId] = useState<string | undefined>();
+  const [selectedJournalId, setSelectedJournalId] = useState<string | undefined>();
+  const [journals, setJournals] = useState<JournalEntry[]>([]);
   const [syncRevision, setSyncRevision] = useState(0);
   const [queueCounts, setQueueCounts] = useState({ rejections: 0, conflicts: 0 });
   const [queues, setQueues] = useState<QueueSnapshot>({ rejections: [], conflicts: [] });
@@ -93,6 +95,9 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
     const controller = new AbortController();
     api.getWorkInstructions(authorization.context.contextId, controller.signal).then(({ instructions: current }) => {
       if (!controller.signal.aborted) setInstructions(current);
+    }).catch(() => undefined);
+    api.getJournals(authorization.context.contextId, controller.signal).then(({ journals: current }) => {
+      if (!controller.signal.aborted) setJournals(current);
     }).catch(() => undefined);
     return () => controller.abort();
   }, [api, authorization.context.contextId, online]);
@@ -179,11 +184,11 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
 
         <main id="main" tabIndex={-1}>
           {authorization.accessMode !== "online" && <div className={`authorization-banner mode-${authorization.accessMode}`} role="status"><strong>{authorization.accessMode === "offline-write" ? "オフライン認証の猶予中" : authorization.accessMode === "offline-read" ? "読取専用へ移行しました" : "認証の猶予が終了しました"}</strong><span>{authorization.accessMode === "offline-write" ? "現場記録だけを端末へ保存できます。機微操作は利用できません。" : authorization.accessMode === "offline-read" ? "下書きは保持されますが、再認証まで記録を確定できません。" : "未同期データを保持しています。オンライン復帰後に再認証してください。"}</span></div>}
-          {route === "today" && <TodayPage tasks={tasks} instructions={instructions} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} recordInstruction={(id) => { setSelectedInstructionId(id); navigate("journal"); }} />}
-          {route === "journal" && <JournalPage api={api} csrfToken={csrfToken} authorization={authorization} online={online} instructionId={selectedInstructionId} storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
+          {route === "today" && <TodayPage tasks={tasks} instructions={instructions} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} recordInstruction={(id) => { setSelectedJournalId(undefined); setSelectedInstructionId(id || undefined); navigate("journal"); }} />}
+          {route === "journal" && <JournalPage api={api} csrfToken={csrfToken} authorization={authorization} online={online} instructionId={selectedInstructionId} journalId={selectedJournalId} storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
           {route === "pesticide" && <PesticidePage queue={queue} navigate={navigate} />}
           {route === "fields" && <Suspense fallback={<div className="page-content"><p role="status">圃場地図を読み込んでいます。</p></div>}><FieldsPage api={api} storage={storage} authorization={authorization} online={online} /></Suspense>}
-          {route === "more" && <MorePage theme={theme} locale={locale} queueCounts={queueCounts} queues={queues} resolveConflict={async (id, choice) => {
+          {route === "more" && <MorePage api={api} csrfToken={csrfToken} authorization={authorization} online={online} instructions={instructions} setInstructions={setInstructions} journals={journals} setJournals={setJournals} correctJournal={(id) => { setSelectedInstructionId(undefined); setSelectedJournalId(id); navigate("journal"); }} setNotice={setNotice} theme={theme} locale={locale} queueCounts={queueCounts} queues={queues} resolveConflict={async (id, choice) => {
             await api.resolveConflict(authorization.context.contextId, csrfToken, id, { choice });
             const next = await api.getQueues(authorization.context.contextId);
             await storage.saveServerQueues(authorization.context.tenantId, next);
@@ -219,7 +224,7 @@ function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate
   return <div className="page-content">
     <section className="welcome-row">
       <div><p className="eyebrow">{date}</p><h1>おはようございます、{userName}さん</h1><p>今日の作業は{instructions.length || tasks.length}件です。{tasks.some((task) => task.status === "safety_check") && "安全確認が必要な作業があります。"}</p></div>
-      <button className="primary-action desktop-only" onClick={() => navigate("journal")}><Icon name="record"/>日誌をつける</button>
+      <button className="primary-action desktop-only" onClick={() => recordInstruction("")}><Icon name="record"/>日誌をつける</button>
     </section>
 
     <section className={`punch-card state-${punch}`} aria-labelledby="punch-title">
@@ -242,14 +247,14 @@ function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate
         </article>)}{instructions.length === 0 && tasks.map((task) => <article className={`task-card ${task.status === "safety_check" ? "needs-check" : ""}`} key={task.id}>
           <div className="task-time"><strong>{task.time}</strong><span>{{ next: "次の作業", today: "今日", safety_check: "要安全確認", completed: "完了", cancelled: "中止" }[task.status]}</span></div>
           <div className="task-main"><h3>{task.work}</h3><p>{task.field}<span aria-hidden="true">・</span>{task.crop}</p></div>
-          {task.status === "safety_check" ? <button className="task-button warning-button" onClick={() => navigate("pesticide")}><Icon name="warning"/>安全確認</button> : <button className="task-button" onClick={() => navigate("journal")}>記録する</button>}
+          {task.status === "safety_check" ? <button className="task-button warning-button" onClick={() => navigate("pesticide")}><Icon name="warning"/>安全確認</button> : <button className="task-button" onClick={() => recordInstruction("")}>記録する</button>}
         </article>)}</div>
       </section>
 
       <aside className="quick-section" aria-labelledby="quick-title">
         <div className="section-head"><div><span className="section-kicker">QUICK ACTIONS</span><h2 id="quick-title">すぐに記録</h2></div></div>
         <div className="quick-grid">
-          <button onClick={() => navigate("journal")}><span className="quick-icon green"><Icon name="record"/></span><span><strong>作業日誌</strong><small>前回値から入力</small></span></button>
+          <button onClick={() => recordInstruction("")}><span className="quick-icon green"><Icon name="record"/></span><span><strong>作業日誌</strong><small>前回値から入力</small></span></button>
           <button onClick={() => navigate("pesticide")} aria-label="農薬記録を始める"><span className="quick-icon amber"><Icon name="leaf"/></span><span><strong>農薬記録</strong><small>使用基準を確認</small></span></button>
           <button onClick={() => navigate("fields")}><span className="quick-icon blue"><Icon name="field"/></span><span><strong>圃場を見る</strong><small>担当圃場を確認</small></span></button>
         </div>
@@ -259,21 +264,26 @@ function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate
   </div>;
 }
 
-function JournalPage({ api, csrfToken, authorization, online, instructionId, storage, queue, navigate, setNotice }: { api: MvpGateway; csrfToken: string; authorization: AppAuthorization; online: boolean; instructionId?: string; storage: StorageGateway; queue: (kind: "journal", payload: Record<string, unknown>, scope?: string) => Promise<boolean>; navigate: (route: Route) => void; setNotice: (message: string) => void }) {
+function JournalPage({ api, csrfToken, authorization, online, instructionId, journalId, storage, queue, navigate, setNotice }: { api: MvpGateway; csrfToken: string; authorization: AppAuthorization; online: boolean; instructionId?: string; journalId?: string; storage: StorageGateway; queue: (kind: "journal", payload: Record<string, unknown>, scope?: string) => Promise<boolean>; navigate: (route: Route) => void; setNotice: (message: string) => void }) {
   const [draft, setDraft] = useState<JournalDraft>({ id: "today-journal", aggregateId: crypto.randomUUID(), baseVersion: 0, baseValue: {}, instructionId, field: "", workType: "", startedAt: "", endedAt: "", memo: "", attachmentIds: [], updatedAt: new Date().toISOString() });
   const [bootstrap, setBootstrap] = useState<JournalBootstrap | null>(null);
   const [photoNames, setPhotoNames] = useState<string[]>([]);
+  const [correctionReason, setCorrectionReason] = useState("");
   useEffect(() => {
     const controller = new AbortController();
     const tenantId = authorization.context.tenantId;
     const apply = (value: JournalBootstrap) => {
+      if (journalId && value.previous?.id !== journalId) return;
       setBootstrap(value);
       const previous = value.previous?.body || {};
       setDraft((current) => ({
         ...current,
+        aggregateId: journalId && value.previous ? value.previous.id : current.aggregateId,
+        baseVersion: journalId && value.previous ? value.previous.version : current.baseVersion,
+        baseValue: journalId && value.previous ? value.previous.body : current.baseValue,
         instructionId: value.instruction?.id || current.instructionId,
-        fieldId: value.instruction?.fieldId || current.fieldId,
-        fieldGroupId: value.instruction?.fieldGroupId || current.fieldGroupId,
+        fieldId: value.instruction?.fieldId || value.previous?.fieldId || current.fieldId,
+        fieldGroupId: value.instruction?.fieldGroupId || value.previous?.fieldGroupId || current.fieldGroupId,
         field: value.instruction?.fieldName || String(previous.field || current.field),
         workType: value.instruction?.workType || String(previous.workType || current.workType),
         startedAt: value.punchSuggestion.startedAt || current.startedAt,
@@ -283,12 +293,12 @@ function JournalPage({ api, csrfToken, authorization, online, instructionId, sto
       }));
     };
     storage.getJournalBootstrap(tenantId).then((cached) => { if (cached && !controller.signal.aborted) apply(cached); }).catch(() => undefined);
-    if (online) api.getJournalBootstrap(authorization.context.contextId, { instructionId }, controller.signal).then(async (current) => {
+    if (online) api.getJournalBootstrap(authorization.context.contextId, { instructionId, journalId }, controller.signal).then(async (current) => {
       await storage.saveJournalBootstrap(tenantId, current);
       if (!controller.signal.aborted) apply(current);
     }).catch(() => { if (!controller.signal.aborted) setNotice("入力候補を更新できませんでした。端末のテンプレートを使います。"); });
     return () => controller.abort();
-  }, [api, authorization.context.contextId, authorization.context.tenantId, instructionId, online, setNotice, storage]);
+  }, [api, authorization.context.contextId, authorization.context.tenantId, instructionId, journalId, online, setNotice, storage]);
   const update = (key: keyof JournalDraft, value: string) => setDraft((current) => ({ ...current, [key]: value, updatedAt: new Date().toISOString() }));
   const duration = useMemo(() => durationLabel(draft.startedAt, draft.endedAt), [draft.startedAt, draft.endedAt]);
   useEffect(() => {
@@ -299,7 +309,8 @@ function JournalPage({ api, csrfToken, authorization, online, instructionId, sto
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const { aggregateId, baseVersion, baseValue, instructionId: selectedInstruction, fieldId, fieldGroupId, field, workType, startedAt, endedAt, memo, attachmentIds } = draft;
-    if (await queue("journal", { aggregateId, baseVersion, baseValue, instructionId: selectedInstruction, fieldId, attachmentIds, changes: { field, workType, startedAt, endedAt, memo, attachmentIds } }, fieldGroupId)) navigate("today");
+    if (journalId && !correctionReason.trim()) { setNotice("訂正理由を入力してください。"); return; }
+    if (await queue("journal", { aggregateId, baseVersion, baseValue, instructionId: selectedInstruction, fieldId, attachmentIds, correctionReason: correctionReason || undefined, changes: { field, workType, startedAt, endedAt, memo, attachmentIds } }, fieldGroupId)) navigate("today");
   };
   const addPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -326,6 +337,7 @@ function JournalPage({ api, csrfToken, authorization, online, instructionId, sto
       </div><div className="template-row"><span>よく使う作業</span>{(bootstrap?.templates || []).map((template) => <button key={template.id} type="button" onClick={() => setDraft((current) => ({ ...current, ...template.defaults, workType: template.workType, updatedAt: new Date().toISOString() }))}>{template.name}</button>)}{!bootstrap?.templates.length && <span>端末に保存された前回値を利用</span>}</div></fieldset>
       <fieldset><legend>作業した時間</legend>{bootstrap?.punchSuggestion.warning && <p className="field-warning" role="status">{bootstrap.punchSuggestion.warning === "missing_start" ? "開始打刻がありません。時刻を確認して入力してください。" : "終了打刻がありません。終了後に時刻を入力してください。"}</p>}<div className="form-grid time-grid"><label>開始<input type="time" value={draft.startedAt} onChange={(event) => update("startedAt", event.target.value)} required/></label><label>終了<input type="time" value={draft.endedAt} onChange={(event) => update("endedAt", event.target.value)} required/></label><div className="duration"><span>作業時間</span><strong>{duration}</strong></div></div></fieldset>
       <fieldset><legend>メモ・写真</legend><label>作業メモ<textarea rows={4} value={draft.memo} onChange={(event) => update("memo", event.target.value)} placeholder="気づいたことを入力（任意）"/></label><label className="secondary-action attachment-picker">写真を追加<input type="file" accept="image/jpeg,image/png,image/webp,image/heic" onChange={(event) => void addPhoto(event)}/></label>{photoNames.length > 0 && <ul className="attachment-list">{photoNames.map((name, index) => <li key={`${name}-${index}`}>{name}</li>)}</ul>}</fieldset>
+      {journalId && <fieldset><legend>訂正理由</legend><label>差し戻しへの対応<textarea rows={3} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} required placeholder="訂正した内容と理由を入力"/></label></fieldset>}
       <div className="form-actions"><button className="secondary-action" type="button" onClick={saveDraft}>下書き保存</button><button className="primary-action" type="submit">この内容で記録</button></div>
     </form>
   </div>;
@@ -356,8 +368,37 @@ function PesticidePage({ queue, navigate }: { queue: (kind: "pesticide", payload
 }
 
 function PageBack({ onBack }: { onBack: () => void }) { return <button className="back-button" onClick={onBack}>← 今日の作業へ戻る</button>; }
-function MorePage({ theme, locale, queueCounts, queues, resolveConflict }: { theme: Theme; locale: Locale; queueCounts: { rejections: number; conflicts: number }; queues: QueueSnapshot; resolveConflict: (id: string, choice: "server" | "device") => Promise<void> }) {
+function MorePage({ api, csrfToken, authorization, online, instructions, setInstructions, journals, setJournals, correctJournal, setNotice, theme, locale, queueCounts, queues, resolveConflict }: { api: MvpGateway; csrfToken: string; authorization: AppAuthorization; online: boolean; instructions: WorkInstruction[]; setInstructions: React.Dispatch<React.SetStateAction<WorkInstruction[]>>; journals: JournalEntry[]; setJournals: React.Dispatch<React.SetStateAction<JournalEntry[]>>; correctJournal: (id: string) => void; setNotice: (message: string) => void; theme: Theme; locale: Locale; queueCounts: { rejections: number; conflicts: number }; queues: QueueSnapshot; resolveConflict: (id: string, choice: "server" | "device") => Promise<void> }) {
+  const manager = authorization.context.capabilities.includes("instruction:manage");
+  const reviewer = authorization.context.capabilities.includes("journal:review");
+  const [returnReasons, setReturnReasons] = useState<Record<string, string>>({});
+  const [assignees, setAssignees] = useState<Record<string, string>>({});
+  const refreshJournals = async () => setJournals((await api.getJournals(authorization.context.contextId)).journals);
+  const review = async (journal: JournalEntry, action: "approve" | "return") => {
+    const reason = returnReasons[journal.id]?.trim();
+    if (action === "return" && !reason) { setNotice("差し戻し理由を入力してください。"); return; }
+    await api.reviewJournal(authorization.context.contextId, csrfToken, journal.id, { action, expectedVersion: journal.version, reason });
+    await refreshJournals(); setNotice(action === "approve" ? "日誌を承認しました。" : "日誌を担当者へ差し戻しました。");
+  };
+  const createInstruction = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form));
+    const created = await api.createWorkInstruction(authorization.context.contextId, csrfToken, { ...data, scheduledStart: new Date(String(data.scheduledStart)).toISOString(), scheduledEnd: new Date(String(data.scheduledEnd)).toISOString(), priority: Number(data.priority) });
+    setInstructions((current) => [...current, created]); form.reset(); setNotice("作業指示を発行しました。");
+  };
+  const reassign = async (instruction: WorkInstruction) => {
+    const assigneeUserId = assignees[instruction.id]?.trim();
+    if (!assigneeUserId) { setNotice("新しい担当者IDを入力してください。"); return; }
+    const result = await api.reassignWorkInstruction(authorization.context.contextId, csrfToken, instruction.id, { assigneeUserId, expectedVersion: instruction.version });
+    setInstructions((current) => current.map((item) => item.id === instruction.id ? { ...item, version: result.version, assignment: { id: result.assignmentId, assigneeUserId: result.assigneeUserId, version: 1 } } : item));
+    setNotice("担当者を変更しました。");
+  };
   return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態、同期で判断が必要な項目を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{locale === "ja" ? "日本語" : "English"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div><div><span>差し戻しキュー</span><strong>{queueCounts.rejections}件</strong></div><div><span>競合キュー</span><strong>{queueCounts.conflicts}件</strong></div></div>
+    {manager && <section className="queue-panel"><h2>作業指示を発行</h2><form className="record-form compact-form" onSubmit={(event) => void createInstruction(event)}><div className="form-grid"><label>圃場ID<input name="fieldId" required/></label><label>担当者ID<input name="assigneeUserId" required/></label><label>指示名<input name="title" required/></label><label>作業種別<input name="workType" required/></label><label>開始予定<input name="scheduledStart" type="datetime-local" required/></label><label>終了予定<input name="scheduledEnd" type="datetime-local" required/></label><label>優先度<select name="priority" defaultValue="1"><option value="0">高</option><option value="1">通常</option><option value="2">低</option></select></label><label>詳細<textarea name="details" rows={2}/></label></div><button className="primary-action" disabled={!online}>オンラインで発行</button></form>
+      <div>{instructions.map((instruction) => <article key={instruction.id}><strong>{instruction.title}</strong><p>{instruction.fieldName}・担当 {instruction.assignment?.assigneeUserId || "未割当"}・version {instruction.version}</p><div className="queue-actions"><label>新しい担当者ID<input value={assignees[instruction.id] || ""} onChange={(event) => setAssignees((current) => ({ ...current, [instruction.id]: event.target.value }))}/></label><button className="secondary-action" disabled={!online} onClick={() => void reassign(instruction)}>再割当</button></div></article>)}</div></section>}
+    {reviewer && <section className="queue-panel"><h2>日誌の承認・差し戻し</h2>{journals.filter((journal) => journal.status === "submitted" || journal.status === "corrected").map((journal) => <article key={journal.id}><strong>{journal.fieldName || String(journal.body.field || "作業日誌")}</strong><p>{String(journal.body.workType || "")}・{String(journal.body.startedAt || "")}〜{String(journal.body.endedAt || "")}</p><p>{String(journal.body.memo || "メモなし")}</p><label>差し戻し理由<textarea value={returnReasons[journal.id] || ""} onChange={(event) => setReturnReasons((current) => ({ ...current, [journal.id]: event.target.value }))}/></label><div className="queue-actions"><button className="secondary-action" onClick={() => void review(journal, "return")}>理由を付けて差し戻す</button><button className="primary-action" onClick={() => void review(journal, "approve")}>承認する</button></div></article>)}</section>}
+    {journals.some((journal) => journal.workerUserId === authorization.user.id && journal.status === "returned") && <section className="queue-panel"><h2>訂正が必要な日誌</h2>{journals.filter((journal) => journal.workerUserId === authorization.user.id && journal.status === "returned").map((journal) => <article key={journal.id}><strong>{journal.fieldName || "作業日誌"}</strong><p>{String(journal.body.workType || "")}を確認し、訂正理由とともに再提出してください。</p><button className="primary-action" onClick={() => correctJournal(journal.id)}>訂正する</button></article>)}</section>}
     {queues.rejections.length > 0 && <section className="queue-panel"><h2>差し戻し</h2>{queues.rejections.map((item) => <article key={item.id}><strong>{item.reason}</strong><p>束: {item.bundleId}</p><p>回復操作: {item.recoveryAction}</p></article>)}</section>}
     {queues.conflicts.length > 0 && <section className="queue-panel"><h2>競合の裁定</h2>{queues.conflicts.map((item) => <article key={item.id}><strong>{item.conflictingFields.join("、")} が競合しています</strong><p>サーバ値: {JSON.stringify(item.currentValue)}</p><p>端末値: {JSON.stringify(item.proposedValue)}</p><div className="queue-actions"><button className="secondary-action" onClick={() => void resolveConflict(item.id, "server")}>サーバ値を採用</button><button className="primary-action" onClick={() => void resolveConflict(item.id, "device")}>端末値を採用</button></div></article>)}</section>}
   </div>;

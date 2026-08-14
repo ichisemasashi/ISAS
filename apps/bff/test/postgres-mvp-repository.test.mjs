@@ -99,3 +99,22 @@ test("punch suggestion fills a journal and warns when a pair is incomplete", () 
   assert.deepEqual(complete, { startedAt: "09:12", endedAt: "10:36", warning: null });
   assert.equal(postgresMvpContract.derivePunchSuggestion([{ action: "start", occurred_at: "2026-08-14T00:12:00Z" }]).warning, "missing_finish");
 });
+
+test("journal return locks the current version and appends an audit revision", async () => {
+  const calls = [];
+  const client = { async query(sql, values) {
+    calls.push({ sql, values });
+    if (sql.includes("has_capability")) return { rows: [{ allowed: true }] };
+    if (sql.includes("FROM app.work_journal") && sql.includes("FOR UPDATE")) return { rows: [{ id: E1, worker_user_id: "22222222-2222-7222-8222-222222222222", body: { memo: "確認前" }, status: "submitted", version: "4" }] };
+    if (sql.includes("INSERT INTO app.journal_revision")) return { rows: [] };
+    if (sql.includes("UPDATE app.work_journal")) return { rows: [{ status: "returned", version: "5", updated_at: new Date("2026-08-14T00:00:00Z") }] };
+    if (sql.includes("INSERT INTO app.sync_change")) return { rows: [] };
+    throw new Error(`unexpected query: ${sql}`);
+  } };
+  const repository = createPostgresMvpRepository({ uuid: () => "aaaaaaaa-0000-7000-8000-000000000099" });
+  const result = await repository.reviewJournal(client, {}, E1, { action: "return", expectedVersion: 4, reason: "終了時刻を確認" });
+  assert.equal(result.status, "returned");
+  assert.equal(result.version, 5);
+  assert.equal(calls.some(({ sql }) => sql.includes("INSERT INTO app.journal_revision")), true);
+  assert.equal(calls.at(-1).values[1], "returned");
+});

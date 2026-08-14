@@ -205,6 +205,7 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
           roleLabel: derived.roleLabel,
           membershipVersion: derived.membershipVersion,
           authorizationSnapshotId: derived.authorizationSnapshotId,
+          capabilities: derived.capabilities || [],
           expiresAt: new Date(expiresAt).toISOString(),
         }, correlationId);
       }

@@ -15,6 +15,7 @@ const context = {
   roleLabel: "現場チーム",
   membershipVersion: "membership-1",
   authorizationSnapshotId: "snapshot-1",
+  capabilities: [],
   expiresAt: "2026-08-14T12:00:00+09:00",
 };
 

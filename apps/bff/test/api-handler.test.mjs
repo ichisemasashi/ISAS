@@ -5,7 +5,7 @@ import { createMemoryMvpRepository } from "../src/memory-mvp-repository.mjs";
 
 const ORIGIN = "https://isas.example";
 
-function fixture(capabilities = ["journal:write"]) {
+function fixture(capabilities = ["journal:write"], options = {}) {
   const trusted = {
     userId: "22222222-2222-7222-8222-222222222222",
     csrfToken: "csrf-1",
@@ -16,6 +16,7 @@ function fixture(capabilities = ["journal:write"]) {
   const memory = createMemoryMvpRepository({
     tasks: [{ id: "task-1", tenantId: "tenant-1", time: "08:30", field: "北圃場", crop: "米", work: "水位確認", status: "今日" }],
     fields: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", tenantId: "tenant-1", geometry: { type: "MultiPolygon", coordinates: [[[[140.3, 38.2], [140.31, 38.2], [140.31, 38.21], [140.3, 38.2]]]] }, properties: { name: "北圃場", cropName: "つや姫", areaSqm: 1000 } }],
+    ...options,
   });
   const handle = createMvpApiHandler({ origin: ORIGIN, resolveContext: async (request) => request.headers.get("Cookie") ? trusted : null, ...memory });
   const request = (path, init = {}) => new Request(`${ORIGIN}${path}`, { ...init, headers: { Cookie: "session=1", ...init.headers } });
@@ -158,5 +159,27 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(retry.status, 201);
     assert.equal((await first.json()).sha256, (await retry.json()).sha256);
     assert.equal(fx.state.attachments.length, 1);
+  });
+
+  test("requires a reason for return and keeps correction history", async () => {
+    const journalId = "0198a6c0-0000-7000-8000-000000000301";
+    const journal = { id: journalId, tenantId: "tenant-1", workerUserId: "22222222-2222-7222-8222-222222222222", fieldName: "北圃場", body: { memo: "旧値" }, status: "submitted", version: 1 };
+    const fx = fixture(["journal:write", "journal:review"], { workJournals: [journal] });
+    const invalid = await fx.handle(fx.request(`/api/v1/journals/${journalId}/review`, {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ action: "return", expectedVersion: 1 }),
+    }));
+    assert.equal(invalid.status, 400);
+    const returned = await fx.handle(fx.request(`/api/v1/journals/${journalId}/review`, {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ action: "return", reason: "終了時刻を確認してください", expectedVersion: 1 }),
+    }));
+    assert.equal(returned.status, 200);
+    assert.equal((await returned.json()).status, "returned");
+
+    const corrected = await fx.handle(pushRequest(fx, [{ bundleId: "bundle-correction", events: [event({ eventUuid: "0198a6c0-0000-7000-8000-000000000302", payload: { aggregateId: journalId, baseVersion: 2, baseValue: { memo: "旧値" }, correctionReason: "終了時刻を訂正", changes: { memo: "訂正値" } } })] }])).then((response) => response.json());
+    assert.equal(corrected.results[0].status, "accepted");
+    assert.equal(fx.state.journals[0].status, "corrected");
+    assert.equal(fx.state.revisions[0].reason, "終了時刻を訂正");
   });
 });
