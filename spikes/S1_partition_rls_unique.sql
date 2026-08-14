@@ -3,8 +3,9 @@
 --
 -- 【v2 全面改訂】PostgreSQL実挙動検証（2026-07-27）で、旧 S1 は文書 §4/§6 とは
 --   別のポリシー・別のDDLで走っており「全PASS」が設計を検証していなかった。
---   本版は **データモデル設計書 v10 §4/§5/§6 と ADR-0001 v16 §2.9/§2.10 の本文を
---   そのまま実行する**。差異があれば S1 が落ちるようにしてある。
+--   本版は **データモデル設計書 v13 §4/§5/§6 と ADR-0001 v19 §2.9/§2.10 の
+--   中核RLS形をそのまま実行する**。v19 §2.11の分類タグ・audit_reader・複合FKは
+--   本番migration昇格時に追加する受入条件であり、本参照ハーネスの検証範囲外。
 --
 -- 対応する指摘：IND3-H2/H3/H5、PG-H1/H2/H3/H6、A1h-*、IND2-*
 -- 【v3】PG-H3 の残り（所有者・版履歴トリガ・audit_writer 経路）を追加。
@@ -458,7 +459,7 @@ SET ROLE app_owner;
 SELECT ck(count(*) = 0, '(12) 所有者でも注入無しなら 0行（FORCE RLS）') FROM location_log;
 RESET ROLE;
 
-\echo '=== (13) カタログ構造検査（ADR-0001 v16 §5 一段目）==='
+\echo '=== (13) カタログ構造検査（ADR-0001 v19 §5 一段目）==='
 SELECT ck(count(*) = 0, '(13a) restrictive に TO 指定が付いていない')
   FROM pg_policies WHERE schemaname='public' AND permissive='RESTRICTIVE' AND roles <> '{public}';
 SELECT ck(count(*) = 0, '(13b) permissive の述語が true 以外のものが無い')
