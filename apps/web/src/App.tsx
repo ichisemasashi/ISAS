@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { demoAuthorization, type AppAuthorization, type TenantOption } from "./auth";
 import { browserStorage, type JournalDraft, type StorageGateway } from "./storage";
 
 type Route = "today" | "journal" | "pesticide" | "fields" | "more";
@@ -44,7 +45,7 @@ function durationLabel(startedAt: string, endedAt: string): string {
   return hours ? `${hours}時間${rest ? `${rest}分` : ""}` : `${rest}分`;
 }
 
-export function App({ storage = browserStorage }: { storage?: StorageGateway }) {
+export function App({ storage = browserStorage, authorization = demoAuthorization, tenants = [], onTenantChange }: { storage?: StorageGateway; authorization?: AppAuthorization; tenants?: TenantOption[]; onTenantChange?: (tenantId: string) => Promise<void> }) {
   const [route, setRoute] = useState<Route>("today");
   const [online, setOnline] = useState(() => navigator.onLine);
   const [pending, setPending] = useState(0);
@@ -52,6 +53,7 @@ export function App({ storage = browserStorage }: { storage?: StorageGateway }) 
   const [theme, setTheme] = useState<Theme>("field");
   const [locale, setLocale] = useState<Locale>("ja");
   const [notice, setNotice] = useState("");
+  const canWrite = authorization.accessMode === "online" || authorization.accessMode === "offline-write";
 
   useEffect(() => {
     storage.pendingCount().then(setPending).catch(() => setNotice("端末保存を確認できませんでした。もう一度お試しください。"));
@@ -77,16 +79,28 @@ export function App({ storage = browserStorage }: { storage?: StorageGateway }) 
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const queue = async (kind: "journal" | "pesticide" | "punch", payload: Record<string, unknown>) => {
-    await storage.enqueue({ eventUuid: eventId(kind), kind, payload, createdAt: new Date().toISOString() });
+  const queue = async (kind: "journal" | "pesticide" | "punch", payload: Record<string, unknown>): Promise<boolean> => {
+    if (!canWrite) {
+      setNotice(authorization.accessMode === "offline-read" ? "オフライン猶予の読取期間です。再認証するまで新しい記録は確定できません。" : "認証の猶予が終了しました。再認証後に記録を再開できます。");
+      return false;
+    }
+    await storage.enqueue({
+      eventUuid: eventId(kind),
+      kind,
+      payload,
+      createdAt: new Date().toISOString(),
+      tenantId: authorization.context.tenantId,
+      authorizationSnapshotId: authorization.context.authorizationSnapshotId,
+      membershipVersion: authorization.context.membershipVersion,
+    });
     setPending((value) => value + 1);
     setNotice(online ? "端末に保存しました。まもなく同期します。" : "端末に保存しました。電波が戻ると自動で同期します。");
+    return true;
   };
 
   const punchAction = async (next: PunchState) => {
     const action = next === "working" ? (punch === "break" ? "resume" : "start") : next === "break" ? "break" : "finish";
-    await queue("punch", { action, occurredAt: new Date().toISOString() });
-    setPunch(next);
+    if (await queue("punch", { action, occurredAt: new Date().toISOString() })) setPunch(next);
   };
 
   return (
@@ -95,7 +109,7 @@ export function App({ storage = browserStorage }: { storage?: StorageGateway }) 
       <aside className="side-nav" aria-label="メインナビゲーション">
         <Brand />
         <Nav route={route} locale={locale} navigate={navigate} />
-        <div className="side-foot">山形みどり農園<br/><span>現場チーム</span></div>
+        <div className="side-foot">{authorization.context.tenantName}<br/><span>{authorization.context.roleLabel}</span></div>
       </aside>
 
       <div className="page-shell">
@@ -103,17 +117,20 @@ export function App({ storage = browserStorage }: { storage?: StorageGateway }) 
           <div className="mobile-brand"><Brand compact /></div>
           <div className="system-status" aria-live="polite">
             <span className={`connection ${online ? "is-online" : "is-offline"}`}><span className="status-dot" />{online ? copy[locale].online : copy[locale].offline}</span>
+            <span className={`auth-state mode-${authorization.accessMode}`}>{authorization.accessMode === "online" ? "認証済み" : authorization.accessMode === "offline-write" ? "オフライン記録可" : authorization.accessMode === "offline-read" ? "オフライン読取のみ" : "再認証が必要"}</span>
             <span className="sync-state"><Icon name="sync" />未同期 {pending}件</span>
           </div>
           <div className="preferences">
+            {tenants.length > 1 && <label className="tenant-switcher">組織<select aria-label="表示する組織" value={authorization.context.tenantId} onChange={(event) => void onTenantChange?.(event.target.value)}>{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}</select></label>}
             <button className="text-button" onClick={() => setLocale((value) => value === "ja" ? "en" : "ja")} aria-label="表示言語を切り替える">{locale === "ja" ? "EN" : "日本語"}</button>
             <button className="text-button" onClick={() => setTheme((value) => value === "field" ? "dark" : value === "dark" ? "contrast" : "field")} aria-label="表示テーマを切り替える">表示</button>
-            <button className="avatar" aria-label="アカウントメニュー">佐</button>
+            <button className="avatar" aria-label={`${authorization.user.displayName}のアカウントメニュー`}>{authorization.user.initials}</button>
           </div>
         </header>
 
         <main id="main" tabIndex={-1}>
-          {route === "today" && <TodayPage punch={punch} punchAction={punchAction} navigate={navigate} />}
+          {authorization.accessMode !== "online" && <div className={`authorization-banner mode-${authorization.accessMode}`} role="status"><strong>{authorization.accessMode === "offline-write" ? "オフライン認証の猶予中" : authorization.accessMode === "offline-read" ? "読取専用へ移行しました" : "認証の猶予が終了しました"}</strong><span>{authorization.accessMode === "offline-write" ? "現場記録だけを端末へ保存できます。機微操作は利用できません。" : authorization.accessMode === "offline-read" ? "下書きは保持されますが、再認証まで記録を確定できません。" : "未同期データを保持しています。オンライン復帰後に再認証してください。"}</span></div>}
+          {route === "today" && <TodayPage userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} />}
           {route === "journal" && <JournalPage storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
           {route === "pesticide" && <PesticidePage queue={queue} navigate={navigate} />}
           {route === "fields" && <PlaceholderPage title="圃場" description="担当圃場の一覧・地図は、次の縦切りでPostGIS APIへ接続します。" />}
@@ -141,11 +158,11 @@ function Nav({ route, locale, navigate }: { route: Route; locale: Locale; naviga
   return <div className="nav-items">{items.map((item) => <button key={item.route} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined} onClick={() => navigate(item.route)}><Icon name={item.icon}/><span>{item.label}</span></button>)}</div>;
 }
 
-function TodayPage({ punch, punchAction, navigate }: { punch: PunchState; punchAction: (state: PunchState) => Promise<void>; navigate: (route: Route) => void }) {
+function TodayPage({ userName, punch, punchAction, navigate }: { userName: string; punch: PunchState; punchAction: (state: PunchState) => Promise<void>; navigate: (route: Route) => void }) {
   const date = new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" }).format(new Date());
   return <div className="page-content">
     <section className="welcome-row">
-      <div><p className="eyebrow">{date}</p><h1>おはようございます、佐藤さん</h1><p>今日の作業は3件です。安全確認が必要な作業があります。</p></div>
+      <div><p className="eyebrow">{date}</p><h1>おはようございます、{userName}さん</h1><p>今日の作業は3件です。安全確認が必要な作業があります。</p></div>
       <button className="primary-action desktop-only" onClick={() => navigate("journal")}><Icon name="record"/>日誌をつける</button>
     </section>
 
@@ -182,7 +199,7 @@ function TodayPage({ punch, punchAction, navigate }: { punch: PunchState; punchA
   </div>;
 }
 
-function JournalPage({ storage, queue, navigate, setNotice }: { storage: StorageGateway; queue: (kind: "journal", payload: Record<string, unknown>) => Promise<void>; navigate: (route: Route) => void; setNotice: (message: string) => void }) {
+function JournalPage({ storage, queue, navigate, setNotice }: { storage: StorageGateway; queue: (kind: "journal", payload: Record<string, unknown>) => Promise<boolean>; navigate: (route: Route) => void; setNotice: (message: string) => void }) {
   const [draft, setDraft] = useState<JournalDraft>({ id: "today-journal", field: "北の1号圃場", workType: "水管理", startedAt: "08:12", endedAt: "09:36", memo: "", updatedAt: new Date().toISOString() });
   const update = (key: keyof JournalDraft, value: string) => setDraft((current) => ({ ...current, [key]: value, updatedAt: new Date().toISOString() }));
   const duration = useMemo(() => durationLabel(draft.startedAt, draft.endedAt), [draft.startedAt, draft.endedAt]);
@@ -191,7 +208,7 @@ function JournalPage({ storage, queue, navigate, setNotice }: { storage: Storage
     return () => window.clearTimeout(timer);
   }, [draft, setNotice, storage]);
   const saveDraft = async () => { await storage.saveDraft(draft); setNotice("下書きを端末に保存しました。"); };
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); await queue("journal", draft); navigate("today"); };
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (await queue("journal", draft)) navigate("today"); };
 
   return <div className="page-content narrow-page">
     <PageBack onBack={() => navigate("today")} />
@@ -209,15 +226,14 @@ function JournalPage({ storage, queue, navigate, setNotice }: { storage: Storage
   </div>;
 }
 
-function PesticidePage({ queue, navigate }: { queue: (kind: "pesticide", payload: Record<string, unknown>) => Promise<void>; navigate: (route: Route) => void }) {
+function PesticidePage({ queue, navigate }: { queue: (kind: "pesticide", payload: Record<string, unknown>) => Promise<boolean>; navigate: (route: Route) => void }) {
   const [chemical, setChemical] = useState("グリーンフロアブル");
   const [acknowledged, setAcknowledged] = useState(false);
   const warning = chemical === "テスト乳剤（要確認）";
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.currentTarget));
-    await queue("pesticide", { ...data, safetyCacheVersion: "2026.08.14-1", warningAcknowledged: acknowledged });
-    navigate("today");
+    if (await queue("pesticide", { ...data, safetyCacheVersion: "2026.08.14-1", warningAcknowledged: acknowledged })) navigate("today");
   };
   return <div className="page-content narrow-page">
     <PageBack onBack={() => navigate("today")} />

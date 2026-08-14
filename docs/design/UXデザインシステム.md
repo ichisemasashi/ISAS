@@ -159,13 +159,16 @@ ISAS
 - 日誌の前回値/打刻補完、下書き保存、IndexedDB outbox。
 - 農薬キャッシュ鮮度表示、安全判定の適合/警告、警告時の明示確認。
 - online/offline、未同期件数、保存結果の常時フィードバック。
+- ADR-0009に従う同一オリジンBFFクライアント契約、タブ単位context、組織切替、認証状態表示。
+- outboxへのtenant・認可Snapshot・membership版の保存と、オフライン猶予後の読取専用／ロック縮退。
+- 認証/API応答とAuthorization付き要求をService Workerキャッシュから除外。
 - 主要導線の自動テスト。
 
 ### 7.2 MVP完了までの残り
 
 | 領域 | 残作業 |
 |---|---|
-| 認証/権限 | ADR-0009 v3に従い、BFF session・context ID・tenant/scope注入・失効パージを実装 |
+| 認証/権限 | クライアント境界は実装済み。BFF/IdP session、contextからDB AuthContextへのtenant/scope注入、失効通知と端末パージを実装 |
 | API/同期 | S7参照状態機械を本番command path・pull/push API・Service Workerへ接続 |
 | 圃場GIS | MapLibre＋PostGIS API、オフライン担当圃場/タイル |
 | 作業指示/ガント | 管理者編集、担当割当、基本タイムライン |

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "./App";
+import { demoAuthorization } from "./auth";
 import type { JournalDraft, OutboxRecord, StorageGateway } from "./storage";
 
 function memoryStorage() {
@@ -30,6 +31,11 @@ describe("ISAS MVP field flow", () => {
     render(<App storage={store.gateway} />);
     await user.click(screen.getByRole("button", { name: "作業を始める" }));
     await waitFor(() => expect(store.outbox).toHaveLength(1));
+    expect(store.outbox[0]).toMatchObject({
+      tenantId: demoAuthorization.context.tenantId,
+      authorizationSnapshotId: demoAuthorization.context.authorizationSnapshotId,
+      membershipVersion: demoAuthorization.context.membershipVersion,
+    });
     expect(screen.getByText("未同期 1件")).toBeInTheDocument();
 
     await user.click(screen.getAllByRole("button", { name: "記録する" })[0]);
@@ -55,5 +61,18 @@ describe("ISAS MVP field flow", () => {
     expect(submit).toBeEnabled();
     await user.click(submit);
     await waitFor(() => expect(store.outbox[0]?.kind).toBe("pesticide"));
+  });
+
+  test("keeps drafts readable but blocks new outbox records after offline write grace", async () => {
+    const user = userEvent.setup();
+    const store = memoryStorage();
+    render(<App storage={store.gateway} authorization={{ ...demoAuthorization, accessMode: "offline-read" }} />);
+
+    expect(screen.getByText("読取専用へ移行しました")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "作業を始める" }));
+
+    expect(await screen.findByText(/再認証するまで新しい記録は確定できません/)).toBeInTheDocument();
+    expect(store.outbox).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: "まだ作業を開始していません" })).toBeInTheDocument();
   });
 });

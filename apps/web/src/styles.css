@@ -78,16 +78,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .topbar { height: 76px; padding: 0 4vw; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: flex-end; gap: 24px; background: color-mix(in srgb, var(--canvas) 92%, transparent); backdrop-filter: blur(14px); position: sticky; top: 0; z-index: 15; }
 .mobile-brand { display: none; margin-right: auto; }
 .system-status { display: flex; align-items: center; gap: 12px; }
-.connection, .sync-state { min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; display: inline-flex; align-items: center; gap: 7px; color: var(--muted); background: var(--paper); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.connection, .auth-state, .sync-state { min-height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; display: inline-flex; align-items: center; gap: 7px; color: var(--muted); background: var(--paper); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.auth-state.mode-online { color: var(--forest-700); }
+.auth-state.mode-offline-write, .auth-state.mode-offline-read, .auth-state.mode-locked { color: var(--amber-600); background: var(--amber-100); }
 .sync-state .icon { width: 17px; height: 17px; }
 .status-dot { width: 9px; height: 9px; border-radius: 50%; background: #178650; box-shadow: 0 0 0 3px rgb(23 134 80 / 14%); }
 .is-offline .status-dot { background: var(--amber-600); box-shadow: 0 0 0 3px rgb(168 79 17 / 14%); }
 .preferences { display: flex; align-items: center; gap: 8px; }
+.tenant-switcher { display: flex; align-items: center; grid-template-columns: none; gap: 6px; font-size: 11px; white-space: nowrap; }
+.tenant-switcher select { width: auto; min-height: 40px; max-width: 190px; padding: 0 30px 0 10px; }
 .text-button, .avatar { min-width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); font-weight: 800; }
 .text-button { padding: 0 12px; font-size: 12px; }
 .avatar { border-radius: 50%; background: var(--forest-800); color: #fff; }
 
 .page-content { width: min(1280px, calc(100% - 7vw)); margin: 0 auto; padding: 46px 0 90px; }
+.authorization-banner { width: min(1280px, calc(100% - 7vw)); margin: 22px auto -22px; padding: 14px 18px; border: 1px solid #d27d21; border-radius: 14px; display: flex; gap: 12px; background: var(--amber-100); color: var(--ink); }
+.authorization-banner strong { white-space: nowrap; }
+.authorization-banner span { color: var(--muted); }
+.auth-screen { min-height: 100vh; padding: 24px; display: grid; place-items: center; }
+.auth-card { width: min(480px, 100%); padding: clamp(28px, 6vw, 52px); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--paper); box-shadow: var(--shadow); text-align: center; }
+.auth-card p { margin-bottom: 26px; color: var(--muted); line-height: 1.7; }
+.auth-logo { width: 72px; height: 72px; margin: 0 auto 24px; border-radius: 22px; display: grid; place-items: center; background: var(--leaf-400); color: var(--forest-900); font-weight: 950; letter-spacing: .08em; transform: rotate(-3deg); }
 .narrow-page { width: min(820px, calc(100% - 7vw)); }
 .welcome-row { margin-bottom: 30px; display: flex; align-items: end; justify-content: space-between; gap: 24px; }
 .eyebrow, .section-kicker { margin: 0 0 7px; color: var(--forest-700); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
@@ -203,11 +214,14 @@ textarea { padding-top: 12px; resize: vertical; }
   .mobile-brand .brand-mark { width: 36px; height: 36px; border-radius: 11px; }
   .mobile-brand .brand strong { font-size: 19px; }
   .system-status { margin-left: auto; gap: 6px; }
-  .connection, .sync-state { min-height: 34px; padding: 0 9px; font-size: 11px; }
+  .connection, .auth-state, .sync-state { min-height: 34px; padding: 0 9px; font-size: 11px; }
   .connection { display: none; }
+  .auth-state { display: none; }
+  .tenant-switcher { display: none; }
   .preferences .text-button { display: none; }
   .avatar { width: 38px; min-width: 38px; height: 38px; }
   .page-content, .narrow-page { width: calc(100% - 28px); padding: 28px 0 110px; }
+  .authorization-banner { width: calc(100% - 28px); margin: 14px auto -14px; flex-direction: column; gap: 4px; font-size: 13px; }
   .welcome-row { align-items: flex-start; }
   .welcome-row h1 { font-size: 27px; }
   .desktop-only { display: none; }

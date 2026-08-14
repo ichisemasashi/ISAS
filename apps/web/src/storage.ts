@@ -13,6 +13,9 @@ export type OutboxRecord = {
   kind: "journal" | "pesticide" | "punch";
   payload: Record<string, unknown>;
   createdAt: string;
+  tenantId: string;
+  authorizationSnapshotId: string;
+  membershipVersion: string;
 };
 
 export interface StorageGateway {
