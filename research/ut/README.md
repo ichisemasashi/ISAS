@@ -13,3 +13,12 @@
 - `results/`：実ラウンドの匿名結果。個人情報・同意原本・録画は置かない
 
 空テンプレート自体は実施証跡ではない。実参加者結果がない状態で合格レポートを作らない。
+
+`participants.csv`の`cohort`は`worker`、`older_worker`、`technical_intern`のいずれかを使う。真偽値は`true`／`false`、SUSは各問1〜5で記録する。`consent_record_id`はリポジトリ外の同意原本を照合する無意味な管理IDとし、氏名や従業員番号を使わない。
+
+```bash
+python3 -m unittest discover -s research/ut -p 'test_*.py'
+python3 research/ut/analyze_ut.py research/ut/results/round-01 --output research/ut/results/round-01/report.md
+```
+
+入力不足・重複・未知の参加者、範囲外SUSはエラーにする。閾値未達の正しい集計は終了コード1、全ゲート合格は0を返す。
