@@ -184,4 +184,38 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(fx.state.journals[0].status, "corrected");
     assert.equal(fx.state.revisions[0].reason, "終了時刻を訂正");
   });
+
+  test("publishes and reads a freshness-bounded pesticide master for an assigned field", async () => {
+    const fx = fixture(["pesticide:write", "pesticide:manage"]);
+    const response = await fx.handle(fx.request("/api/v1/pesticide-master/releases", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ version: "jp-2026-08-14", validUntil: "2026-08-21T00:00:00Z", chemicals: [{
+        id: "0198a6c0-0000-7000-8000-000000000401", registrationNumber: "農林水産省登録第1号", name: "テスト水和剤",
+        activeIngredient: "成分A", applicableCrops: ["つや姫"], dilutionMin: 500, dilutionMax: 1000, maxUses: 3, preharvestDays: 7,
+      }] }),
+    }));
+    assert.equal(response.status, 201);
+    const bootstrap = await fx.handle(fx.request("/api/v1/pesticide-bootstrap?fieldId=0198a6c0-0000-7000-8000-000000000101")).then((item) => item.json());
+    assert.equal(bootstrap.release.version, "jp-2026-08-14");
+    assert.equal(bootstrap.chemicals[0].maxUses, 3);
+  });
+
+  test("derives inventory from append-only events and queues a negative balance for adjudication", async () => {
+    const chemicalId = "0198a6c0-0000-7000-8000-000000000401";
+    const fx = fixture(["inventory:write", "inventory:adjust"], { pesticideRelease: { id: "release-1", version: "v1", validUntil: "2026-08-21T00:00:00Z" }, agrochemicals: [{ id: chemicalId, tenantId: "tenant-1", name: "テスト水和剤", registrationNumber: "1" }] });
+    const withdrawal = event({ eventUuid: "0198a6c0-0000-7000-8000-000000000402", kind: "stock", payload: { aggregateId: "0198a6c0-0000-7000-8000-000000000403", chemicalId, eventType: "withdrawal", quantity: 2, reason: "散布用出庫" } });
+    assert.equal((await fx.handle(pushRequest(fx, [{ bundleId: "stock-1", events: [withdrawal] }])).then((item) => item.json())).results[0].status, "accepted");
+    const inventory = await fx.handle(fx.request("/api/v1/inventory")).then((item) => item.json());
+    assert.equal(inventory.balances[0].quantity, -2);
+    assert.equal(inventory.alerts[0].negativeQuantity, -2);
+    const queues = await fx.handle(fx.request("/api/v1/sync/queues")).then((item) => item.json());
+    assert.equal(queues.stockAlerts[0].id, inventory.alerts[0].id);
+
+    const adjustment = event({ eventUuid: "0198a6c0-0000-7000-8000-000000000404", kind: "stock", payload: { aggregateId: "0198a6c0-0000-7000-8000-000000000405", chemicalId, eventType: "adjustment", quantity: 5, reason: "実棚3Lを確認", alertId: inventory.alerts[0].id } });
+    await fx.handle(pushRequest(fx, [{ bundleId: "stock-adjust", events: [adjustment] }]));
+    const resolved = await fx.handle(fx.request("/api/v1/inventory")).then((item) => item.json());
+    assert.equal(resolved.balances[0].quantity, 3);
+    assert.equal(resolved.alerts.length, 0);
+    assert.equal(fx.state.inventoryEvents.length, 2);
+  });
 });

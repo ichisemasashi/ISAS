@@ -144,6 +144,24 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         return json(200, result, requestId);
       }
 
+      if (request.method === "GET" && url.pathname === "/api/v1/pesticide-bootstrap") {
+        const fieldId = url.searchParams.get("fieldId");
+        const result = await database.transaction(trusted, (client, canonical) => repository.getPesticideBootstrap(client, canonical ? { ...trusted, authContext: canonical } : trusted, { fieldId }), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/inventory") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.listInventory(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/pesticide-master/releases") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.publishPesticideMaster(client, canonical ? { ...trusted, authContext: canonical } : trusted, body));
+        return json(201, result, requestId);
+      }
+
       const reviewMatch = url.pathname.match(/^\/api\/v1\/journals\/([^/]+)\/review$/);
       if (request.method === "POST" && reviewMatch) {
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);

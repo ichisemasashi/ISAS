@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-const CAPABILITY_BY_KIND = Object.freeze({ journal: "journal:write", pesticide: "pesticide:write", punch: "punch:write" });
+const CAPABILITY_BY_KIND = Object.freeze({ journal: "journal:write", pesticide: "pesticide:write", punch: "punch:write", stock: "inventory:write" });
 
 function eventTimestamp(occurredAt) {
   const occurred = new Date(occurredAt);
@@ -40,6 +40,120 @@ function mergeFields(base, current, proposed) {
 }
 
 function isUuid(value) { return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
+
+function iso(value) { return value instanceof Date ? value.toISOString() : value; }
+
+function validateMasterRelease(input) {
+  if (!input || typeof input.version !== "string" || !input.version.trim() || input.version.length > 100
+    || !Number.isFinite(Date.parse(input.validUntil)) || !Array.isArray(input.chemicals) || input.chemicals.length < 1 || input.chemicals.length > 1000) throw new TypeError("invalid pesticide master release");
+  for (const item of input.chemicals) {
+    if (!item || typeof item.registrationNumber !== "string" || !item.registrationNumber.trim()
+      || typeof item.name !== "string" || !item.name.trim() || !Array.isArray(item.applicableCrops) || item.applicableCrops.length < 1
+      || !Number.isFinite(item.dilutionMin) || item.dilutionMin <= 0 || !Number.isFinite(item.dilutionMax) || item.dilutionMax < item.dilutionMin
+      || !Number.isInteger(item.maxUses) || item.maxUses < 1 || !Number.isInteger(item.preharvestDays) || item.preharvestDays < 0
+      || (item.revokedOn != null && !/^\d{4}-\d{2}-\d{2}$/.test(item.revokedOn))) throw new TypeError("invalid agrochemical");
+  }
+}
+
+function pesticideSafety({ chemical, cropName, dilution, appliedOn, plannedHarvestOn, usageCount, now = new Date() }) {
+  const reasons = [];
+  if (!chemical.current_chemical_id) reasons.push("master_entry_not_current");
+  if (chemical.release_valid_until && Date.parse(chemical.release_valid_until) < now.getTime()) reasons.push("master_expired");
+  if (chemical.revoked_on && chemical.revoked_on <= appliedOn) reasons.push("revoked");
+  if (!chemical.applicable_crops.includes(cropName)) reasons.push("crop_not_applicable");
+  if (dilution < Number(chemical.dilution_min) || dilution > Number(chemical.dilution_max)) reasons.push("dilution_out_of_range");
+  if (usageCount + 1 > Number(chemical.max_uses)) reasons.push("maximum_uses_exceeded");
+  if (plannedHarvestOn) {
+    const interval = Math.floor((Date.parse(`${plannedHarvestOn}T00:00:00Z`) - Date.parse(`${appliedOn}T00:00:00Z`)) / 86400000);
+    if (interval < Number(chemical.preharvest_days)) reasons.push("preharvest_interval_short");
+  }
+  return { status: reasons.length ? "warning" : "safe", reasons, checkedAt: new Date().toISOString(), usageCountBefore: usageCount };
+}
+
+async function projectPesticideUsage(client, tenantId, trusted, event, eventTs, uuid) {
+  const payload = event.payload;
+  if (!isUuid(payload.fieldId) || !isUuid(payload.chemicalId) || typeof payload.cropName !== "string" || !payload.cropName.trim()
+    || !Number.isFinite(payload.dilution) || payload.dilution <= 0 || !Number.isFinite(payload.amount) || payload.amount <= 0
+    || typeof payload.targetPest !== "string" || !payload.targetPest.trim() || typeof payload.workerName !== "string" || !payload.workerName.trim()
+    || typeof payload.equipment !== "string" || !payload.equipment.trim()
+    || (payload.plannedHarvestOn != null && !/^\d{4}-\d{2}-\d{2}$/.test(payload.plannedHarvestOn))) throw new TypeError("invalid pesticide usage");
+  const reference = await client.query(`
+    WITH latest_release AS (
+      SELECT release_id, valid_until FROM app.pesticide_master_release
+      WHERE tenant_id = $1::uuid ORDER BY published_at DESC LIMIT 1
+    )
+    SELECT field.field_group_id::text, field.timezone,
+           cached.chemical_id::text, cached.registration_number,
+           current.chemical_id::text AS current_chemical_id, release.valid_until AS release_valid_until,
+           coalesce(current.applicable_crops, cached.applicable_crops) AS applicable_crops,
+           coalesce(current.dilution_min, cached.dilution_min) AS dilution_min,
+           coalesce(current.dilution_max, cached.dilution_max) AS dilution_max,
+           coalesce(current.max_uses, cached.max_uses) AS max_uses,
+           coalesce(current.preharvest_days, cached.preharvest_days) AS preharvest_days,
+           coalesce(current.revoked_on, cached.revoked_on) AS revoked_on,
+           ($4::timestamptz AT TIME ZONE field.timezone)::date::text AS applied_on
+    FROM app.field field
+    JOIN app.agrochemical cached ON cached.tenant_id = field.tenant_id AND cached.chemical_id = $3::uuid
+    LEFT JOIN latest_release release ON true
+    LEFT JOIN app.agrochemical current
+      ON current.tenant_id = cached.tenant_id AND current.release_id = release.release_id
+     AND current.registration_number = cached.registration_number
+    WHERE field.tenant_id = $1::uuid AND field.field_id = $2::uuid AND field.deleted_at IS NULL`,
+  [tenantId, payload.fieldId, payload.chemicalId, event.occurredAt]);
+  if (!reference.rows[0]) throw new TypeError("unknown pesticide or field");
+  const chemical = reference.rows[0];
+  const count = await client.query(`SELECT count(*)::integer AS usage_count
+    FROM app.pesticide_usage usage JOIN app.agrochemical used
+      ON used.tenant_id = usage.tenant_id AND used.chemical_id = usage.chemical_id
+    WHERE usage.tenant_id = $1::uuid AND usage.field_id = $2::uuid AND usage.crop_name = $3
+      AND used.registration_number = $4
+      AND extract(year FROM usage.applied_on) = extract(year FROM $5::date)`,
+  [tenantId, payload.fieldId, payload.cropName, chemical.registration_number, chemical.applied_on]);
+  const serverSafety = pesticideSafety({ chemical, cropName: payload.cropName, dilution: payload.dilution,
+    appliedOn: chemical.applied_on, plannedHarvestOn: payload.plannedHarvestOn, usageCount: Number(count.rows[0].usage_count) });
+  if (typeof payload.safetyDecision?.status === "string" && payload.safetyDecision.status !== serverSafety.status) {
+    serverSafety.reasons.push("client_server_mismatch");
+    serverSafety.status = "warning";
+  }
+  const usageId = isUuid(payload.aggregateId) ? payload.aggregateId : uuid();
+  await client.query(`INSERT INTO app.pesticide_usage
+    (tenant_id, usage_id, event_uuid, field_id, field_group_id, crop_name, chemical_id, applied_on,
+     dilution, amount, target_pest, worker_name, equipment, planned_harvest_on, client_safety,
+     server_safety, occurred_at, event_ts, actor_user_id)
+    VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7::uuid, $8::date,
+      $9, $10, $11, $12, $13, $14::date, $15::jsonb, $16::jsonb, $17::timestamptz, $18::timestamptz, app.current_user_id())
+    ON CONFLICT (tenant_id, event_uuid) DO NOTHING`,
+  [tenantId, usageId, event.eventUuid, payload.fieldId, chemical.field_group_id, payload.cropName, payload.chemicalId,
+    chemical.applied_on, payload.dilution, payload.amount, payload.targetPest, payload.workerName, payload.equipment,
+    payload.plannedHarvestOn || null, JSON.stringify(payload.safetyDecision || {}), JSON.stringify(serverSafety), event.occurredAt, eventTs]);
+  if (serverSafety.reasons.length) {
+    await client.query(`INSERT INTO app.pesticide_safety_alert
+      (tenant_id, alert_id, usage_id, field_group_id, reasons, client_safety, server_safety)
+      VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text[], $6::jsonb, $7::jsonb)`,
+    [tenantId, uuid(), usageId, chemical.field_group_id, serverSafety.reasons, JSON.stringify(payload.safetyDecision || {}), JSON.stringify(serverSafety)]);
+  }
+  return { entityId: usageId, serverSafety };
+}
+
+async function projectStockEvent(client, tenantId, event, eventTs, uuid) {
+  const payload = event.payload;
+  if (!isUuid(payload.chemicalId) || !["receipt", "withdrawal", "adjustment"].includes(payload.eventType)
+    || !Number.isFinite(payload.quantity) || payload.quantity === 0 || typeof payload.reason !== "string" || !payload.reason.trim()) throw new TypeError("invalid stock event");
+  const stockEventId = isUuid(payload.aggregateId) ? payload.aggregateId : uuid();
+  const delta = payload.eventType === "withdrawal" ? -Math.abs(payload.quantity)
+    : payload.eventType === "receipt" ? Math.abs(payload.quantity) : payload.quantity;
+  await client.query(`INSERT INTO app.stock_event
+    (tenant_id, stock_event_id, event_uuid, chemical_id, event_type, quantity_delta, reason, occurred_at, event_ts, actor_user_id)
+    VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8::timestamptz, $9::timestamptz, app.current_user_id())
+    ON CONFLICT (tenant_id, event_uuid) DO NOTHING`,
+  [tenantId, stockEventId, event.eventUuid, payload.chemicalId, payload.eventType, delta, payload.reason, event.occurredAt, eventTs]);
+  if (payload.eventType === "adjustment" && isUuid(payload.alertId)) {
+    await client.query(`UPDATE app.stock_alert
+      SET status = 'resolved', resolved_by = app.current_user_id(), resolved_at = clock_timestamp(), resolution_event_id = $3::uuid
+      WHERE tenant_id = $1::uuid AND alert_id = $2::uuid AND status = 'pending'`, [tenantId, payload.alertId, stockEventId]);
+  }
+  return { entityId: stockEventId, quantityDelta: delta };
+}
 
 function validateInstruction(input) {
   if (!input || !isUuid(input.fieldId) || !isUuid(input.assigneeUserId)
@@ -336,6 +450,99 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return { id: journalId, status: updated.rows[0].status, version: Number(updated.rows[0].version), updatedAt: new Date(updated.rows[0].updated_at).toISOString() };
     },
 
+    async getPesticideBootstrap(client, trusted, { fieldId }) {
+      if (!isUuid(fieldId)) throw new TypeError("invalid field");
+      const tenantId = trusted.authContext.tenantId;
+      const field = await client.query(`SELECT field_id::text AS id, field_group_id::text AS field_group_id,
+          name, crop_name, timezone FROM app.field
+        WHERE tenant_id = $1::uuid AND field_id = $2::uuid AND deleted_at IS NULL`, [tenantId, fieldId]);
+      if (!field.rows[0]) throw new TypeError("unknown field");
+      const release = await client.query(`SELECT release_id::text AS id, version, valid_until, published_at
+        FROM app.pesticide_master_release WHERE tenant_id = $1::uuid
+        ORDER BY published_at DESC LIMIT 1`, [tenantId]);
+      if (!release.rows[0]) return { field: field.rows[0], release: null, chemicals: [], usage: [], inventory: [] };
+      const [chemicals, usage, inventory] = await Promise.all([
+        client.query(`SELECT chemical_id::text AS id, registration_number, name, active_ingredient,
+            applicable_crops, dilution_min, dilution_max, max_uses, preharvest_days, revoked_on
+          FROM app.agrochemical WHERE tenant_id = $1::uuid AND release_id = $2::uuid ORDER BY name`, [tenantId, release.rows[0].id]),
+        client.query(`SELECT chemical_id::text AS chemical_id, count(*)::integer AS usage_count,
+            max(applied_on)::text AS last_applied_on
+          FROM app.pesticide_usage
+          WHERE tenant_id = $1::uuid AND field_id = $2::uuid AND crop_name = $3
+            AND extract(year FROM applied_on) = extract(year FROM current_date)
+          GROUP BY chemical_id`, [tenantId, fieldId, field.rows[0].crop_name]),
+        client.query(`SELECT balance.chemical_id::text AS chemical_id, balance.quantity, balance.updated_at
+          FROM app.stock_balance balance
+          JOIN app.agrochemical chemical ON chemical.tenant_id = balance.tenant_id AND chemical.chemical_id = balance.chemical_id
+          WHERE balance.tenant_id = $1::uuid AND chemical.release_id = $2::uuid`, [tenantId, release.rows[0].id]),
+      ]);
+      return {
+        field: { id: field.rows[0].id, fieldGroupId: field.rows[0].field_group_id, name: field.rows[0].name, cropName: field.rows[0].crop_name, timezone: field.rows[0].timezone },
+        release: { id: release.rows[0].id, version: release.rows[0].version, validUntil: iso(release.rows[0].valid_until), publishedAt: iso(release.rows[0].published_at), syncedAt: new Date().toISOString() },
+        chemicals: chemicals.rows.map((row) => ({ id: row.id, registrationNumber: row.registration_number, name: row.name,
+          activeIngredient: row.active_ingredient, applicableCrops: row.applicable_crops, dilutionMin: Number(row.dilution_min),
+          dilutionMax: Number(row.dilution_max), maxUses: Number(row.max_uses), preharvestDays: Number(row.preharvest_days), revokedOn: row.revoked_on || null })),
+        usage: usage.rows.map((row) => ({ chemicalId: row.chemical_id, usageCount: Number(row.usage_count), lastAppliedOn: row.last_applied_on })),
+        inventory: inventory.rows.map((row) => ({ chemicalId: row.chemical_id, quantity: Number(row.quantity), updatedAt: iso(row.updated_at) })),
+      };
+    },
+
+    async publishPesticideMaster(client, trusted, input) {
+      validateMasterRelease(input);
+      await requireCapability(client, "pesticide:manage");
+      const tenantId = trusted.authContext.tenantId;
+      const current = await client.query(`SELECT version FROM app.pesticide_master_release
+        WHERE tenant_id = $1::uuid ORDER BY published_at DESC LIMIT 1 FOR UPDATE`, [tenantId]);
+      if (input.expectedVersion !== undefined && (current.rows[0]?.version || null) !== input.expectedVersion) {
+        const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = current.rows[0]?.version || null; throw error;
+      }
+      const releaseId = uuid();
+      const published = await client.query(`INSERT INTO app.pesticide_master_release
+        (tenant_id, release_id, version, valid_until, published_by)
+        VALUES ($1::uuid, $2::uuid, $3, $4::timestamptz, app.current_user_id())
+        RETURNING release_id::text AS id, version, valid_until, published_at`, [tenantId, releaseId, input.version, input.validUntil]);
+      for (const item of input.chemicals) {
+        await client.query(`INSERT INTO app.agrochemical
+          (tenant_id, chemical_id, release_id, registration_number, name, active_ingredient,
+           applicable_crops, dilution_min, dilution_max, max_uses, preharvest_days, revoked_on)
+          VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::text[], $8, $9, $10, $11, $12::date)`,
+        [tenantId, isUuid(item.id) ? item.id : uuid(), releaseId, item.registrationNumber, item.name,
+          item.activeIngredient || "", item.applicableCrops, item.dilutionMin, item.dilutionMax,
+          item.maxUses, item.preharvestDays, item.revokedOn || null]);
+      }
+      await client.query(`INSERT INTO app.sync_change (tenant_id, priority, entity_type, operation, entity_id, data)
+        VALUES ($1::uuid, 0, 'pesticide_master', 'upsert', $2::uuid,
+          jsonb_build_object('version', $3::text, 'validUntil', $4::timestamptz))`, [tenantId, releaseId, input.version, input.validUntil]);
+      return { id: published.rows[0].id, version: published.rows[0].version, validUntil: iso(published.rows[0].valid_until), publishedAt: iso(published.rows[0].published_at), chemicalCount: input.chemicals.length };
+    },
+
+    async listInventory(client) {
+      const [balances, alerts] = await Promise.all([
+        client.query(`SELECT chemical.chemical_id::text AS chemical_id, chemical.name, chemical.registration_number,
+            coalesce(balance.quantity, 0) AS quantity, balance.updated_at
+          FROM app.agrochemical chemical
+          JOIN app.pesticide_master_release release
+            ON release.tenant_id = chemical.tenant_id AND release.release_id = chemical.release_id
+          LEFT JOIN app.stock_balance balance
+            ON balance.tenant_id = chemical.tenant_id AND balance.chemical_id = chemical.chemical_id
+          WHERE chemical.tenant_id = app.current_tenant_id()
+            AND release.release_id = (SELECT release_id FROM app.pesticide_master_release
+              WHERE tenant_id = app.current_tenant_id() ORDER BY published_at DESC LIMIT 1)
+          ORDER BY chemical.name`),
+        client.query(`SELECT alert.alert_id::text AS id, alert.chemical_id::text AS chemical_id,
+            chemical.name, alert.negative_quantity, alert.triggering_event_id::text,
+            alert.status, alert.created_at
+          FROM app.stock_alert alert JOIN app.agrochemical chemical
+            ON chemical.tenant_id = alert.tenant_id AND chemical.chemical_id = alert.chemical_id
+          WHERE alert.tenant_id = app.current_tenant_id() AND alert.status = 'pending'
+          ORDER BY alert.created_at`),
+      ]);
+      return {
+        balances: balances.rows.map((row) => ({ chemicalId: row.chemical_id, name: row.name, registrationNumber: row.registration_number, quantity: Number(row.quantity), updatedAt: iso(row.updated_at) || null })),
+        alerts: alerts.rows.map((row) => ({ id: row.id, chemicalId: row.chemical_id, name: row.name, negativeQuantity: Number(row.negative_quantity), triggeringEventId: row.triggering_event_id, status: row.status, createdAt: iso(row.created_at) })),
+      };
+    },
+
     async pushBundle(client, trusted, bundle) {
       const tenantId = trusted.authContext.tenantId;
       const allReceipts = await client.query(`
@@ -354,6 +561,10 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         if (!allowed.rows[0]?.allowed || event.membershipVersion !== trusted.membershipVersion || event.authorizationSnapshotId !== trusted.authorizationSnapshotId) {
           rejectionReason = "authorization_changed";
           break;
+        }
+        if (event.kind === "stock" && event.payload.eventType === "adjustment") {
+          const adjustment = await client.query("SELECT app.has_capability('inventory:adjust') AS allowed");
+          if (!adjustment.rows[0]?.allowed) { rejectionReason = "authorization_changed"; break; }
         }
         if (event.kind === "journal" && isUuid(event.payload.aggregateId)) {
           const currentJournal = await client.query("SELECT status FROM app.work_journal WHERE tenant_id = $1::uuid AND journal_id = $2::uuid", [tenantId, event.payload.aggregateId]);
@@ -393,6 +604,9 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           VALUES ($1::uuid, $2::uuid, $3::timestamptz, $4::timestamptz, $5, $6::uuid, $7::jsonb, $8, $9, $10, $11)
           ON CONFLICT DO NOTHING`, [tenantId, event.eventUuid, stableEventTs, event.occurredAt, event.kind, event.scope || null, JSON.stringify(event.payload), event.authorizationSnapshotId, event.membershipVersion, trusted.actorPseudonym, clockSkewed]);
 
+        let projectedEntityId = isUuid(event.payload.aggregateId) ? event.payload.aggregateId : null;
+        let projectedData = event.payload;
+
         if (event.kind === "punch") {
           if (!["start", "break", "resume", "finish"].includes(event.payload.action)) throw new TypeError("invalid punch");
           await client.query(`INSERT INTO app.work_punch
@@ -400,6 +614,18 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
             VALUES ($1::uuid, $2::uuid, $3::uuid, app.current_user_id(), $4::uuid, $5::uuid, $6, $7::timestamptz, $8::timestamptz)
             ON CONFLICT (tenant_id, event_uuid) DO NOTHING`,
           [tenantId, uuid(), event.eventUuid, isUuid(event.payload.instructionId) ? event.payload.instructionId : null, event.scope || null, event.payload.action, event.occurredAt, stableEventTs]);
+        }
+
+        if (event.kind === "pesticide") {
+          const projection = await projectPesticideUsage(client, tenantId, trusted, event, stableEventTs, uuid);
+          projectedEntityId = projection.entityId;
+          projectedData = { ...event.payload, serverSafety: projection.serverSafety };
+        }
+
+        if (event.kind === "stock") {
+          const projection = await projectStockEvent(client, tenantId, event, stableEventTs, uuid);
+          projectedEntityId = projection.entityId;
+          projectedData = { ...event.payload, quantityDelta: projection.quantityDelta };
         }
 
         if (event.kind === "journal" && isUuid(event.payload.aggregateId) && Number.isInteger(event.payload.baseVersion)) {
@@ -457,7 +683,7 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         await client.query(`
           INSERT INTO app.sync_change (tenant_id, scope_field_group_id, priority, entity_type, operation, entity_id, event_uuid, data)
           VALUES ($1::uuid, $2::uuid, 1, $3, 'upsert', $4::uuid, $5::uuid, $6::jsonb)`,
-        [tenantId, event.scope || null, event.kind, event.payload.aggregateId || null, event.eventUuid, JSON.stringify(event.payload)]);
+        [tenantId, event.scope || null, event.kind, projectedEntityId, event.eventUuid, JSON.stringify(projectedData)]);
         accepted.push({ eventUuid: event.eventUuid, eventTs: new Date(stableEventTs).toISOString() });
       }
       return { bundleId: bundle.bundleId, status: conflicted ? "conflict" : "accepted", events: accepted };
@@ -490,9 +716,14 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
     },
 
     async getQueues(client) {
-      const [rejections, conflicts] = await Promise.all([
+      const [rejections, conflicts, pesticideAlerts, stockAlerts] = await Promise.all([
         client.query(`SELECT rejection_id::text AS id, bundle_id, event_uuids::text[], reason, recovery_action, created_at FROM app.sync_rejection WHERE tenant_id = app.current_tenant_id() ORDER BY created_at DESC LIMIT 100`),
         client.query(`SELECT conflict_id::text AS id, document_id::text AS document_id, event_uuid::text AS event_uuid, base_version, current_version, current_value, proposed_value, conflicting_fields, status, created_at FROM app.sync_conflict WHERE tenant_id = app.current_tenant_id() AND status = 'pending' ORDER BY created_at LIMIT 100`),
+        client.query(`SELECT alert_id::text AS id, usage_id::text AS usage_id, reasons, client_safety, server_safety, status, created_at
+          FROM app.pesticide_safety_alert WHERE tenant_id = app.current_tenant_id() AND status = 'pending' ORDER BY created_at LIMIT 100`),
+        client.query(`SELECT alert_id::text AS id, chemical_id::text AS chemical_id, triggering_event_id::text AS triggering_event_id,
+            negative_quantity, status, created_at FROM app.stock_alert
+          WHERE tenant_id = app.current_tenant_id() AND status = 'pending' ORDER BY created_at LIMIT 100`),
       ]);
       return {
         rejections: rejections.rows.map(queueDto),
@@ -503,6 +734,10 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           conflictingFields: row.conflicting_fields, status: row.status,
           createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
         })),
+        pesticideAlerts: pesticideAlerts.rows.map((row) => ({ id: row.id, usageId: row.usage_id, reasons: row.reasons,
+          clientSafety: row.client_safety, serverSafety: row.server_safety, status: row.status, createdAt: iso(row.created_at) })),
+        stockAlerts: stockAlerts.rows.map((row) => ({ id: row.id, chemicalId: row.chemical_id,
+          triggeringEventId: row.triggering_event_id, negativeQuantity: Number(row.negative_quantity), status: row.status, createdAt: iso(row.created_at) })),
       };
     },
 
@@ -537,4 +772,4 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
   };
 }
 
-export const postgresMvpContract = Object.freeze({ mergeFields, derivePunchSuggestion });
+export const postgresMvpContract = Object.freeze({ mergeFields, derivePunchSuggestion, pesticideSafety });

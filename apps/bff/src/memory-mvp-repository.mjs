@@ -2,13 +2,14 @@ const CAPABILITY_BY_KIND = {
   journal: "journal:write",
   pesticide: "pesticide:write",
   punch: "punch:write",
+  stock: "inventory:write",
 };
 
 function clone(value) {
   return structuredClone(value);
 }
 
-export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [] } = {}) {
+export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [], pesticideRelease = null, agrochemicals = [], stockEvents = [] } = {}) {
   const receipts = new Map();
   const changes = [];
   const rejections = [];
@@ -18,6 +19,12 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   const attachments = [];
   const journals = clone(workJournals);
   const revisions = [];
+  let currentPesticideRelease = clone(pesticideRelease);
+  const chemicals = clone(agrochemicals);
+  const inventoryEvents = clone(stockEvents);
+  const pesticideUsages = [];
+  const pesticideAlerts = [];
+  const stockAlerts = [];
 
   const database = {
     async transaction(_trusted, operation) { return operation({}); },
@@ -83,6 +90,37 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       return { id: item.id, status: item.status, version: item.version, updatedAt: new Date().toISOString() };
     },
 
+    async getPesticideBootstrap(_client, trusted, { fieldId }) {
+      const field = fields.find((item) => item.id === fieldId && (!item.tenantId || item.tenantId === trusted.authContext.tenantId));
+      if (!field) throw new TypeError("unknown field");
+      const tenantChemicals = chemicals.filter((item) => !item.tenantId || item.tenantId === trusted.authContext.tenantId);
+      return {
+        field: { id: field.id, fieldGroupId: field.properties.fieldGroupId || null, name: field.properties.name, cropName: field.properties.cropName, timezone: field.properties.timezone || "Asia/Tokyo" },
+        release: clone(currentPesticideRelease), chemicals: clone(tenantChemicals),
+        usage: [],
+        inventory: tenantChemicals.map((chemical) => ({ chemicalId: chemical.id,
+          quantity: inventoryEvents.filter((item) => item.chemicalId === chemical.id).reduce((sum, item) => sum + item.quantityDelta, 0), updatedAt: null })),
+      };
+    },
+
+    async publishPesticideMaster(_client, trusted, input) {
+      if (!trusted.authContext.capabilities.includes("pesticide:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      if (input.expectedVersion !== undefined && (currentPesticideRelease?.version || null) !== input.expectedVersion) {
+        const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = currentPesticideRelease?.version || null; throw error;
+      }
+      currentPesticideRelease = { id: `release-${Date.now()}`, version: input.version, validUntil: input.validUntil, publishedAt: new Date().toISOString(), syncedAt: new Date().toISOString() };
+      chemicals.splice(0, chemicals.length, ...input.chemicals.map((item, index) => ({ ...clone(item), id: item.id || `chemical-${index + 1}`, tenantId: trusted.authContext.tenantId })));
+      return { ...clone(currentPesticideRelease), chemicalCount: chemicals.length };
+    },
+
+    async listInventory(_client, trusted) {
+      const balances = chemicals.filter((item) => !item.tenantId || item.tenantId === trusted.authContext.tenantId).map((chemical) => ({
+        chemicalId: chemical.id, name: chemical.name, registrationNumber: chemical.registrationNumber,
+        quantity: inventoryEvents.filter((item) => item.chemicalId === chemical.id).reduce((sum, item) => sum + item.quantityDelta, 0), updatedAt: null,
+      }));
+      return { balances, alerts: clone(stockAlerts.filter((item) => item.tenantId === trusted.authContext.tenantId && item.status === "pending")) };
+    },
+
     async pushBundle(_client, trusted, bundle) {
       const tenantId = trusted.authContext.tenantId;
       const duplicate = bundle.events.every((event) => receipts.has(`${tenantId}:${event.eventUuid}`));
@@ -97,13 +135,14 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
           || event.authorizationSnapshotId !== trusted.authorizationSnapshotId;
       });
       const lockedJournal = bundle.events.find((event) => event.kind === "journal" && journals.some((journal) => journal.id === event.payload.aggregateId && journal.tenantId === tenantId && journal.status === "approved"));
-      if (invalid || lockedJournal) {
+      const unauthorizedAdjustment = bundle.events.find((event) => event.kind === "stock" && event.payload.eventType === "adjustment" && !trusted.authContext.capabilities.includes("inventory:adjust"));
+      if (invalid || lockedJournal || unauthorizedAdjustment) {
         const rejection = {
           id: `rejection-${rejections.length + 1}`,
           tenantId,
           bundleId: bundle.bundleId,
           eventUuids: bundle.events.map((event) => event.eventUuid),
-          reason: lockedJournal ? "journal_locked" : CAPABILITY_BY_KIND[invalid.kind] ? "authorization_changed" : "unsupported_event",
+          reason: lockedJournal ? "journal_locked" : unauthorizedAdjustment || CAPABILITY_BY_KIND[invalid.kind] ? "authorization_changed" : "unsupported_event",
           recoveryAction: "reauthenticate_or_request_manager_review",
           createdAt: new Date().toISOString(),
         };
@@ -131,6 +170,24 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
             journal.status = "corrected"; journal.version += 1; journal.body = clone(event.payload.changes || event.payload);
           }
         }
+        if (event.kind === "pesticide") pesticideUsages.push({ ...clone(event.payload), eventUuid: event.eventUuid, tenantId });
+        if (event.kind === "stock") {
+          const delta = event.payload.eventType === "withdrawal" ? -Math.abs(event.payload.quantity)
+            : event.payload.eventType === "receipt" ? Math.abs(event.payload.quantity) : event.payload.quantity;
+          const stockEvent = { id: event.payload.aggregateId || event.eventUuid, eventUuid: event.eventUuid, tenantId,
+            chemicalId: event.payload.chemicalId, eventType: event.payload.eventType, quantityDelta: delta, reason: event.payload.reason };
+          inventoryEvents.push(stockEvent);
+          const balance = inventoryEvents.filter((item) => item.tenantId === tenantId && item.chemicalId === event.payload.chemicalId).reduce((sum, item) => sum + item.quantityDelta, 0);
+          if (balance < 0) {
+            const existingAlert = stockAlerts.find((item) => item.tenantId === tenantId && item.chemicalId === event.payload.chemicalId && item.status === "pending");
+            if (existingAlert) existingAlert.negativeQuantity = balance;
+            else stockAlerts.push({ id: `stock-alert-${stockAlerts.length + 1}`, tenantId, chemicalId: event.payload.chemicalId, negativeQuantity: balance, triggeringEventId: stockEvent.id, status: "pending", createdAt: new Date().toISOString() });
+          }
+          if (event.payload.eventType === "adjustment" && event.payload.alertId) {
+            const alert = stockAlerts.find((item) => item.id === event.payload.alertId && item.tenantId === tenantId);
+            if (alert) alert.status = "resolved";
+          }
+        }
         accepted.push(receipt);
       }
       return { bundleId: bundle.bundleId, status: "accepted", events: accepted };
@@ -153,6 +210,8 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       return {
         rejections: clone(rejections.filter((item) => item.tenantId === tenantId)),
         conflicts: clone(conflicts.filter((item) => item.tenantId === tenantId && item.status === "pending")),
+        pesticideAlerts: clone(pesticideAlerts.filter((item) => item.tenantId === tenantId && item.status === "pending")),
+        stockAlerts: clone(stockAlerts.filter((item) => item.tenantId === tenantId && item.status === "pending")),
       };
     },
 
@@ -170,5 +229,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments, journals, revisions } };
+  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments, journals, revisions, chemicals, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts } };
 }

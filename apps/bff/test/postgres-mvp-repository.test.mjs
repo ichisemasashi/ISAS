@@ -100,6 +100,17 @@ test("punch suggestion fills a journal and warns when a pair is incomplete", () 
   assert.equal(postgresMvpContract.derivePunchSuggestion([{ action: "start", occurred_at: "2026-08-14T00:12:00Z" }]).warning, "missing_finish");
 });
 
+test("pesticide safety rechecks crop, annual uses, harvest interval and master freshness", () => {
+  const result = postgresMvpContract.pesticideSafety({
+    chemical: { current_chemical_id: E1, release_valid_until: "2026-08-13T00:00:00Z", revoked_on: null,
+      applicable_crops: ["つや姫"], dilution_min: "500", dilution_max: "1000", max_uses: "3", preharvest_days: "7" },
+    cropName: "雪若丸", dilution: 1200, appliedOn: "2026-08-14", plannedHarvestOn: "2026-08-18", usageCount: 3,
+    now: new Date("2026-08-14T00:00:00Z"),
+  });
+  assert.equal(result.status, "warning");
+  assert.deepEqual(result.reasons, ["master_expired", "crop_not_applicable", "dilution_out_of_range", "maximum_uses_exceeded", "preharvest_interval_short"]);
+});
+
 test("journal return locks the current version and appends an audit revision", async () => {
   const calls = [];
   const client = { async query(sql, values) {
