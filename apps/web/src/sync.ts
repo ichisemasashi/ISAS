@@ -20,10 +20,17 @@ export async function synchronize({ api, storage, authorization, csrfToken, sign
       const response = await api.push(authorization.context.contextId, csrfToken, bundles(records), signal);
       for (const item of response.results) {
         const grouped = records.filter((record) => record.bundleId === item.bundleId);
-        if (item.status === "accepted" || item.status === "duplicate") { await storage.acknowledge(grouped.map((record) => record.eventUuid)); accepted += grouped.length; }
+        if (item.status === "accepted" || item.status === "duplicate") {
+          await storage.markAttachmentsReady(grouped.filter((record) => record.kind === "journal").map((record) => String(record.payload.aggregateId || "")));
+          await storage.acknowledge(grouped.map((record) => record.eventUuid)); accepted += grouped.length;
+        }
         else if (item.status === "rejected") { await storage.quarantine(grouped, "rejections", item.rejection?.reason || "rejected", item.rejection?.recoveryAction || "manager_review"); rejected += grouped.length; }
         else { await storage.quarantine(grouped, "conflicts", "optimistic_lock_conflict", "manager_resolution"); conflicts += grouped.length; }
       }
+    }
+    for (const attachment of await storage.listReadyAttachments(tenantId)) {
+      await api.uploadJournalAttachment(authorization.context.contextId, csrfToken, attachment, signal);
+      await storage.acknowledgeAttachment(attachment.id);
     }
     await pullChannel(api, storage, authorization, "normal", signal);
     const queues = await api.getQueues(authorization.context.contextId, signal); await storage.saveServerQueues(tenantId, queues);

@@ -18,6 +18,11 @@ function gateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
 const api: MvpGateway = {
   async getToday() { return { tasks: [], serverTime: new Date().toISOString() }; },
   async getFields() { return { type: "FeatureCollection", features: [], nextCursor: null }; },
+  async getWorkInstructions() { return { instructions: [] }; },
+  async createWorkInstruction() { throw new Error("not used"); },
+  async reassignWorkInstruction() { throw new Error("not used"); },
+  async getJournalBootstrap() { return { instruction: null, punchSuggestion: { startedAt: null, endedAt: null, warning: "missing_start" }, templates: [], previous: null }; },
+  async uploadJournalAttachment() { throw new Error("not used"); },
   async push() { return { results: [] }; }, async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
   async getQueues() { return { rejections: [], conflicts: [] }; }, async resolveConflict() { return {}; },
 };

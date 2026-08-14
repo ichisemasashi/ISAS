@@ -1,16 +1,21 @@
-import type { FieldFeature, PullChange, QueueSnapshot, TodayTask } from "./api";
+import type { FieldFeature, JournalBootstrap, PullChange, QueueSnapshot, TodayTask } from "./api";
 
-export type JournalDraft = { id: string; aggregateId: string; baseVersion: number; baseValue: Record<string, unknown>; field: string; workType: string; startedAt: string; endedAt: string; memo: string; updatedAt: string };
+export type JournalDraft = { id: string; aggregateId: string; baseVersion: number; baseValue: Record<string, unknown>; instructionId?: string; fieldId?: string; fieldGroupId?: string; field: string; workType: string; startedAt: string; endedAt: string; memo: string; attachmentIds?: string[]; updatedAt: string };
 export type OutboxRecord = {
   eventUuid: string; bundleId: string; kind: "journal" | "pesticide" | "punch"; payload: Record<string, unknown>;
   createdAt: string; occurredAt: string; tenantId: string; scope?: string;
   authorizationSnapshotId: string; membershipVersion: string;
 };
 export type LocalQueueRecord = { eventUuid: string; bundleId: string; tenantId: string; reason: string; recoveryAction: string; payload: Record<string, unknown>; createdAt: string };
+export type JournalAttachmentRecord = { id: string; tenantId: string; journalId: string; fileName: string; capturedAt: string; blob: Blob; ready: boolean };
 
 export interface StorageGateway {
   saveDraft(draft: JournalDraft): Promise<void>;
   enqueue(record: OutboxRecord): Promise<void>;
+  saveAttachment(record: JournalAttachmentRecord): Promise<void>;
+  markAttachmentsReady(journalIds: string[]): Promise<void>;
+  listReadyAttachments(tenantId: string): Promise<JournalAttachmentRecord[]>;
+  acknowledgeAttachment(id: string): Promise<void>;
   pendingCount(tenantId?: string): Promise<number>;
   listOutbox(tenantId: string, limit?: number): Promise<OutboxRecord[]>;
   acknowledge(eventUuids: string[]): Promise<void>;
@@ -21,6 +26,8 @@ export interface StorageGateway {
   purgeScope(tenantId: string, scope: string): Promise<void>;
   saveToday(tenantId: string, tasks: TodayTask[]): Promise<void>;
   getToday(tenantId: string): Promise<TodayTask[]>;
+  saveJournalBootstrap(tenantId: string, value: JournalBootstrap): Promise<void>;
+  getJournalBootstrap(tenantId: string): Promise<JournalBootstrap | null>;
   saveFields(tenantId: string, fields: FieldFeature[]): Promise<void>;
   getFields(tenantId: string): Promise<FieldFeature[]>;
   saveServerQueues(tenantId: string, queues: QueueSnapshot): Promise<void>;
@@ -28,8 +35,8 @@ export interface StorageGateway {
 }
 
 const DB_NAME = "isas-field-ops";
-const DB_VERSION = 3;
-const STORES = ["drafts", "outbox", "rejections", "conflicts", "cursors", "changes", "today", "fields", "serverQueues"] as const;
+const DB_VERSION = 4;
+const STORES = ["drafts", "outbox", "attachments", "rejections", "conflicts", "cursors", "changes", "today", "journalBootstrap", "fields", "serverQueues"] as const;
 type StoreName = typeof STORES[number];
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -37,7 +44,7 @@ function openDatabase(): Promise<IDBDatabase> {
     const value = indexedDB.open(DB_NAME, DB_VERSION);
     value.onupgradeneeded = () => {
       const db = value.result;
-      for (const [name, keyPath] of [["drafts", "id"], ["outbox", "eventUuid"], ["rejections", "eventUuid"], ["conflicts", "eventUuid"], ["cursors", "key"], ["changes", "key"], ["today", "tenantId"], ["fields", "key"], ["serverQueues", "tenantId"]] as const) {
+      for (const [name, keyPath] of [["drafts", "id"], ["outbox", "eventUuid"], ["attachments", "id"], ["rejections", "eventUuid"], ["conflicts", "eventUuid"], ["cursors", "key"], ["changes", "key"], ["today", "tenantId"], ["journalBootstrap", "tenantId"], ["fields", "key"], ["serverQueues", "tenantId"]] as const) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath });
       }
     };
@@ -67,6 +74,12 @@ function cursorKey(tenantId: string, scope: string, priority: string) { return `
 export const browserStorage: StorageGateway = {
   saveDraft: (draft) => inTransaction("drafts", "readwrite", ({ drafts }) => idbRequest(drafts.put(draft)).then(() => undefined)),
   enqueue: (record) => inTransaction("outbox", "readwrite", ({ outbox }) => idbRequest(outbox.put(record)).then(() => undefined)),
+  saveAttachment: (record) => inTransaction("attachments", "readwrite", ({ attachments }) => idbRequest(attachments.put(record)).then(() => undefined)),
+  markAttachmentsReady: (journalIds) => inTransaction("attachments", "readwrite", async ({ attachments }) => {
+    for (const row of await idbRequest<JournalAttachmentRecord[]>(attachments.getAll())) if (journalIds.includes(row.journalId)) attachments.put({ ...row, ready: true });
+  }),
+  listReadyAttachments: (tenantId) => inTransaction("attachments", "readonly", async ({ attachments }) => (await idbRequest<JournalAttachmentRecord[]>(attachments.getAll())).filter((row) => row.tenantId === tenantId && row.ready)),
+  acknowledgeAttachment: (id) => inTransaction("attachments", "readwrite", ({ attachments }) => idbRequest(attachments.delete(id)).then(() => undefined)),
   pendingCount: (tenantId) => inTransaction("outbox", "readonly", async ({ outbox }) => { const rows = await idbRequest<OutboxRecord[]>(outbox.getAll()); return tenantId ? rows.filter((row) => row.tenantId === tenantId).length : rows.length; }),
   listOutbox: (tenantId, limit = 100) => inTransaction("outbox", "readonly", async ({ outbox }) => (await idbRequest<OutboxRecord[]>(outbox.getAll())).filter((row) => row.tenantId === tenantId).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, limit)),
   acknowledge: (ids) => inTransaction("outbox", "readwrite", ({ outbox }) => { ids.forEach((id) => outbox.delete(id)); }),
@@ -86,6 +99,8 @@ export const browserStorage: StorageGateway = {
   }),
   saveToday: (tenantId, tasks) => inTransaction("today", "readwrite", ({ today }) => idbRequest(today.put({ tenantId, tasks, savedAt: new Date().toISOString() })).then(() => undefined)),
   getToday: (tenantId) => inTransaction("today", "readonly", async ({ today }) => (await idbRequest<{ tasks: TodayTask[] } | undefined>(today.get(tenantId)))?.tasks || []),
+  saveJournalBootstrap: (tenantId, value) => inTransaction("journalBootstrap", "readwrite", ({ journalBootstrap }) => idbRequest(journalBootstrap.put({ tenantId, value, savedAt: new Date().toISOString() })).then(() => undefined)),
+  getJournalBootstrap: (tenantId) => inTransaction("journalBootstrap", "readonly", async ({ journalBootstrap }) => (await idbRequest<{ value: JournalBootstrap } | undefined>(journalBootstrap.get(tenantId)))?.value || null),
   saveFields: (tenantId, fields) => inTransaction("fields", "readwrite", async ({ fields: store }) => {
     for (const row of await idbRequest<Array<{ key: string; tenantId: string }>>(store.getAll())) if (row.tenantId === tenantId) store.delete(row.key);
     for (const field of fields) store.put({ ...field, key: `${tenantId}:${field.id}`, tenantId, cachedAt: new Date().toISOString() });

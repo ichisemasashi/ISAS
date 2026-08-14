@@ -9,11 +9,12 @@ function fixture(status: "accepted" | "duplicate" | "rejected" | "conflict" = "a
   const quarantined: string[] = [];
   const storage: StorageGateway = {
     saveDraft: vi.fn(), enqueue: vi.fn(), pendingCount: vi.fn(async () => outbox.length), listOutbox: vi.fn(async () => [...outbox]),
+    saveAttachment: vi.fn(), markAttachmentsReady: vi.fn(), listReadyAttachments: vi.fn(async () => []), acknowledgeAttachment: vi.fn(),
     acknowledge: vi.fn(async (ids) => { for (const id of ids) { const index = outbox.findIndex((row) => row.eventUuid === id); if (index >= 0) outbox.splice(index, 1); } }),
     quarantine: vi.fn(async (records, queue) => { quarantined.push(queue); for (const record of records) { const index = outbox.findIndex((row) => row.eventUuid === record.eventUuid); if (index >= 0) outbox.splice(index, 1); } }),
-    getCursor: vi.fn(async () => null), setCursor: vi.fn(), applyChanges: vi.fn(), purgeScope: vi.fn(), saveToday: vi.fn(), getToday: vi.fn(async () => []), saveFields: vi.fn(), getFields: vi.fn(async () => []), saveServerQueues: vi.fn(), queueCounts: vi.fn(async () => ({ rejections: 0, conflicts: 0 })),
+    getCursor: vi.fn(async () => null), setCursor: vi.fn(), applyChanges: vi.fn(), purgeScope: vi.fn(), saveToday: vi.fn(), getToday: vi.fn(async () => []), saveJournalBootstrap: vi.fn(), getJournalBootstrap: vi.fn(async () => null), saveFields: vi.fn(), getFields: vi.fn(async () => []), saveServerQueues: vi.fn(), queueCounts: vi.fn(async () => ({ rejections: 0, conflicts: 0 })),
   };
-  const api: MvpGateway = { getToday: vi.fn(), getFields: vi.fn(), push: vi.fn(async () => ({ results: [{ bundleId: "bundle-1", status, rejection: status === "rejected" ? { reason: "authorization_changed", recoveryAction: "manager_review" } : undefined }] })), pull: vi.fn(async () => ({ changes: [], nextCursor: "0", hasMore: false })), getQueues: vi.fn(async () => ({ rejections: [], conflicts: [] })), resolveConflict: vi.fn() };
+  const api: MvpGateway = { getToday: vi.fn(), getFields: vi.fn(), getWorkInstructions: vi.fn(async () => ({ instructions: [] })), createWorkInstruction: vi.fn(), reassignWorkInstruction: vi.fn(), getJournalBootstrap: vi.fn(), uploadJournalAttachment: vi.fn(), push: vi.fn(async () => ({ results: [{ bundleId: "bundle-1", status, rejection: status === "rejected" ? { reason: "authorization_changed", recoveryAction: "manager_review" } : undefined }] })), pull: vi.fn(async () => ({ changes: [], nextCursor: "0", hasMore: false })), getQueues: vi.fn(async () => ({ rejections: [], conflicts: [] })), resolveConflict: vi.fn() };
   return { api, storage, outbox, quarantined };
 }
 
@@ -26,4 +27,15 @@ test("runs P0 pull before push and acknowledges only an accepted result", async 
 test.each([["rejected", "rejections"], ["conflict", "conflicts"]] as const)("moves %s results to a visible queue", async (status, queue) => {
   const fx = fixture(status); await synchronize({ api: fx.api, storage: fx.storage, authorization: demoAuthorization, csrfToken: "csrf-1" });
   expect(fx.quarantined).toEqual([queue]); expect(fx.outbox).toHaveLength(0);
+});
+
+test("marks journal photos ready after journal acceptance before uploading them", async () => {
+  const fx = fixture();
+  const attachment = { id: "photo-1", tenantId: demoAuthorization.context.tenantId, journalId: "journal-1", fileName: "field.jpg", capturedAt: "2026-08-14T00:00:00Z", blob: new Blob(["image"], { type: "image/jpeg" }), ready: true };
+  vi.mocked(fx.storage.listReadyAttachments).mockResolvedValue([attachment]);
+  fx.outbox[0].payload = { aggregateId: "journal-1" };
+  await synchronize({ api: fx.api, storage: fx.storage, authorization: demoAuthorization, csrfToken: "csrf-1" });
+  expect(fx.storage.markAttachmentsReady).toHaveBeenCalledWith(["journal-1"]);
+  expect(fx.api.uploadJournalAttachment).toHaveBeenCalledWith(demoAuthorization.context.contextId, "csrf-1", attachment, undefined);
+  expect(fx.storage.acknowledgeAttachment).toHaveBeenCalledWith("photo-1");
 });

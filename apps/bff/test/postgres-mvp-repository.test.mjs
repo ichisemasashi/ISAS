@@ -90,3 +90,12 @@ test("work reassignment locks the instruction and rejects a stale expected versi
   assert.match(calls[1].sql, /FOR UPDATE/);
   assert.equal(calls.length, 2);
 });
+
+test("punch suggestion fills a journal and warns when a pair is incomplete", () => {
+  const complete = postgresMvpContract.derivePunchSuggestion([
+    { action: "start", occurred_at: "2026-08-14T00:12:00Z" },
+    { action: "finish", occurred_at: "2026-08-14T01:36:00Z" },
+  ]);
+  assert.deepEqual(complete, { startedAt: "09:12", endedAt: "10:36", warning: null });
+  assert.equal(postgresMvpContract.derivePunchSuggestion([{ action: "start", occurred_at: "2026-08-14T00:12:00Z" }]).warning, "missing_finish");
+});

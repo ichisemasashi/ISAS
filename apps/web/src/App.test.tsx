@@ -8,9 +8,14 @@ import type { JournalDraft, OutboxRecord, StorageGateway } from "./storage";
 function memoryStorage() {
   const drafts: JournalDraft[] = [];
   const outbox: OutboxRecord[] = [];
+  const attachments: Array<{ id: string; journalId: string; fileName: string }> = [];
   const gateway: StorageGateway = {
     async saveDraft(draft) { drafts.push(draft); },
     async enqueue(record) { outbox.push(record); },
+    async saveAttachment(record) { attachments.push({ id: record.id, journalId: record.journalId, fileName: record.fileName }); },
+    async markAttachmentsReady() {},
+    async listReadyAttachments() { return []; },
+    async acknowledgeAttachment() {},
     async pendingCount() { return outbox.length; },
     async listOutbox() { return [...outbox]; },
     async acknowledge(ids) { for (const id of ids) { const index = outbox.findIndex((row) => row.eventUuid === id); if (index >= 0) outbox.splice(index, 1); } },
@@ -21,12 +26,14 @@ function memoryStorage() {
     async purgeScope() {},
     async saveToday() {},
     async getToday() { return []; },
+    async saveJournalBootstrap() {},
+    async getJournalBootstrap() { return null; },
     async saveFields() {},
     async getFields() { return []; },
     async saveServerQueues() {},
     async queueCounts() { return { rejections: 0, conflicts: 0 }; },
   };
-  return { gateway, drafts, outbox };
+  return { gateway, drafts, outbox, attachments };
 }
 
 const tasks = [
@@ -37,6 +44,11 @@ const tasks = [
 const api: MvpGateway = {
   async getToday() { return { tasks, serverTime: new Date().toISOString() }; },
   async getFields() { return { type: "FeatureCollection", features: [], nextCursor: null }; },
+  async getWorkInstructions() { return { instructions: [] }; },
+  async createWorkInstruction() { throw new Error("not used"); },
+  async reassignWorkInstruction() { throw new Error("not used"); },
+  async getJournalBootstrap() { return { instruction: null, punchSuggestion: { startedAt: "08:12", endedAt: "09:36", warning: null }, templates: [{ id: "template-1", name: "水管理", workType: "水管理", defaults: {}, version: 1 }], previous: { id: "previous-1", body: { field: "北の1号圃場", workType: "水管理" }, version: 1, updatedAt: new Date().toISOString() } }; },
+  async uploadJournalAttachment() { throw new Error("not used"); },
   async push() { throw new Error("offline test transport"); },
   async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
   async getQueues() { return { rejections: [], conflicts: [] }; },
@@ -90,6 +102,18 @@ describe("ISAS MVP field flow", () => {
     expect(submit).toBeEnabled();
     await user.click(submit);
     await waitFor(() => expect(store.outbox[0]?.kind).toBe("pesticide"));
+  });
+
+  test("keeps a journal photo on the device and links it to the journal event", async () => {
+    const user = userEvent.setup();
+    const store = memoryStorage();
+    renderApp(store.gateway);
+    await user.click((await screen.findAllByRole("button", { name: "記録する" }))[0]);
+    await user.upload(screen.getByLabelText("写真を追加"), new File([new Uint8Array([1, 2, 3])], "水位.jpg", { type: "image/jpeg" }));
+    await waitFor(() => expect(store.attachments).toHaveLength(1));
+    expect(screen.getByText("水位.jpg")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "この内容で記録" }));
+    await waitFor(() => expect(store.outbox[0]?.payload.attachmentIds).toEqual([store.attachments[0].id]));
   });
 
   test("keeps drafts readable but blocks new outbox records after offline write grace", async () => {

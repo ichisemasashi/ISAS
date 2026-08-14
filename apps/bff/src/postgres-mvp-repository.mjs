@@ -66,6 +66,20 @@ function workInstructionDto(row) {
   };
 }
 
+function localTime(value) {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+}
+
+function derivePunchSuggestion(rows) {
+  const start = rows.find((row) => row.action === "start") || rows.find((row) => row.action === "resume");
+  const finish = [...rows].reverse().find((row) => row.action === "finish");
+  return {
+    startedAt: start ? localTime(start.occurred_at) : null,
+    endedAt: finish ? localTime(finish.occurred_at) : null,
+    warning: !start ? "missing_start" : start && !finish ? "missing_finish" : null,
+  };
+}
+
 export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
   return {
     async getToday(client) {
@@ -193,6 +207,71 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return { id: instructionId, assignmentId, assigneeUserId: input.assigneeUserId, version: Number(updated.rows[0].version) };
     },
 
+    async getJournalBootstrap(client, _trusted, { instructionId, fieldId }) {
+      if (instructionId && !isUuid(instructionId)) throw new TypeError("invalid instruction");
+      if (fieldId && !isUuid(fieldId)) throw new TypeError("invalid field");
+      const instruction = instructionId ? await client.query(`
+        SELECT instruction.instruction_id::text AS id, instruction.field_id::text AS field_id,
+               instruction.field_group_id::text AS field_group_id, field.name AS field_name,
+               instruction.work_type, instruction.details, instruction.scheduled_start, instruction.scheduled_end
+        FROM app.work_instruction instruction
+        JOIN app.field field ON field.tenant_id = instruction.tenant_id AND field.field_id = instruction.field_id
+        JOIN app.work_assignment assignment ON assignment.tenant_id = instruction.tenant_id
+          AND assignment.instruction_id = instruction.instruction_id AND assignment.unassigned_at IS NULL
+        WHERE instruction.tenant_id = app.current_tenant_id() AND instruction.instruction_id = $1::uuid
+          AND (assignment.assignee_user_id = app.current_user_id() OR app.has_capability('instruction:manage'))`, [instructionId]) : { rows: [] };
+      const selectedFieldId = fieldId || instruction.rows[0]?.field_id || null;
+      const selectedScope = instruction.rows[0]?.field_group_id || null;
+      const [punches, templates, previous] = await Promise.all([
+        client.query(`SELECT action, occurred_at FROM app.work_punch
+          WHERE tenant_id = app.current_tenant_id() AND user_id = app.current_user_id()
+            AND occurred_at >= date_trunc('day', now() AT TIME ZONE 'Asia/Tokyo') AT TIME ZONE 'Asia/Tokyo'
+          ORDER BY occurred_at`),
+        client.query(`SELECT template_id::text AS id, name, work_type, defaults, version FROM app.journal_template
+          WHERE tenant_id = app.current_tenant_id() AND active
+            AND ($1::uuid IS NULL OR field_group_id IS NULL OR field_group_id = $1::uuid)
+          ORDER BY sort_order, name LIMIT 20`, [selectedScope]),
+        client.query(`SELECT journal_id::text AS id, body, version, updated_at FROM app.work_journal
+          WHERE tenant_id = app.current_tenant_id() AND worker_user_id = app.current_user_id()
+            AND ($1::uuid IS NULL OR field_id = $1::uuid)
+          ORDER BY updated_at DESC LIMIT 1`, [selectedFieldId]),
+      ]);
+      return {
+        instruction: instruction.rows[0] ? {
+          id: instruction.rows[0].id, fieldId: instruction.rows[0].field_id, fieldGroupId: instruction.rows[0].field_group_id,
+          fieldName: instruction.rows[0].field_name, workType: instruction.rows[0].work_type, details: instruction.rows[0].details,
+          scheduledStart: new Date(instruction.rows[0].scheduled_start).toISOString(), scheduledEnd: new Date(instruction.rows[0].scheduled_end).toISOString(),
+        } : null,
+        punchSuggestion: derivePunchSuggestion(punches.rows),
+        templates: templates.rows.map((row) => ({ id: row.id, name: row.name, workType: row.work_type, defaults: row.defaults, version: Number(row.version) })),
+        previous: previous.rows[0] ? { id: previous.rows[0].id, body: previous.rows[0].body, version: Number(previous.rows[0].version), updatedAt: new Date(previous.rows[0].updated_at).toISOString() } : null,
+      };
+    },
+
+    async saveJournalAttachment(client, trusted, attachment) {
+      if (!isUuid(attachment.attachmentId) || !isUuid(attachment.journalId)
+        || typeof attachment.fileName !== "string" || !attachment.fileName || attachment.fileName.length > 255
+        || !Number.isFinite(Date.parse(attachment.capturedAt))) throw new TypeError("invalid attachment");
+      await requireCapability(client, "journal:write");
+      const result = await client.query(`
+        WITH inserted AS (
+          INSERT INTO app.journal_attachment
+            (tenant_id, attachment_id, journal_id, worker_user_id, file_name, content_type,
+             byte_size, sha256, content, captured_at)
+          VALUES ($1::uuid, $2::uuid, $3::uuid, app.current_user_id(), $4, $5, $6, $7, $8::bytea, $9::timestamptz)
+          ON CONFLICT (tenant_id, attachment_id) DO NOTHING
+          RETURNING attachment_id, journal_id, byte_size, sha256
+        )
+        SELECT attachment_id::text AS id, journal_id::text AS journal_id, byte_size, sha256 FROM inserted
+        UNION ALL
+        SELECT attachment_id::text, journal_id::text, byte_size, sha256 FROM app.journal_attachment
+        WHERE tenant_id = $1::uuid AND attachment_id = $2::uuid
+        LIMIT 1`,
+      [trusted.authContext.tenantId, attachment.attachmentId, attachment.journalId, attachment.fileName, attachment.contentType, attachment.bytes.length, attachment.sha256, attachment.bytes, attachment.capturedAt]);
+      if (result.rows[0]?.sha256 !== attachment.sha256) { const error = new Error("attachment id reused"); error.code = "idempotency_conflict"; throw error; }
+      return { id: result.rows[0].id, journalId: result.rows[0].journal_id, byteSize: Number(result.rows[0].byte_size), sha256: result.rows[0].sha256 };
+    },
+
     async pushBundle(client, trusted, bundle) {
       const tenantId = trusted.authContext.tenantId;
       const allReceipts = await client.query(`
@@ -246,8 +325,18 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           VALUES ($1::uuid, $2::uuid, $3::timestamptz, $4::timestamptz, $5, $6::uuid, $7::jsonb, $8, $9, $10, $11)
           ON CONFLICT DO NOTHING`, [tenantId, event.eventUuid, stableEventTs, event.occurredAt, event.kind, event.scope || null, JSON.stringify(event.payload), event.authorizationSnapshotId, event.membershipVersion, trusted.actorPseudonym, clockSkewed]);
 
-        if (event.kind === "journal" && event.payload.aggregateId && Number.isInteger(event.payload.baseVersion)) {
+        if (event.kind === "punch") {
+          if (!["start", "break", "resume", "finish"].includes(event.payload.action)) throw new TypeError("invalid punch");
+          await client.query(`INSERT INTO app.work_punch
+            (tenant_id, punch_id, event_uuid, user_id, instruction_id, field_group_id, action, occurred_at, event_ts)
+            VALUES ($1::uuid, $2::uuid, $3::uuid, app.current_user_id(), $4::uuid, $5::uuid, $6, $7::timestamptz, $8::timestamptz)
+            ON CONFLICT (tenant_id, event_uuid) DO NOTHING`,
+          [tenantId, uuid(), event.eventUuid, isUuid(event.payload.instructionId) ? event.payload.instructionId : null, event.scope || null, event.payload.action, event.occurredAt, stableEventTs]);
+        }
+
+        if (event.kind === "journal" && isUuid(event.payload.aggregateId) && Number.isInteger(event.payload.baseVersion)) {
           const proposed = event.payload.changes && typeof event.payload.changes === "object" ? event.payload.changes : event.payload;
+          let journalBody = proposed;
           const updated = await client.query(`
             UPDATE app.sync_document SET body = $3::jsonb, version = version + 1, updated_at = clock_timestamp()
             WHERE tenant_id = $1::uuid AND document_id = $2::uuid AND version = $4::bigint
@@ -257,6 +346,7 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
             if (current.rows[0]) {
               const base = event.payload.baseValue && typeof event.payload.baseValue === "object" ? event.payload.baseValue : {};
               const fieldMerge = mergeFields(base, current.rows[0].body, proposed);
+              journalBody = fieldMerge.merged;
               await client.query("UPDATE app.sync_document SET body = $3::jsonb, version = version + 1, updated_at = clock_timestamp() WHERE tenant_id = $1::uuid AND document_id = $2::uuid AND version = $4", [tenantId, event.payload.aggregateId, JSON.stringify(fieldMerge.merged), current.rows[0].version]);
               if (fieldMerge.conflicts.length) {
                 conflicted = true;
@@ -272,6 +362,17 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
               await client.query("INSERT INTO app.sync_document (tenant_id, document_id, field_group_id, body) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::jsonb)", [tenantId, event.payload.aggregateId, event.scope || null, JSON.stringify(proposed)]);
             }
           }
+          await client.query(`INSERT INTO app.work_journal
+            (tenant_id, journal_id, instruction_id, field_id, field_group_id, worker_user_id, body)
+            VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, app.current_user_id(), $6::jsonb)
+            ON CONFLICT (tenant_id, journal_id) DO UPDATE
+              SET body = EXCLUDED.body, version = app.work_journal.version + 1,
+                  status = CASE WHEN app.work_journal.status = 'returned' THEN 'corrected' ELSE 'submitted' END,
+                  updated_at = clock_timestamp()
+              WHERE app.work_journal.worker_user_id = app.current_user_id()
+                AND app.work_journal.status IN ('submitted', 'returned', 'corrected')`,
+          [tenantId, event.payload.aggregateId, isUuid(event.payload.instructionId) ? event.payload.instructionId : null,
+            isUuid(event.payload.fieldId) ? event.payload.fieldId : null, event.scope || null, JSON.stringify(journalBody)]);
         }
 
         await client.query(`
@@ -357,4 +458,4 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
   };
 }
 
-export const postgresMvpContract = Object.freeze({ mergeFields });
+export const postgresMvpContract = Object.freeze({ mergeFields, derivePunchSuggestion });

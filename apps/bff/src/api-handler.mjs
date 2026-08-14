@@ -1,8 +1,10 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 const MAX_PUSH_BYTES = 1024 * 1024;
 const MAX_BUNDLES = 100;
 const MAX_EVENTS_PER_BUNDLE = 100;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
 
 function json(status, body, correlationId, contentType = "application/json; charset=utf-8") {
   return new Response(JSON.stringify(body), {
@@ -83,6 +85,24 @@ async function readJsonObject(request) {
   return body;
 }
 
+async function readAttachment(request) {
+  const contentType = (request.headers.get("Content-Type") || "").toLowerCase();
+  const declared = Number(request.headers.get("Content-Length") || 0);
+  if (!IMAGE_TYPES.has(contentType)) throw new TypeError("content_type");
+  if (declared > MAX_ATTACHMENT_BYTES) throw new RangeError("attachment_too_large");
+  const bytes = Buffer.from(await request.arrayBuffer());
+  if (!bytes.length || bytes.length > MAX_ATTACHMENT_BYTES) throw new RangeError("attachment_size");
+  return {
+    attachmentId: request.headers.get("X-Attachment-ID"),
+    journalId: request.headers.get("X-Journal-ID"),
+    fileName: decodeURIComponent(request.headers.get("X-File-Name") || "photo"),
+    capturedAt: request.headers.get("X-Captured-At"),
+    contentType,
+    bytes,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+}
+
 export function createMvpApiHandler({ origin, resolveContext, database, repository }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
 
@@ -109,6 +129,20 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (request.method === "GET" && url.pathname === "/api/v1/work-instructions") {
         const result = await database.transaction(trusted, (client, canonical) => repository.listWorkInstructions(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
         return json(200, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/journal-bootstrap") {
+        const instructionId = url.searchParams.get("instructionId");
+        const fieldId = url.searchParams.get("fieldId");
+        const result = await database.transaction(trusted, (client, canonical) => repository.getJournalBootstrap(client, canonical ? { ...trusted, authContext: canonical } : trusted, { instructionId, fieldId }), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/journal-attachments") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const attachment = await readAttachment(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.saveJournalAttachment(client, canonical ? { ...trusted, authContext: canonical } : trusted, attachment));
+        return json(201, result, requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/api/v1/work-instructions") {
@@ -167,6 +201,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (error?.code === "scope_revoked") return problem(409, "scope_revoked", "Scope was revoked", requestId, undefined, { purgeScope: error.scope });
       if (error?.code === "forbidden") return problem(403, "forbidden", "Forbidden", requestId);
       if (error?.code === "version_conflict") return problem(409, "version_conflict", "Version conflict", requestId, undefined, { currentVersion: error.currentVersion });
+      if (error?.code === "idempotency_conflict") return problem(409, "idempotency_conflict", "Idempotency conflict", requestId);
       return problem(500, "request_failed", "Request failed", requestId);
     }
   };

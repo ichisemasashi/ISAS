@@ -15,6 +15,7 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   const conflicts = [];
   let sequence = 0;
   const instructions = clone(workInstructions);
+  const attachments = [];
 
   const database = {
     async transaction(_trusted, operation) { return operation({}); },
@@ -51,6 +52,18 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       if (item.version !== input.expectedVersion) { const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = item.version; throw error; }
       item.version += 1; item.assignment = { id: `assignment-${instructions.length + item.version}`, assigneeUserId: input.assigneeUserId, version: 1 };
       return { id: item.id, assignmentId: item.assignment.id, assigneeUserId: input.assigneeUserId, version: item.version };
+    },
+
+    async getJournalBootstrap() {
+      return { instruction: null, punchSuggestion: { startedAt: null, endedAt: null, warning: "missing_start" }, templates: [], previous: null };
+    },
+
+    async saveJournalAttachment(_client, trusted, attachment) {
+      if (!trusted.authContext.capabilities.includes("journal:write")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      const existing = attachments.find((item) => item.id === attachment.attachmentId && item.tenantId === trusted.authContext.tenantId);
+      if (existing) return clone(existing);
+      const item = { id: attachment.attachmentId, journalId: attachment.journalId, tenantId: trusted.authContext.tenantId, byteSize: attachment.bytes.length, sha256: attachment.sha256 };
+      attachments.push(item); return clone(item);
     },
 
     async pushBundle(_client, trusted, bundle) {
@@ -132,5 +145,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions } };
+  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments } };
 }

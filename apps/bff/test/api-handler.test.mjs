@@ -139,4 +139,24 @@ describe("MVP REST and synchronization API", () => {
     }));
     assert.equal(response.status, 403);
   });
+
+  test("returns offline journal defaults and stores an idempotent photo upload", async () => {
+    const fx = fixture(["journal:write"]);
+    const bootstrap = await fx.handle(fx.request("/api/v1/journal-bootstrap"));
+    assert.equal(bootstrap.status, 200);
+    assert.equal((await bootstrap.json()).punchSuggestion.warning, "missing_start");
+
+    const headers = {
+      Origin: ORIGIN, "Content-Type": "image/jpeg", "X-CSRF-Token": "csrf-1",
+      "X-Attachment-ID": "0198a6c0-0000-7000-8000-000000000201",
+      "X-Journal-ID": "0198a6c0-0000-7000-8000-000000000202",
+      "X-File-Name": encodeURIComponent("圃場.jpg"), "X-Captured-At": "2026-08-14T00:00:00Z",
+    };
+    const first = await fx.handle(fx.request("/api/v1/journal-attachments", { method: "POST", headers, body: new Uint8Array([0xff, 0xd8, 0xff]) }));
+    const retry = await fx.handle(fx.request("/api/v1/journal-attachments", { method: "POST", headers, body: new Uint8Array([0xff, 0xd8, 0xff]) }));
+    assert.equal(first.status, 201);
+    assert.equal(retry.status, 201);
+    assert.equal((await first.json()).sha256, (await retry.json()).sha256);
+    assert.equal(fx.state.attachments.length, 1);
+  });
 });
