@@ -165,7 +165,7 @@ ISAS
 
 | 領域 | 残作業 |
 |---|---|
-| 認証/権限 | ADR-0009を確定し、ログイン・tenant/scope注入・失効パージを実装 |
+| 認証/権限 | ADR-0009 v3に従い、BFF session・context ID・tenant/scope注入・失効パージを実装 |
 | API/同期 | S7参照状態機械を本番command path・pull/push API・Service Workerへ接続 |
 | 圃場GIS | MapLibre＋PostGIS API、オフライン担当圃場/タイル |
 | 作業指示/ガント | 管理者編集、担当割当、基本タイムライン |
