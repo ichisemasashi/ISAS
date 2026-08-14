@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
-import { App } from "./App";
+import { App, durationLabel } from "./App";
 import type { MvpGateway } from "./api";
 import { demoAuthorization } from "./auth";
 import type { JournalDraft, OutboxRecord, StorageGateway } from "./storage";
@@ -75,6 +75,11 @@ const api: MvpGateway = {
 const renderApp = (storage: StorageGateway, authorization = demoAuthorization, gateway = api) => render(<App api={gateway} csrfToken="csrf-1" storage={storage} authorization={authorization} />);
 
 describe("ISAS MVP field flow", () => {
+  test("does not show NaN when punch times are not cached yet", () => {
+    expect(durationLabel("", "")).toBe("未入力");
+    expect(durationLabel("08:12", "")).toBe("未入力");
+  });
+
   test("shows today's work and persistent synchronization state", async () => {
     const store = memoryStorage();
     renderApp(store.gateway);

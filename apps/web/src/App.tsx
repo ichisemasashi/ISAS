@@ -43,9 +43,11 @@ function eventId(): string {
   return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
 }
 
-function durationLabel(startedAt: string, endedAt: string): string {
+export function durationLabel(startedAt: string, endedAt: string): string {
+  if (!startedAt || !endedAt) return "未入力";
   const [startHour, startMinute] = startedAt.split(":").map(Number);
   const [endHour, endMinute] = endedAt.split(":").map(Number);
+  if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return "未入力";
   const minutes = Math.max(0, endHour * 60 + endMinute - startHour * 60 - startMinute);
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;

@@ -26,6 +26,29 @@
   text-rendering: optimizeLegibility;
 }
 
+.ut-mode-banner {
+  position: relative;
+  z-index: 100;
+  padding: 8px 16px;
+  background: #fff0c2;
+  color: #4c2b00;
+  border-block-end: 2px solid #a84f11;
+  text-align: center;
+  font-weight: 800;
+}
+
+.ut-mode-banner.is-offline { background: #ffe0d5; }
+.ut-mode-banner button {
+  min-height: 36px;
+  margin-inline-start: 16px;
+  padding-inline: 12px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-weight: 800;
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
   --ink: #f3f5ef;
