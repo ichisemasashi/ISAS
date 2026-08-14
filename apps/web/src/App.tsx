@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import type { JournalBootstrap, JournalEntry, MvpGateway, QueueSnapshot, TodayTask, WorkInstruction } from "./api";
+import type { FieldFeature, InventorySnapshot, JournalBootstrap, JournalEntry, MvpGateway, PesticideBootstrap, QueueSnapshot, TodayTask, WorkInstruction } from "./api";
 import { demoAuthorization, type AppAuthorization, type TenantOption } from "./auth";
 import { browserStorage, type JournalDraft, type StorageGateway } from "./storage";
 import { synchronize } from "./sync";
+import { evaluatePesticideUse, safetyReasonLabel } from "./pesticide-safety";
 
 const FieldsPage = lazy(() => import("./FieldsPage").then((module) => ({ default: module.FieldsPage })));
 
-type Route = "today" | "journal" | "pesticide" | "fields" | "more";
+type Route = "today" | "journal" | "pesticide" | "inventory" | "fields" | "more";
 type PunchState = "idle" | "working" | "break";
 type Theme = "field" | "dark" | "contrast";
 type Locale = "ja" | "en";
@@ -127,7 +128,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const queue = async (kind: "journal" | "pesticide" | "punch", payload: Record<string, unknown>, scope?: string): Promise<boolean> => {
+  const queue = async (kind: "journal" | "pesticide" | "punch" | "stock", payload: Record<string, unknown>, scope?: string): Promise<boolean> => {
     if (!canWrite) {
       setNotice(authorization.accessMode === "offline-read" ? "オフライン猶予の読取期間です。再認証するまで新しい記録は確定できません。" : "認証の猶予が終了しました。再認証後に記録を再開できます。");
       return false;
@@ -186,7 +187,8 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
           {authorization.accessMode !== "online" && <div className={`authorization-banner mode-${authorization.accessMode}`} role="status"><strong>{authorization.accessMode === "offline-write" ? "オフライン認証の猶予中" : authorization.accessMode === "offline-read" ? "読取専用へ移行しました" : "認証の猶予が終了しました"}</strong><span>{authorization.accessMode === "offline-write" ? "現場記録だけを端末へ保存できます。機微操作は利用できません。" : authorization.accessMode === "offline-read" ? "下書きは保持されますが、再認証まで記録を確定できません。" : "未同期データを保持しています。オンライン復帰後に再認証してください。"}</span></div>}
           {route === "today" && <TodayPage tasks={tasks} instructions={instructions} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} recordInstruction={(id) => { setSelectedJournalId(undefined); setSelectedInstructionId(id || undefined); navigate("journal"); }} />}
           {route === "journal" && <JournalPage api={api} csrfToken={csrfToken} authorization={authorization} online={online} instructionId={selectedInstructionId} journalId={selectedJournalId} storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
-          {route === "pesticide" && <PesticidePage queue={queue} navigate={navigate} />}
+          {route === "pesticide" && <PesticidePage api={api} authorization={authorization} online={online} storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
+          {route === "inventory" && <InventoryPage api={api} authorization={authorization} online={online} storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
           {route === "fields" && <Suspense fallback={<div className="page-content"><p role="status">圃場地図を読み込んでいます。</p></div>}><FieldsPage api={api} storage={storage} authorization={authorization} online={online} /></Suspense>}
           {route === "more" && <MorePage api={api} csrfToken={csrfToken} authorization={authorization} online={online} instructions={instructions} setInstructions={setInstructions} journals={journals} setJournals={setJournals} correctJournal={(id) => { setSelectedInstructionId(undefined); setSelectedJournalId(id); navigate("journal"); }} setNotice={setNotice} theme={theme} locale={locale} queueCounts={queueCounts} queues={queues} resolveConflict={async (id, choice) => {
             await api.resolveConflict(authorization.context.contextId, csrfToken, id, { choice });
@@ -257,6 +259,7 @@ function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate
           <button onClick={() => recordInstruction("")}><span className="quick-icon green"><Icon name="record"/></span><span><strong>作業日誌</strong><small>前回値から入力</small></span></button>
           <button onClick={() => navigate("pesticide")} aria-label="農薬記録を始める"><span className="quick-icon amber"><Icon name="leaf"/></span><span><strong>農薬記録</strong><small>使用基準を確認</small></span></button>
           <button onClick={() => navigate("fields")}><span className="quick-icon blue"><Icon name="field"/></span><span><strong>圃場を見る</strong><small>担当圃場を確認</small></span></button>
+          <button onClick={() => navigate("inventory")}><span className="quick-icon green"><Icon name="sync"/></span><span><strong>在庫入出庫</strong><small>現場で出庫を記録</small></span></button>
         </div>
         <div className="safety-note"><Icon name="leaf"/><div><strong>農薬マスタは最新です</strong><span>2026年8月14日 06:10 更新</span></div></div>
       </aside>
@@ -348,27 +351,94 @@ function JournalPage({ api, csrfToken, authorization, online, instructionId, jou
   </div>;
 }
 
-function PesticidePage({ queue, navigate }: { queue: (kind: "pesticide", payload: Record<string, unknown>) => Promise<boolean>; navigate: (route: Route) => void }) {
-  const [chemical, setChemical] = useState("グリーンフロアブル");
+function PesticidePage({ api, authorization, online, storage, queue, navigate, setNotice }: { api: MvpGateway; authorization: AppAuthorization; online: boolean; storage: StorageGateway; queue: (kind: "pesticide", payload: Record<string, unknown>, scope?: string) => Promise<boolean>; navigate: (route: Route) => void; setNotice: (message: string) => void }) {
+  const [fields, setFields] = useState<FieldFeature[]>([]);
+  const [fieldId, setFieldId] = useState("");
+  const [bootstrap, setBootstrap] = useState<PesticideBootstrap | null>(null);
+  const [chemicalId, setChemicalId] = useState("");
+  const [dilution, setDilution] = useState(1000);
+  const [appliedOn, setAppliedOn] = useState(() => new Date().toISOString().slice(0, 10));
+  const [plannedHarvestOn, setPlannedHarvestOn] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
-  const warning = chemical === "テスト乳剤（要確認）";
+
+  useEffect(() => {
+    let active = true;
+    const tenantId = authorization.context.tenantId;
+    storage.getFields(tenantId).then((cached) => { if (active && cached.length) { setFields(cached); setFieldId((current) => current || cached[0].id); } }).catch(() => undefined);
+    if (online) api.getFields(authorization.context.contextId).then(async (current) => {
+      await storage.saveFields(tenantId, current.features);
+      if (active) { setFields(current.features); setFieldId((value) => value || current.features[0]?.id || ""); }
+    }).catch(() => setNotice("担当圃場を更新できませんでした。端末の保存内容を使います。"));
+    return () => { active = false; };
+  }, [api, authorization.context.contextId, authorization.context.tenantId, online, setNotice, storage]);
+
+  useEffect(() => {
+    if (!fieldId) { setBootstrap(null); return; }
+    let active = true;
+    const tenantId = authorization.context.tenantId;
+    storage.getPesticideBootstrap(tenantId, fieldId).then((cached) => { if (active && cached) { setBootstrap(cached); setChemicalId((current) => current || cached.chemicals[0]?.id || ""); } }).catch(() => undefined);
+    if (online) api.getPesticideBootstrap(authorization.context.contextId, fieldId).then(async (current) => {
+      await storage.savePesticideBootstrap(tenantId, current);
+      if (active) { setBootstrap(current); setChemicalId(current.chemicals[0]?.id || ""); setAcknowledged(false); }
+    }).catch(() => setNotice("農薬マスタを更新できませんでした。端末の保存内容で確認します。"));
+    return () => { active = false; };
+  }, [api, authorization.context.contextId, authorization.context.tenantId, fieldId, online, setNotice, storage]);
+
+  const chemical = bootstrap?.chemicals.find((item) => item.id === chemicalId) || null;
+  const decision = useMemo(() => evaluatePesticideUse({ bootstrap, chemical, cropName: bootstrap?.field.cropName || "", dilution, appliedOn, plannedHarvestOn: plannedHarvestOn || undefined }), [appliedOn, bootstrap, chemical, dilution, plannedHarvestOn]);
+  const managerOverride = authorization.context.capabilities.includes("pesticide:override");
+  const canSubmit = decision.status === "safe" || (decision.status === "warning" && acknowledged && (!decision.requiresManagerOverride || managerOverride));
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!bootstrap || !chemical || !canSubmit) return;
     const data = Object.fromEntries(new FormData(event.currentTarget));
-    if (await queue("pesticide", { ...data, safetyCacheVersion: "2026.08.14-1", warningAcknowledged: acknowledged })) navigate("today");
+    if (await queue("pesticide", {
+      aggregateId: eventId(), fieldId: bootstrap.field.id, cropName: bootstrap.field.cropName, chemicalId: chemical.id,
+      dilution, amount: Number(data.amount), targetPest: data.targetPest, equipment: data.equipment,
+      workerName: data.workerName, plannedHarvestOn: plannedHarvestOn || null, appliedOn,
+      safetyDecision: decision, warningAcknowledged: acknowledged, managerOverride: decision.requiresManagerOverride && managerOverride,
+    }, bootstrap.field.fieldGroupId)) navigate("today");
   };
+  const isWarning = decision.status !== "safe";
   return <div className="page-content narrow-page">
     <PageBack onBack={() => navigate("today")} />
-    <div className="form-heading"><span className="section-kicker">PESTICIDE RECORD</span><h1>農薬記録</h1><p>散布前に使用基準を確認します。警告は色だけでなく文章でも表示します。</p></div>
-    <form className="record-form" onSubmit={submit}>
-      <div className="freshness"><Icon name="sync"/><div><strong>安全基準データは最新です</strong><span>2026年8月14日 06:10更新・オフライン確認可</span></div></div>
-      <fieldset><legend>散布する場所と作物</legend><div className="form-grid"><label>圃場<select name="field" defaultValue="南の3号圃場"><option>南の3号圃場</option><option>北の1号圃場</option></select></label><label>作物<select name="crop" defaultValue="雪若丸"><option>雪若丸</option><option>つや姫</option></select></label></div></fieldset>
-      <fieldset><legend>薬剤と使用量</legend><label>薬剤名<select name="chemical" value={chemical} onChange={(event) => { setChemical(event.target.value); setAcknowledged(false); }}><option>グリーンフロアブル</option><option>テスト乳剤（要確認）</option></select></label><div className="form-grid"><label>希釈倍率<input name="dilution" inputMode="numeric" defaultValue="1000"/><span className="field-suffix">倍</span></label><label>散布量<input name="amount" inputMode="decimal" defaultValue="120"/><span className="field-suffix">L</span></label></div></fieldset>
-      <div className={`safety-result ${warning ? "is-warning" : "is-safe"}`} role={warning ? "alert" : "status"}><Icon name={warning ? "warning" : "leaf"}/><div><strong>{warning ? "使用回数を確認してください" : "使用基準の範囲内です"}</strong><p>{warning ? "今作の使用回数が上限に達する可能性があります。履歴を確認し、責任者の判断を記録してください。" : "適用作物・希釈倍率・使用回数・収穫前日数を確認しました。"}</p></div></div>
-      {warning && <label className="check-row"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)}/><span>警告内容と使用履歴を確認しました</span></label>}
-      <fieldset><legend>記録に必要な情報</legend><div className="form-grid"><label>対象病害虫<input name="target" defaultValue="ノビエ"/></label><label>使用器具<input name="equipment" defaultValue="背負式噴霧器"/></label><label>作業者<input name="worker" defaultValue="佐藤 一郎"/></label><label>散布日<input name="date" type="date" defaultValue="2026-08-14"/></label></div></fieldset>
-      <div className="form-actions"><button className="secondary-action" type="button" onClick={() => navigate("today")}>戻る</button><button className="primary-action" type="submit" disabled={warning && !acknowledged}>安全確認して記録</button></div>
+    <div className="form-heading"><span className="section-kicker">PESTICIDE RECORD</span><h1>農薬記録</h1><p>端末保存したマスタと使用履歴で、散布前に使用基準を確認します。</p></div>
+    <form className="record-form" onSubmit={(event) => void submit(event)}>
+      <div className={`freshness ${decision.reasons.includes("master_stale") || decision.reasons.includes("master_missing") ? "is-warning" : ""}`}><Icon name="sync"/><div><strong>{bootstrap?.release ? `安全基準 ${bootstrap.release.version}` : "安全基準データがありません"}</strong><span>{bootstrap?.release ? `有効期限 ${new Date(bootstrap.release.validUntil).toLocaleString("ja-JP")}・最終同期 ${new Date(bootstrap.release.syncedAt).toLocaleString("ja-JP")}` : "オンラインでマスタを取得してください"}</span></div></div>
+      <fieldset><legend>散布する場所と作物</legend><div className="form-grid"><label>圃場<select value={fieldId} onChange={(event) => { setFieldId(event.target.value); setBootstrap(null); setChemicalId(""); setAcknowledged(false); }} required><option value="">選択してください</option>{fields.map((field) => <option key={field.id} value={field.id}>{field.properties.name}</option>)}</select></label><label>作物<input value={bootstrap?.field.cropName || ""} readOnly required/></label></div></fieldset>
+      <fieldset><legend>薬剤と使用量</legend><label>薬剤名<select value={chemicalId} onChange={(event) => { setChemicalId(event.target.value); setAcknowledged(false); }} required><option value="">選択してください</option>{bootstrap?.chemicals.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="form-grid"><label>希釈倍率<input inputMode="numeric" type="number" value={dilution} onChange={(event) => { setDilution(Number(event.target.value)); setAcknowledged(false); }} required/><span className="field-suffix">倍</span></label><label>散布量<input name="amount" inputMode="decimal" type="number" min="0.01" step="0.01" defaultValue="120" required/><span className="field-suffix">L</span></label></div></fieldset>
+      <div className={`safety-result ${isWarning ? "is-warning" : "is-safe"}`} role={isWarning ? "alert" : "status"}><Icon name={isWarning ? "warning" : "leaf"}/><div><strong>{decision.status === "blocked" ? "この内容では記録できません" : isWarning ? "使用前に警告を確認してください" : "使用基準の範囲内です"}</strong>{decision.reasons.length ? <ul>{decision.reasons.map((reason) => <li key={reason}>{safetyReasonLabel[reason]}</li>)}</ul> : <p>適用作物・希釈倍率・使用回数・収穫前日数を確認しました。</p>}{decision.requiresManagerOverride && !managerOverride && <p>この端末のマスタが古いため、責任者がオンライン更新または承認してください。</p>}</div></div>
+      {decision.status === "warning" && <label className="check-row"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)}/><span>{decision.requiresManagerOverride ? "責任者として古いマスタと警告内容を確認しました" : "警告内容と使用履歴を確認しました"}</span></label>}
+      <fieldset><legend>記録に必要な情報</legend><div className="form-grid"><label>対象病害虫<input name="targetPest" defaultValue="ノビエ" required/></label><label>使用器具<input name="equipment" defaultValue="背負式噴霧器" required/></label><label>作業者<input name="workerName" defaultValue={authorization.user.displayName} required/></label><label>散布日<input type="date" value={appliedOn} onChange={(event) => { setAppliedOn(event.target.value); setAcknowledged(false); }} required/></label><label>収穫予定日<input type="date" value={plannedHarvestOn} onChange={(event) => { setPlannedHarvestOn(event.target.value); setAcknowledged(false); }}/></label></div></fieldset>
+      <div className="form-actions"><button className="secondary-action" type="button" onClick={() => navigate("today")}>戻る</button><button className="primary-action" type="submit" disabled={!canSubmit}>安全確認して記録</button></div>
     </form>
+  </div>;
+}
+
+function InventoryPage({ api, authorization, online, storage, queue, navigate, setNotice }: { api: MvpGateway; authorization: AppAuthorization; online: boolean; storage: StorageGateway; queue: (kind: "stock", payload: Record<string, unknown>) => Promise<boolean>; navigate: (route: Route) => void; setNotice: (message: string) => void }) {
+  const [snapshot, setSnapshot] = useState<InventorySnapshot>({ balances: [], alerts: [] });
+  const [physical, setPhysical] = useState<Record<string, string>>({});
+  const canAdjust = authorization.context.capabilities.includes("inventory:adjust");
+  useEffect(() => {
+    let active = true; const tenantId = authorization.context.tenantId;
+    storage.getInventory(tenantId).then((cached) => { if (active && cached) setSnapshot(cached); }).catch(() => undefined);
+    if (online) api.getInventory(authorization.context.contextId).then(async (current) => { await storage.saveInventory(tenantId, current); if (active) setSnapshot(current); }).catch(() => setNotice("在庫を更新できませんでした。端末の保存内容を表示します。"));
+    return () => { active = false; };
+  }, [api, authorization.context.contextId, authorization.context.tenantId, online, setNotice, storage]);
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); const form = event.currentTarget; const data = Object.fromEntries(new FormData(form));
+    if (await queue("stock", { aggregateId: eventId(), chemicalId: data.chemicalId, eventType: data.eventType, quantity: Number(data.quantity), reason: data.reason })) { form.reset(); navigate("today"); }
+  };
+  const adjust = async (alert: NonNullable<QueueSnapshot["stockAlerts"]>[number]) => {
+    const balance = snapshot.balances.find((item) => item.chemicalId === alert.chemicalId)?.quantity || 0;
+    const actual = Number(physical[alert.id]);
+    if (!Number.isFinite(actual)) { setNotice("実棚数量を入力してください。"); return; }
+    if (await queue("stock", { aggregateId: eventId(), chemicalId: alert.chemicalId, eventType: "adjustment", quantity: actual - balance, reason: `実棚${actual}を確認`, alertId: alert.id })) setNotice("棚卸し調整イベントを端末に保存しました。");
+  };
+  return <div className="page-content narrow-page"><PageBack onBack={() => navigate("today")}/><div className="form-heading"><span className="section-kicker">INVENTORY</span><h1>在庫入出庫</h1><p>残高は直接編集せず、入出庫と棚卸し調整の履歴から計算します。</p></div>
+    <section className="queue-panel"><h2>現在の在庫</h2>{snapshot.balances.length ? snapshot.balances.map((item) => <article key={item.chemicalId}><strong>{item.name}</strong><p>{item.registrationNumber}・残量 <b>{item.quantity}</b></p></article>) : <p>端末に在庫データがありません。オンラインで更新してください。</p>}</section>
+    <form className="record-form" onSubmit={(event) => void submit(event)}><fieldset><legend>入出庫イベント</legend><div className="form-grid"><label>資材<select name="chemicalId" required><option value="">選択してください</option>{snapshot.balances.map((item) => <option key={item.chemicalId} value={item.chemicalId}>{item.name}</option>)}</select></label><label>種別<select name="eventType" defaultValue="withdrawal"><option value="withdrawal">出庫</option><option value="receipt">入庫</option></select></label><label>数量<input name="quantity" type="number" min="0.01" step="0.01" required/></label><label>理由<input name="reason" defaultValue="散布用出庫" required/></label></div></fieldset><button className="primary-action">端末に入出庫を記録</button></form>
+    {canAdjust && snapshot.alerts.length > 0 && <section className="queue-panel"><h2>マイナス在庫の裁定</h2>{snapshot.alerts.map((alert) => <article key={alert.id}><strong>{alert.name || snapshot.balances.find((item) => item.chemicalId === alert.chemicalId)?.name || "農薬"}</strong><p>同期後残高 {alert.negativeQuantity}。実棚を確認して差分を追記してください。</p><div className="queue-actions"><label>実棚数量<input type="number" step="0.01" value={physical[alert.id] || ""} onChange={(event) => setPhysical((current) => ({ ...current, [alert.id]: event.target.value }))}/></label><button className="primary-action" onClick={() => void adjust(alert)}>調整イベントを記録</button></div></article>)}</section>}
   </div>;
 }
 

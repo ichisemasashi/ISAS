@@ -22,6 +22,8 @@ const api: MvpGateway = {
   async createWorkInstruction() { throw new Error("not used"); },
   async reassignWorkInstruction() { throw new Error("not used"); },
   async getJournalBootstrap() { return { instruction: null, punchSuggestion: { startedAt: null, endedAt: null, warning: "missing_start" }, templates: [], previous: null }; },
+  async getPesticideBootstrap() { throw new Error("not used"); },
+  async getInventory() { return { balances: [], alerts: [] }; },
   async getJournals() { return { journals: [] }; },
   async reviewJournal() { throw new Error("not used"); },
   async uploadJournalAttachment() { throw new Error("not used"); },

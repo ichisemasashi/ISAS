@@ -10,6 +10,8 @@ function memoryStorage() {
   const drafts: JournalDraft[] = [];
   const outbox: OutboxRecord[] = [];
   const attachments: Array<{ id: string; journalId: string; fileName: string }> = [];
+  let pesticideCache: Awaited<ReturnType<MvpGateway["getPesticideBootstrap"]>> | null = null;
+  let inventoryCache: Awaited<ReturnType<MvpGateway["getInventory"]>> | null = null;
   const gateway: StorageGateway = {
     async saveDraft(draft) { drafts.push(draft); },
     async enqueue(record) { outbox.push(record); },
@@ -30,7 +32,11 @@ function memoryStorage() {
     async saveJournalBootstrap() {},
     async getJournalBootstrap() { return null; },
     async saveFields() {},
-    async getFields() { return []; },
+    async getFields() { return [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", geometry: { type: "MultiPolygon", coordinates: [] }, properties: { id: "0198a6c0-0000-7000-8000-000000000101", fieldGroupId: "f1111111-1111-7111-8111-111111111111", name: "南の3号圃場", cropName: "雪若丸", status: "active", areaSqm: 1000, version: 1 } }]; },
+    async savePesticideBootstrap(_tenantId, value) { pesticideCache = value; },
+    async getPesticideBootstrap() { return pesticideCache; },
+    async saveInventory(_tenantId, value) { inventoryCache = value; },
+    async getInventory() { return inventoryCache; },
     async saveServerQueues() {},
     async queueCounts() { return { rejections: 0, conflicts: 0 }; },
   };
@@ -44,11 +50,16 @@ const tasks = [
 ];
 const api: MvpGateway = {
   async getToday() { return { tasks, serverTime: new Date().toISOString() }; },
-  async getFields() { return { type: "FeatureCollection", features: [], nextCursor: null }; },
+  async getFields() { return { type: "FeatureCollection", features: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", geometry: { type: "MultiPolygon", coordinates: [] }, properties: { id: "0198a6c0-0000-7000-8000-000000000101", fieldGroupId: "f1111111-1111-7111-8111-111111111111", name: "南の3号圃場", cropName: "雪若丸", status: "active", areaSqm: 1000, version: 1 } }], nextCursor: null }; },
   async getWorkInstructions() { return { instructions: [] }; },
   async createWorkInstruction() { throw new Error("not used"); },
   async reassignWorkInstruction() { throw new Error("not used"); },
   async getJournalBootstrap() { return { instruction: null, punchSuggestion: { startedAt: "08:12", endedAt: "09:36", warning: null }, templates: [{ id: "template-1", name: "水管理", workType: "水管理", defaults: {}, version: 1 }], previous: { id: "previous-1", body: { field: "北の1号圃場", workType: "水管理" }, version: 1, updatedAt: new Date().toISOString() } }; },
+  async getPesticideBootstrap(_contextId, fieldId) { return { field: { id: fieldId, fieldGroupId: "f1111111-1111-7111-8111-111111111111", name: "南の3号圃場", cropName: "雪若丸", timezone: "Asia/Tokyo" }, release: { id: "release-1", version: "2026.08.14-1", validUntil: "2099-08-21T00:00:00Z", publishedAt: "2026-08-14T00:00:00Z", syncedAt: new Date().toISOString() }, chemicals: [
+    { id: "chemical-safe", registrationNumber: "1", name: "グリーンフロアブル", activeIngredient: "A", applicableCrops: ["雪若丸"], dilutionMin: 500, dilutionMax: 1500, maxUses: 3, preharvestDays: 0, revokedOn: null },
+    { id: "chemical-warning", registrationNumber: "2", name: "テスト乳剤（要確認）", activeIngredient: "B", applicableCrops: ["雪若丸"], dilutionMin: 500, dilutionMax: 1500, maxUses: 1, preharvestDays: 0, revokedOn: null },
+  ], usage: [{ chemicalId: "chemical-warning", usageCount: 1, lastAppliedOn: "2026-08-01" }], inventory: [] }; },
+  async getInventory() { return { balances: [], alerts: [] }; },
   async getJournals() { return { journals: [] }; },
   async reviewJournal() { throw new Error("not used"); },
   async uploadJournalAttachment() { throw new Error("not used"); },
@@ -97,8 +108,8 @@ describe("ISAS MVP field flow", () => {
     const store = memoryStorage();
     renderApp(store.gateway);
     await user.click(screen.getByRole("button", { name: "農薬記録を始める" }));
-    await user.selectOptions(screen.getByLabelText("薬剤名"), "テスト乳剤（要確認）");
-    expect(screen.getByRole("alert")).toHaveTextContent("使用回数を確認してください");
+    await user.selectOptions(await screen.findByLabelText("薬剤名"), "chemical-warning");
+    expect(screen.getByRole("alert")).toHaveTextContent("使用回数が上限を超えます");
     const submit = screen.getByRole("button", { name: "安全確認して記録" });
     expect(submit).toBeDisabled();
     await user.click(screen.getByRole("checkbox", { name: "警告内容と使用履歴を確認しました" }));
