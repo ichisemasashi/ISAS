@@ -17,7 +17,8 @@ done
 echo " ready"
 
 echo "== 3) 使い捨て検証DBを再作成（文書どおり public で実行） =="
-docker compose exec -T db dropdb --if-exists -U postgres spike
+# 起動直後のhealthcheck接続が一瞬残っていても、使い捨てDBを確実に再作成する。
+docker compose exec -T db dropdb --if-exists --force -U postgres spike
 docker compose exec -T db createdb -U postgres spike
 echo "== 4) 共通セットアップ（拡張・ロール・UUIDv7）: 1回だけ =="
 $PSQL -f - < 00_common.sql

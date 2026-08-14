@@ -57,7 +57,7 @@ DETAIL:  Array value must start with "{" or dimension information.
 |---|---|---|---|
 | PG-H1（**対応済 v15**） | **「未設定/空/不正は偽＝全拒否」は成立しない**。空/不正は**プラン時例外**（SQLSTATE 22P02）。`SET LOCAL` を一度使った接続では以後「未設定」が NULL ではなく `''` になる | ❌ 誤り | 未対応 |
 | PG-H2 | **文書の述語は配列リテラル `{...}` を要求するが、スパイクの注入値はカンマ区切り**。文書の述語＋スパイクの値の組合せは100%エラー。**「全PASS」は文書 §4 の述語を一度も実行していない** | ❌ 別物 | 未対応 |
-| PG-H3 | **基本 permissive を `TO app_role, auth_role` に限定すると、テーブル所有者が FORCE RLS 下で自表に読み書きできない**。**版履歴（`*_history`）の SECURITY DEFINER トリガと所有者経由の一括投入が壊れる**。「RLSは親 field に追随」という機構は**存在しない** | ⚠️ 条件付き（帰結の適用漏れ） | 未対応 |
+| PG-H3 | **基本 permissive を `TO app_role, auth_role` に限定すると、テーブル所有者が FORCE RLS 下で自表に読み書きできない**。**版履歴（`*_history`）の SECURITY DEFINER トリガと所有者経由の一括投入が壊れる**。「RLSは親 field に追随」という機構は**存在しない** | ⚠️ 条件付き（帰結の適用漏れ） | **対応済・PG16実測PASS** |
 | PG-H4（**対応済 v16**） | **`agro_chemical_effective` ビューは基底表の RLS を「ビュー所有者」の文脈で評価する**。v7 設計と組み合わせると**誰が読んでも0行**。`security_invoker`（PG15+）の記述がどの文書にも無い。**ビューは `pg_policies` にも `relrowsecurity` にも現れないので検査1〜8のどれにも引っかからない** | ❌ 誤り | **対応済・PG16実測PASS** |
 | PG-H5（**対応済 v16**） | **ブートストラップ例外が ADR-0001 内部で自己矛盾**。`current_user = auth_role` 判定は **auth_role が直接 SELECT する**場合のみ真。SECURITY DEFINER 経由では関数所有者になり**第2項が常に偽→0行→自己ブロック再発**。§2(3)「membership の SELECT のみ」と §2 3b/§5「テーブル権限ゼロ・EXECUTE のみ」が両立しない | ❌ 誤り | 未対応 |
 | PG-H6（**対応済 v16**） | **FORCE RLS はパーティション子に伝播せず、子直接参照で RLS が完全に無効**。防御は「子に GRANT しない」だけだが `GRANT … ON ALL TABLES IN SCHEMA` で露出する。**パーティションは月次で自動生成される＝無防備な子が毎月増える** | ❌ 誤り | 未対応 |
@@ -169,6 +169,7 @@ restrictive は AND・permissive は OR ／ permissive 0本＝0行 ／ `TO` な�
 使い捨てDocker環境で S1／S2 を再実行した。全文は [`S1_2026-08-13_PG16.log`](../../spikes/results/S1_2026-08-13_PG16.log)／[`S2_2026-08-13_PG16_PostGIS.log`](../../spikes/results/S2_2026-08-13_PG16_PostGIS.log)。
 
 - **PG-H4**：`security_invoker` ビューが呼出元RLSで評価され、テナントAにはAの上書き、Bには共有マスタが見えることを確認。S1 (14) はPASS。
+- **PG-H3**：S1 (15) で、`app_owner` 所有の版履歴トリガが FORCE RLS 下で更新前スナップショットを追記すること、注入無しの所有者が本体・履歴・監査を迂回できないことを確認。監査は `audit_writer`（NOLOGIN・BYPASSRLS・INSERT-only）所有の固定search_path関数から対象行由来tenantへ2件追記し、通常ロールからの直接参照・関数実行を拒否した。チェーン直列化と並行性能はS5に残る。
 - **PG-M2**：`&&`／`<->` の実体関数はともに `proleakproof = false`。bboxはRLSのみで7.502ms、明示的な `tenant_id` 等値付きで3.335msだったが、どちらも空間 `&&` は `Filter` に残り、1テナント5,000行のうち1,546行を除外した。**性能値はSLO内でも、意図した複合索引の構造的合格基準には未達**。
 - **PG-M8**：RLSのみのKNNは `geom` 単独GiSTを使い、20行を得るまで他テナント276行を除外（1.233ms）。明示的な `tenant_id` 等値付きでは複合GiSTを使い0.137msとなり、読み捨ては発生しなかった。
 - **判定の限界**：10万行・単一接続の合成データでは全ケースが地図2秒SLO内だが、本番規模・並行負荷への外挿はしない。bboxの緩和策、KNNのクエリ規約、再測条件を設計で確定する必要がある。

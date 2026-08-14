@@ -7,6 +7,7 @@
 --   そのまま実行する**。差異があれば S1 が落ちるようにしてある。
 --
 -- 対応する指摘：IND3-H2/H3/H5、PG-H1/H2/H3/H6、A1h-*、IND2-*
+-- 【v3】PG-H3 の残り（所有者・版履歴トリガ・audit_writer 経路）を追加。
 -- PostGIS 非依存（空間は S2）。security_invoker ビューは PG15+ でのみ実行。
 -- =====================================================================
 \set ON_ERROR_STOP on
@@ -86,6 +87,49 @@ CREATE UNIQUE INDEX ac_tenant ON agro_chemical(reg_key, tenant_id) WHERE tenant_
 -- membership（形(f)：ブートストラップ例外）
 CREATE TABLE membership (tenant_id uuid NOT NULL, user_id uuid NOT NULL, PRIMARY KEY (tenant_id, user_id));
 
+-- ② 可逆な確定データ＋更新前スナップショット（版履歴トリガ経路）
+CREATE TABLE field_record (
+  id         uuid PRIMARY KEY,
+  tenant_id  uuid NOT NULL,
+  name       text NOT NULL,
+  version    bigint NOT NULL DEFAULT 1,
+  updated_by uuid NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE field_history (
+  history_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id  uuid NOT NULL,
+  field_id   uuid NOT NULL,
+  version    bigint NOT NULL,
+  snapshot   jsonb NOT NULL,
+  valid_from timestamptz NOT NULL,
+  valid_to   timestamptz NOT NULL,
+  changed_by uuid NOT NULL
+);
+
+-- ①-a 監査ログ。書込は audit_writer 所有の SECURITY DEFINER トリガだけに閉じる。
+CREATE TABLE audit_log (
+  event_uuid       uuid NOT NULL,
+  tenant_id        uuid NOT NULL,
+  event_ts         timestamptz NOT NULL,
+  entity           text NOT NULL,
+  entity_id        uuid NOT NULL,
+  op               text NOT NULL,
+  before           jsonb,
+  after            jsonb,
+  actor_pseudonym  text NOT NULL,
+  prev_hash        bytea,
+  row_hash         bytea NOT NULL,
+  PRIMARY KEY (tenant_id, event_ts, event_uuid)
+) PARTITION BY RANGE (event_ts);
+DO $$
+DECLARE m date := date_trunc('month', now())::date;
+BEGIN
+  EXECUTE format(
+    'CREATE TABLE part.%I PARTITION OF audit_log FOR VALUES FROM (%L) TO (%L)',
+    'audit_log_' || to_char(m, 'YYYY_MM'), m, (m + interval '1 month')::date);
+END $$;
+
 -- ============================================================
 -- RLS：文書 §4 の述語形をそのまま。
 --   permissive は USING(true) 固定＋TO で列挙／restrictive は TO なし＋7形のいずれか
@@ -94,7 +138,10 @@ CREATE TABLE membership (tenant_id uuid NOT NULL, user_id uuid NOT NULL, PRIMARY
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['event_receipt','location_log','labor_summary','agro_chemical','membership'] LOOP
+  FOREACH t IN ARRAY ARRAY[
+    'event_receipt','location_log','labor_summary','agro_chemical','membership',
+    'field_record','field_history','audit_log'
+  ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
   END LOOP;
@@ -109,6 +156,11 @@ CREATE POLICY base ON labor_summary AS PERMISSIVE FOR ALL TO app_user USING (tru
 CREATE POLICY base ON agro_chemical AS PERMISSIVE FOR ALL TO app_user, admin_role USING (true) WITH CHECK (true);
 -- membership は bootstrap_owner も読む（含めないと permissive 無し＝0行＝PG-H3 の型）
 CREATE POLICY base ON membership    AS PERMISSIVE FOR ALL TO app_user, bootstrap_owner USING (true) WITH CHECK (true);
+CREATE POLICY base ON field_record  AS PERMISSIVE FOR ALL TO app_user USING (true) WITH CHECK (true);
+-- 更新元トリガは app_owner の権限で履歴へ書く。TO 列挙が無いと FORCE RLS 下で自己ブロックする。
+CREATE POLICY base ON field_history AS PERMISSIVE FOR ALL TO app_user, app_owner USING (true) WITH CHECK (true);
+-- audit_writer は BYPASSRLS だが、正当な書込主体として経路を明示する。
+CREATE POLICY base ON audit_log     AS PERMISSIVE FOR ALL TO audit_writer USING (true) WITH CHECK (true);
 
 -- 形(a) 標準
 CREATE POLICY res ON event_receipt AS RESTRICTIVE
@@ -146,12 +198,74 @@ CREATE POLICY res ON membership AS RESTRICTIVE
                   AND user_id = NULLIF(current_setting('app.bootstrap_claimed_user', true), '')::uuid))
   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 
+-- 形(a) 標準：可変本体と版履歴は同じテナント境界に従う。
+CREATE POLICY res ON field_record AS RESTRICTIVE
+  USING      (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]))
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+CREATE POLICY res ON field_history AS RESTRICTIVE
+  USING      (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]))
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+CREATE POLICY res ON audit_log AS RESTRICTIVE
+  USING      (tenant_id = ANY(COALESCE(NULLIF(current_setting('app.allowed_tenants', true), ''), '{}')::uuid[]))
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+
 GRANT SELECT, INSERT, UPDATE ON event_receipt, location_log, labor_summary, agro_chemical, membership TO app_user;
+GRANT SELECT, INSERT, UPDATE ON field_record TO app_user;
+GRANT SELECT ON field_history TO app_user;
 GRANT SELECT, INSERT, UPDATE ON agro_chemical TO admin_role;   -- 共有マスタの書込経路（A1c-L2）
 GRANT SELECT ON membership TO bootstrap_owner;   -- auth_role には一切与えない
+REVOKE ALL ON audit_log FROM PUBLIC;
+GRANT INSERT ON audit_log TO audit_writer;
 -- part スキーマの子には GRANT しない（かつ USAGE も無い）
 
+-- 版履歴は app_owner の SECURITY DEFINER で書く。FORCE RLS は所有者にも効くため、
+-- field_history の permissive TO と、呼出元TXの tenant_id が正しくなければ失敗する。
+CREATE FUNCTION capture_field_history() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+BEGIN
+  INSERT INTO public.field_history
+    (tenant_id, field_id, version, snapshot, valid_from, valid_to, changed_by)
+  VALUES
+    (OLD.tenant_id, OLD.id, OLD.version, to_jsonb(OLD), OLD.updated_at,
+     clock_timestamp(), NEW.updated_by);
+  RETURN NEW;
+END $$;
+
+-- 作成時は app_owner。後で所有者を audit_writer へ付け替え、BYPASSRLS 経路を関数内に閉じる。
+CREATE FUNCTION write_field_audit() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE
+  ts timestamptz := clock_timestamp();
+  target_tenant uuid := COALESCE(NEW.tenant_id, OLD.tenant_id);
+  target_id uuid := COALESCE(NEW.id, OLD.id);
+  before_row jsonb := CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE to_jsonb(OLD) END;
+  after_row jsonb := CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE to_jsonb(NEW) END;
+BEGIN
+  INSERT INTO public.audit_log
+    (event_uuid, tenant_id, event_ts, entity, entity_id, op, before, after,
+     actor_pseudonym, prev_hash, row_hash)
+  VALUES
+    (gen_random_uuid(), target_tenant, ts, TG_TABLE_NAME, target_id, TG_OP,
+     before_row, after_row,
+     COALESCE(NULLIF(current_setting('app.actor_pseudonym', true), ''), 'unknown'),
+     NULL,
+     decode(md5(concat_ws('|', target_tenant::text, target_id::text, TG_OP,
+                          ts::text, before_row::text, after_row::text)), 'hex'));
+  RETURN COALESCE(NEW, OLD);
+END $$;
+
 RESET ROLE;
+ALTER FUNCTION write_field_audit() OWNER TO audit_writer;
+REVOKE ALL ON FUNCTION capture_field_history(), write_field_audit() FROM PUBLIC;
+-- app_owner はマイグレーション時のトリガ作成にだけ EXECUTE を使う。app_user へは与えない。
+GRANT EXECUTE ON FUNCTION write_field_audit() TO app_owner;
+SET ROLE app_owner;
+CREATE TRIGGER field_record_history
+  BEFORE UPDATE ON field_record FOR EACH ROW EXECUTE FUNCTION capture_field_history();
+CREATE TRIGGER field_record_audit
+  AFTER INSERT OR UPDATE ON field_record FOR EACH ROW EXECUTE FUNCTION write_field_audit();
+RESET ROLE;
+REVOKE EXECUTE ON FUNCTION write_field_audit() FROM app_owner;
 -- ブートストラップ関数（所有者 bootstrap_owner・auth_role は EXECUTE のみ）
 --   ※所有者付替えは superuser 側で行う（app_owner は bootstrap_owner のメンバーではない＝
 --     「bootstrap_owner をいかなるロールにも GRANT しない」原則：PG-L7）
@@ -207,6 +321,9 @@ SET ROLE app_user;
 SET app.allowed_tenants = '{11111111-1111-7111-8111-111111111111}';
 SET app.tenant_id = '11111111-1111-7111-8111-111111111111';
 INSERT INTO agro_chemical VALUES ('AC-001', :'A'::uuid, 'Aの上書き');
+SET app.actor_pseudonym = 'actor-u1';
+INSERT INTO field_record(id, tenant_id, name, updated_by)
+VALUES ('f1111111-1111-7111-8111-111111111111', :'A'::uuid, '更新前の圃場', :'U1'::uuid);
 RESET ROLE;
 
 SET ROLE app_user;
@@ -402,6 +519,80 @@ BEGIN
       current_setting('server_version');
   END IF;
 END $$;
+
+\echo '=== (15) 所有者・版履歴トリガ・監査経路（PG-H3）==='
+SET ROLE app_user;
+SET app.allowed_tenants = '{11111111-1111-7111-8111-111111111111}';
+SET app.tenant_id = '11111111-1111-7111-8111-111111111111';
+SET app.user_id = 'aaaaaaaa-0000-7000-8000-000000000001';
+SET app.actor_pseudonym = 'actor-u1';
+UPDATE field_record
+   SET name = '更新後の圃場', version = version + 1,
+       updated_by = :'U1'::uuid, updated_at = clock_timestamp()
+ WHERE id = 'f1111111-1111-7111-8111-111111111111';
+SELECT ck(count(*) = 1 AND max(snapshot->>'name') = '更新前の圃場',
+  '(15a) app_owner の版履歴トリガが FORCE RLS 下で更新前スナップショットを追記')
+FROM field_history WHERE field_id = 'f1111111-1111-7111-8111-111111111111';
+DO $$ BEGIN
+  BEGIN
+    PERFORM count(*) FROM audit_log;
+    RAISE EXCEPTION 'FAIL  (15b) app_user が audit_log を直接参照できてしまった';
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE NOTICE 'PASS  (15b) app_user の audit_log 直接参照を拒否';
+  END;
+END $$;
+RESET ROLE;
+
+-- 所有者も FORCE RLS を迂回せず、注入無しでは本体・履歴・監査を読めず履歴へ直接書けない。
+SET ROLE app_owner;
+RESET app.allowed_tenants; RESET app.tenant_id;
+SELECT ck((SELECT count(*) FROM field_record) = 0
+          AND (SELECT count(*) FROM field_history) = 0
+          AND (SELECT count(*) FROM audit_log) = 0,
+  '(15c) 所有者も注入無しでは本体・履歴・監査が0行（FORCE RLS）');
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO field_history
+      (tenant_id, field_id, version, snapshot, valid_from, valid_to, changed_by)
+    VALUES
+      ('11111111-1111-7111-8111-111111111111',
+       'f1111111-1111-7111-8111-111111111111', 99, '{}'::jsonb,
+       clock_timestamp(), clock_timestamp(),
+       'aaaaaaaa-0000-7000-8000-000000000001');
+    RAISE EXCEPTION 'FAIL  (15d) 所有者が注入無しで版履歴へ直接追記できてしまった';
+  EXCEPTION WHEN insufficient_privilege OR check_violation THEN
+    RAISE NOTICE 'PASS  (15d) 所有者の注入無し版履歴追記を拒否';
+  END;
+END $$;
+RESET ROLE;
+
+-- superuser の検証主体から、トリガが作った監査2件と最小権限を確認する。
+SELECT ck(count(*) = 2
+          AND count(*) FILTER (WHERE op = 'INSERT') = 1
+          AND count(*) FILTER (WHERE op = 'UPDATE') = 1
+          AND bool_and(tenant_id = :'A'::uuid)
+          AND bool_and(actor_pseudonym = 'actor-u1'),
+  '(15e) audit_writer の監査トリガが行由来tenant_idで INSERT/UPDATE の2件を追記')
+FROM audit_log WHERE entity = 'field_record';
+SELECT ck(has_table_privilege('audit_writer', 'audit_log', 'INSERT')
+          AND NOT has_table_privilege('audit_writer', 'audit_log', 'SELECT')
+          AND NOT has_table_privilege('audit_writer', 'audit_log', 'UPDATE')
+          AND NOT has_table_privilege('audit_writer', 'audit_log', 'DELETE'),
+  '(15f) audit_writer は audit_log へのINSERTのみ');
+SELECT ck((SELECT rolbypassrls AND NOT rolcanlogin FROM pg_roles WHERE rolname='audit_writer'),
+  '(15g) audit_writer は BYPASSRLS・NOLOGIN');
+SELECT ck(count(*) = 0, '(15h) 履歴・監査関数は SECURITY DEFINER＋固定search_path＋所定所有者')
+FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+WHERE n.nspname='public' AND p.proname IN ('capture_field_history','write_field_audit')
+  AND NOT (p.prosecdef
+           AND p.proconfig @> ARRAY['search_path=pg_catalog, public']
+           AND pg_get_userbyid(p.proowner) = CASE p.proname
+             WHEN 'capture_field_history' THEN 'app_owner' ELSE 'audit_writer' END);
+SELECT ck(NOT has_function_privilege('app_owner', 'write_field_audit()', 'EXECUTE')
+          AND NOT has_function_privilege('app_user', 'write_field_audit()', 'EXECUTE'),
+  '(15i) 監査関数を直接実行できるのは所有者 audit_writer のみ');
+SELECT ck(count(*) = 2, '(15j) field_record の履歴・監査トリガが両方有効')
+FROM pg_trigger WHERE tgrelid='field_record'::regclass AND NOT tgisinternal AND tgenabled='O';
 
 \echo ''
 \echo '=== S1 完了 ==='

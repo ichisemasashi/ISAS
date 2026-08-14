@@ -1,7 +1,6 @@
 Environment: PostgreSQL 16.4 (Debian 16.4-1.pgdg120+2), aarch64; PostGIS 3.4.3
 Command: ./run.sh S1
-Result: PASS (including item 14 security_invoker visibility test)
-
+Result: PASS (including item 14 security_invoker and item 15 owner/trigger/audit paths)
 == 1) DB 起動 ==
  Container spikes-db-1  Running
 == 2) ヘルスチェック待ち ==
@@ -11,8 +10,8 @@ Result: PASS (including item 14 security_invoker visibility test)
 psql:<stdin>:22: NOTICE:  postgis/btree_gist: 有効（S2 実行可）
 DO
 psql:<stdin>:27: NOTICE:  schema "part" does not exist, skipping
-DROP SCHEMA
 psql:<stdin>:28: NOTICE:  schema "priv" does not exist, skipping
+DROP SCHEMA
 DROP SCHEMA
 psql:<stdin>:29: NOTICE:  schema "spike" does not exist, skipping
 DROP SCHEMA
@@ -32,8 +31,8 @@ GRANT
 CREATE FUNCTION
 CREATE FUNCTION
 CREATE FUNCTION
-DO
 psql:<stdin>:95: NOTICE:  uuidv7_time: IMMUTABLE かつ時刻復元一致（診断用として維持）
+DO
 
 ########################################################
 # 実行: S1_partition_rls_unique.sql
@@ -47,6 +46,10 @@ CREATE TABLE
 CREATE INDEX
 CREATE INDEX
 CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+DO
 DO
 CREATE POLICY
 CREATE POLICY
@@ -59,10 +62,30 @@ CREATE POLICY
 CREATE POLICY
 CREATE POLICY
 CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
 GRANT
 GRANT
 GRANT
+GRANT
+GRANT
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
 RESET
+ALTER FUNCTION
+REVOKE
+GRANT
+SET
+CREATE TRIGGER
+CREATE TRIGGER
+RESET
+REVOKE
 CREATE FUNCTION
 ALTER FUNCTION
 REVOKE
@@ -92,6 +115,8 @@ SET
 SET
 SET
 INSERT 0 1
+SET
+INSERT 0 1
 RESET
 SET
 
@@ -99,7 +124,6 @@ SET
 SET
 SET
 SET
-psql:<stdin>:218: NOTICE:  PASS  (1) A のみ可視 (80件・B の40件は不可視)
  ck
 ----
 
@@ -107,22 +131,23 @@ psql:<stdin>:218: NOTICE:  PASS  (1) A のみ可視 (80件・B の40件は不可
 
 === (2) 横断が通る：グループ管理者が allowed_tenants 内の他テナントを読む ===
 SET
-psql:<stdin>:222: NOTICE:  PASS  (2) 横断で A+B が可視 (120件) ← permissive では成立しない形
+psql:<stdin>:335: NOTICE:  PASS  (1) A のみ可視 (80件・B の40件は不可視)
  ck
 ----
 
 (1 row)
 
 === (3) 本人起点横断：allowed_tenants の外の自分の labor_summary が読める ===
+psql:<stdin>:339: NOTICE:  PASS  (2) 横断で A+B が可視 (120件) ← permissive では成立しない形
 SET
-psql:<stdin>:226: NOTICE:  PASS  (3) 形(b) で B の自分の行も可視 (2件)
+psql:<stdin>:343: NOTICE:  PASS  (3) 形(b) で B の自分の行も可視 (2件)
  ck
 ----
 
 (1 row)
 
 SET
-psql:<stdin>:228: NOTICE:  PASS  (3b) 他人(U2)では B の行は不可視 (1件)
+psql:<stdin>:345: NOTICE:  PASS  (3b) 他人(U2)では B の行は不可視 (1件)
  ck
 ----
 
@@ -130,43 +155,43 @@ psql:<stdin>:228: NOTICE:  PASS  (3b) 他人(U2)では B の行は不可視 (1�
 
 SET
 === (4) ③共有行が見える＋横断で配下の上書きも見える ===
+psql:<stdin>:349: NOTICE:  PASS  (4) 共有行＋A の上書き行が可視 (2件)
  ck
 ----
 
 (1 row)
 
 === (5) capability：無いと他者の位置ログが見えない／あると見える ===
-psql:<stdin>:232: NOTICE:  PASS  (4) 共有行＋A の上書き行が可視 (2件)
 SET
-psql:<stdin>:236: NOTICE:  PASS  (5a) cap 無し → 自分の分のみ (50件)
  ck
 ----
 
 (1 row)
 
+psql:<stdin>:353: NOTICE:  PASS  (5a) cap 無し → 自分の分のみ (50件)
 SET
-psql:<stdin>:238: NOTICE:  PASS  (5b) cap 有り → 他者の分も可視 (80件)
  ck
 ----
 
 (1 row)
 
 === (6) 書込側：他テナント名義 INSERT / 行移送 / 共有行書込 の拒否 ===
-psql:<stdin>:261: NOTICE:  PASS  (6a) 他テナント名義の labor_summary 追記を拒否
-psql:<stdin>:261: NOTICE:  PASS  (6b) UPDATE による行移送を拒否
-psql:<stdin>:261: NOTICE:  PASS  (6c) 一般ロールの共有行 INSERT を拒否
+psql:<stdin>:355: NOTICE:  PASS  (5b) cap 有り → 他者の分も可視 (80件)
+psql:<stdin>:378: NOTICE:  PASS  (6a) 他テナント名義の labor_summary 追記を拒否
+psql:<stdin>:378: NOTICE:  PASS  (6b) UPDATE による行移送を拒否
+psql:<stdin>:378: NOTICE:  PASS  (6c) 一般ロールの共有行 INSERT を拒否
 DO
 === (7) 冪等：受理台帳が再送を弾き、記録済み event_ts を返す ===
 SET
 SET
-psql:<stdin>:281: NOTICE:  PASS  (7a) 再送は0件扱い
-psql:<stdin>:281: NOTICE:  PASS  (7b) 記録済み event_ts が不変（サーバ採番でも決定性が保たれる）
+psql:<stdin>:398: NOTICE:  PASS  (7a) 再送は0件扱い
+psql:<stdin>:398: NOTICE:  PASS  (7b) 記録済み event_ts が不変（サーバ採番でも決定性が保たれる）
 DO
 === (8) クランプ：端末時計が ±1年ずれても ①-a が受理できる（IND3-H5）===
-psql:<stdin>:298: NOTICE:  PASS  (8) 端末時計が -20年/+5年ずれても受理できた（クランプ後は必ずパーティション内）
+psql:<stdin>:415: NOTICE:  PASS  (8) 端末時計が -20年/+5年ずれても受理できた（クランプ後は必ずパーティション内）
 DO
 === (9) 子テーブルの直接参照が拒否される（PG-H6）===
-psql:<stdin>:310: NOTICE:  PASS  (9) 子テーブルの直接参照を拒否（part スキーマの USAGE 無し）
+psql:<stdin>:427: NOTICE:  PASS  (9) 子テーブルの直接参照を拒否（part スキーマの USAGE 無し）
 DO
 === (10) 注入漏れ：SET LOCAL を使った接続の「2回目」でも 0行（例外にならない）===
 RESET
@@ -179,20 +204,20 @@ BEGIN
 SET
 SET
 SET
+psql:<stdin>:436: NOTICE:  PASS  (10a) TX内では可視
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:319: NOTICE:  PASS  (10a) TX内では可視
 COMMIT
-psql:<stdin>:320: NOTICE:  PASS  (10b) COMMIT後の「未設定」は NULL ではない（＝素のキャストなら 22P02 で落ちる状態）
+psql:<stdin>:437: NOTICE:  PASS  (10b) COMMIT後の「未設定」は NULL ではない（＝素のキャストなら 22P02 で落ちる状態）
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:321: NOTICE:  PASS  (10c) 正規化形なので 0行（素のキャストなら 22P02 で落ちる）
+psql:<stdin>:438: NOTICE:  PASS  (10c) 正規化形なので 0行（素のキャストなら 22P02 で落ちる）
  ck
 ----
 
@@ -202,24 +227,24 @@ RESET
 === (11) ブートストラップ（IND3-H1/PG-H5）===
 SET
 SET
-psql:<stdin>:327: NOTICE:  PASS  (11a) auth_role が関数経由でテナント跨ぎ解決 (A,B の2件)
+psql:<stdin>:444: NOTICE:  PASS  (11a) auth_role が関数経由でテナント跨ぎ解決 (A,B の2件)
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:328: NOTICE:  PASS  (11b) 主張と引数が一致しないと0件
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:336: NOTICE:  PASS  (11c) auth_role の membership 直接参照を拒否（テーブル権限ゼロ）
+psql:<stdin>:445: NOTICE:  PASS  (11b) 主張と引数が一致しないと0件
+psql:<stdin>:453: NOTICE:  PASS  (11c) auth_role の membership 直接参照を拒否（テーブル権限ゼロ）
 DO
 RESET
 === (12) FORCE RLS：所有者も従う ===
 SET
-psql:<stdin>:341: NOTICE:  PASS  (12) 所有者でも注入無しなら 0行（FORCE RLS）
+psql:<stdin>:458: NOTICE:  PASS  (12) 所有者でも注入無しなら 0行（FORCE RLS）
  ck
 ----
 
@@ -227,31 +252,31 @@ psql:<stdin>:341: NOTICE:  PASS  (12) 所有者でも注入無しなら 0行（F
 
 RESET
 === (13) カタログ構造検査（ADR-0001 v16 §5 一段目）===
-psql:<stdin>:346: NOTICE:  PASS  (13a) restrictive に TO 指定が付いていない
+psql:<stdin>:463: NOTICE:  PASS  (13a) restrictive に TO 指定が付いていない
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:348: NOTICE:  PASS  (13b) permissive の述語が true 以外のものが無い
+psql:<stdin>:465: NOTICE:  PASS  (13b) permissive の述語が true 以外のものが無い
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:350: NOTICE:  PASS  (13c) restrictive に WITH CHECK が明示されている
+psql:<stdin>:467: NOTICE:  PASS  (13c) restrictive に WITH CHECK が明示されている
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:355: NOTICE:  PASS  (13d) tenant_id 列を持つ表に restrictive が存在する
+psql:<stdin>:472: NOTICE:  PASS  (13d) tenant_id 列を持つ表に restrictive が存在する
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:358: NOTICE:  PASS  (13e) part スキーマに通常ロールの権限が無い
+psql:<stdin>:475: NOTICE:  PASS  (13e) part スキーマに通常ロールの権限が無い
  ck
 ----
 
@@ -262,22 +287,86 @@ psql:<stdin>:358: NOTICE:  PASS  (13e) part スキーマに通常ロールの権
 
 (1 row)
 
-psql:<stdin>:359: NOTICE:  PASS  (13f) app_user は part の USAGE を持たない
-psql:<stdin>:364: NOTICE:  PASS  (13g) auth_role は app_owner 所有のアプリ表に直接権限を持たない
+psql:<stdin>:476: NOTICE:  PASS  (13f) app_user は part の USAGE を持たない
+psql:<stdin>:481: NOTICE:  PASS  (13g) auth_role は app_owner 所有のアプリ表に直接権限を持たない
  ck
 ----
 
 (1 row)
 
-psql:<stdin>:366: NOTICE:  PASS  (13h) rolsuper/rolbypassrls を持つロールが一覧内（audit_writer のみ）
  ck
 ----
 
 (1 row)
 
 === (14) security_invoker ビュー（PG15+ のみ・PG14 ではスキップ）===
-psql:<stdin>:404: NOTICE:  PASS  (14) security_invoker が呼出元RLSで評価（A=上書き／B=共有）
+psql:<stdin>:483: NOTICE:  PASS  (13h) rolsuper/rolbypassrls を持つロールが一覧内（audit_writer のみ）
+psql:<stdin>:521: NOTICE:  PASS  (14) security_invoker が呼出元RLSで評価（A=上書き／B=共有）
 DO
+=== (15) 所有者・版履歴トリガ・監査経路（PG-H3）===
+SET
+SET
+SET
+SET
+SET
+UPDATE 1
+ ck
+----
+
+(1 row)
+
+psql:<stdin>:535: NOTICE:  PASS  (15a) app_owner の版履歴トリガが FORCE RLS 下で更新前スナップショットを追記
+DO
+psql:<stdin>:543: NOTICE:  PASS  (15b) app_user の audit_log 直接参照を拒否
+RESET
+SET
+RESET
+RESET
+psql:<stdin>:552: NOTICE:  PASS  (15c) 所有者も注入無しでは本体・履歴・監査が0行（FORCE RLS）
+ ck
+----
+
+(1 row)
+
+psql:<stdin>:566: NOTICE:  PASS  (15d) 所有者の注入無し版履歴追記を拒否
+DO
+RESET
+psql:<stdin>:576: NOTICE:  PASS  (15e) audit_writer の監査トリガが行由来tenant_idで INSERT/UPDATE の2件を追記
+ ck
+----
+
+(1 row)
+
+psql:<stdin>:581: NOTICE:  PASS  (15f) audit_writer は audit_log へのINSERTのみ
+ ck
+----
+
+(1 row)
+
+psql:<stdin>:583: NOTICE:  PASS  (15g) audit_writer は BYPASSRLS・NOLOGIN
+ ck
+----
+
+(1 row)
+
+psql:<stdin>:590: NOTICE:  PASS  (15h) 履歴・監査関数は SECURITY DEFINER＋固定search_path＋所定所有者
+ ck
+----
+
+(1 row)
+
+psql:<stdin>:593: NOTICE:  PASS  (15i) 監査関数を直接実行できるのは所有者 audit_writer のみ
+ ck
+----
+
+(1 row)
+
+psql:<stdin>:595: NOTICE:  PASS  (15j) field_record の履歴・監査トリガが両方有効
+ ck
+----
+
+(1 row)
+
 
 === S1 完了 ===
 

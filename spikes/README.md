@@ -27,7 +27,7 @@
 | ファイル | 内容 | 状態 |
 |---|---|---|
 | `00_common.sql` | 拡張・**ロール6種**（app_owner／app_user／**admin_role**／auth_role／**bootstrap_owner**／audit_writer）・**スキーマ `part`・`priv`**・UUIDv7ヘルパ・**`clamp_event_ts`** | ✅ |
-| `S1_partition_rls_unique.sql` | パーティション×RLS×冪等×FORCE RLS×**受理台帳**×**capability**×**ブートストラップ**×**子直接参照**×**注入漏れ** | ✅ **全項目PASS**（PG16で (14) `security_invoker` の可視性も実測） |
+| `S1_partition_rls_unique.sql` | パーティション×RLS×冪等×FORCE RLS×**受理台帳**×**capability**×**ブートストラップ**×**子直接参照**×**注入漏れ**×**版履歴・監査トリガ** | ✅ **全項目PASS**（PG16で (14) `security_invoker`、(15) 所有者・トリガ・監査経路も実測） |
 | `S2_spatial_rls.sql` | 空間索引×RLS（**PostGIS 必須**） | ⚠️ **実行済**（合成10万行ではSLO内。ただし PG-M2／PG-M8 の構造的課題を確認） |
 | `S4_rls_scale.sql` | RLS×規模（10万行・スコープ restrictive） | ✅ 実行済 |
 | `results/` | **実行ログと EXPLAIN 全文**（教訓16） | — |
@@ -56,10 +56,13 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 
 実行ログ：[`S1_2026-08-13_PG16.log`](results/S1_2026-08-13_PG16.log)／[`S2_2026-08-13_PG16_PostGIS.log`](results/S2_2026-08-13_PG16_PostGIS.log)
 
-### S1：全項目 PASS（`security_invoker` を含む）
+### S1：全項目 PASS（`security_invoker`、所有者・トリガ・監査経路を含む）
 
 - (14) はビューの作成確認だけでなく、**テナントAにはAの上書き、テナントBには共有マスタが見えること**を呼出元RLSの文脈で実測した。
 - PostgreSQL 15+ で必要な `security_invoker` が、設計どおり③共有＋上書きの解決に使えることを確認した。
+- (15) は `app_owner` 所有の `SECURITY DEFINER` 版履歴トリガが FORCE RLS 下で更新前スナップショットを残すこと、注入無しの所有者は本体・履歴・監査を読めず履歴へ直接追記できないことを確認した。
+- `audit_writer` 所有の監査トリガが、クライアントのtenant主張ではなく**対象行由来の `tenant_id`** でINSERT/UPDATEを記録することを確認した。`audit_writer` は **NOLOGIN・BYPASSRLS・`audit_log` へのINSERTのみ**で、監査関数は通常ロールから直接実行できない。
+- S1が検証するのは**監査書込経路と最小権限**まで。`prev_hash` の直列化、チェーン生成、並行性能、アンカ署名は引き続き S5 の対象とする。
 
 ### S2：テスト規模ではSLO内、構造的課題あり
 
@@ -85,7 +88,6 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 | 項目 | 次にやること |
 |---|---|
 | **PG-M2／PG-M8 の設計処置** | bbox の緩和策を設計し、KNNの明示的 `tenant_id` 条件とともに本番規模・並行負荷で再測する |
-| **所有者・トリガ経路（版履歴・監査）** | `*_history` の書き手と `audit_writer` 経路を S1 に追加する |
 | **S5（監査並行性）／S7（同期整合）** | ADR-0004 v8 の合格基準を満たすシナリオを作成・実行する |
 
 ---
@@ -127,5 +129,5 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 |---|---|---|
 | **S2（空間）** | **PostGIS 未導入** | Docker 環境で実行し、**PG-M2（RLS 下で PostGIS の `&&`／`<->` が索引条件に使えるか＝leakproof 性）を EXPLAIN 全文で確認**する |
 | **S1 (14) `security_invoker` ビュー** | **PostgreSQL 15 未満** | PG15+ 環境で実行（PG-H4／IND3-M6） |
-| **所有者・トリガ経路（版履歴・監査）** | 未実装 | `*_history` の書き手と `audit_writer` 経路を S1 に追加（PG-H3 の残り） |
+| **所有者・トリガ経路（版履歴・監査）** | 2026-07-27時点で未実装（**2026-08-13のS1 (15)で解消**） | `*_history` の書き手と `audit_writer` 経路を S1 に追加（PG-H3 の残り） |
 | **S5（監査並行性）／S7（同期整合）** | 未作成 | ADR-0004 v8 の合格基準「想定最大テナントの書込レートで直列化がSLOを侵さないこと」で設計する |

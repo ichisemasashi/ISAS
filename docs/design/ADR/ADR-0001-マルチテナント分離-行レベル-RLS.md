@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **提案中（再オープン・High処置済／M・L残）**（v17：**スパイクを文書の設計そのままで書き直して再実行し、S1 の全項目が PASS**（PG15 必須の `security_invoker` のみスキップ）。**再実行で判明した2件を反映**：**①permissive の `TO` には正当にアクセスする全ロールを列挙する**（`admin_role` を実体化＝PG-H3 の実地是正）、**②クランプ窓の下限は最古パーティションの開始以上でなければならない**（データモデル §5）。v15＝裁定(a)、v16＝独立経路一致3件。**残：IND3 Medium 8・Low 4／PG-H2(解消)・H3(一部)・M9・L13／S2・security_invoker・所有者/トリガ経路は未実行**。[第9回](レビュー記録_ADR-0001.md)／[PG検証](../PostgreSQL実挙動検証記録.md)／[spikes](../../../spikes/README.md)） |
+| ステータス | **提案中（再オープン・High処置済／M・L残）**（**v18**：PostgreSQL 16.4でS1を再実行し、`security_invoker` に加えて **PG-H3の所有者・版履歴トリガ・`audit_writer` 監査経路まで全項目PASS**。版履歴は `app_owner` の SECURITY DEFINER＋FORCE RLS、監査は `audit_writer`（NOLOGIN・BYPASSRLS・INSERT-only）の固定search_path関数として最小権限を実測。v17＝文書同一SQLへの全面改訂、v15＝裁定(a)、v16＝独立経路一致3件。**残：IND3 Medium 8・Low 4／PG-M9・L13／S2のPG-M2・PG-M8設計処置／監査チェーン並行性S5**。[第9回](レビュー記録_ADR-0001.md)／[PG検証](../PostgreSQL実挙動検証記録.md)／[spikes](../../../spikes/README.md)） |
 | 日付 | 2026-07-17 |
 | 由来 | 確定済み（要求仕様9章#6の方向性をADRとして正式記録） |
 | 関連 | 要求仕様 [7章 インフラ／#6](../../農業営農支援システム_要求仕様書.md)、[ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0005 権限モデル](ADR-0005-権限モデル-RBAC-メンバーシップ.md) |
