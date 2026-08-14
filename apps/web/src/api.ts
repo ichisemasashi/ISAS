@@ -5,7 +5,9 @@ export type PushBundle = { bundleId: string; events: OutboxRecord[] };
 export type PushResult = { bundleId: string; status: "accepted" | "duplicate" | "rejected" | "conflict"; events?: Array<{ eventUuid: string; eventTs: string }>; rejection?: { reason: string; recoveryAction: string } };
 export type PullChange = { serverSeq: string; type: string; operation: "upsert" | "delete" | "revoke"; entityId?: string | null; eventUuid?: string | null; data: Record<string, unknown> };
 export type PullResult = { changes: PullChange[]; nextCursor: string; snapshotUpper?: string; hasMore: boolean };
-export type QueueSnapshot = { rejections: Array<Record<string, unknown>>; conflicts: Array<Record<string, unknown>> };
+export type SyncRejection = { id: string; bundleId: string; eventUuids: string[]; reason: string; recoveryAction: string; createdAt: string };
+export type SyncConflict = { id: string; documentId: string; eventUuid: string; baseVersion: number; currentVersion: number; currentValue: Record<string, unknown>; proposedValue: Record<string, unknown>; conflictingFields: string[]; status: string; createdAt: string };
+export type QueueSnapshot = { rejections: SyncRejection[]; conflicts: SyncConflict[] };
 
 export class ApiProblem extends Error { constructor(public status: number, public type: string, public body: Record<string, unknown>) { super(`${type} (${status})`); } }
 export interface MvpGateway {

@@ -25,6 +25,20 @@ function queueDto(row) {
   };
 }
 
+function same(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
+
+function mergeFields(base, current, proposed) {
+  const merged = { ...current };
+  const conflicts = [];
+  for (const [field, value] of Object.entries(proposed)) {
+    const serverChanged = !same(current[field], base[field]);
+    const deviceChanged = !same(value, base[field]);
+    if (serverChanged && deviceChanged && !same(current[field], value)) conflicts.push(field);
+    else if (deviceChanged) merged[field] = value;
+  }
+  return { merged, conflicts };
+}
+
 export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
   return {
     async getToday(client) {
@@ -94,21 +108,29 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           ON CONFLICT DO NOTHING`, [tenantId, event.eventUuid, stableEventTs, event.occurredAt, event.kind, event.scope || null, JSON.stringify(event.payload), event.authorizationSnapshotId, event.membershipVersion, trusted.actorPseudonym, clockSkewed]);
 
         if (event.kind === "journal" && event.payload.aggregateId && Number.isInteger(event.payload.baseVersion)) {
+          const proposed = event.payload.changes && typeof event.payload.changes === "object" ? event.payload.changes : event.payload;
           const updated = await client.query(`
             UPDATE app.sync_document SET body = $3::jsonb, version = version + 1, updated_at = clock_timestamp()
             WHERE tenant_id = $1::uuid AND document_id = $2::uuid AND version = $4::bigint
-            RETURNING version`, [tenantId, event.payload.aggregateId, JSON.stringify(event.payload), event.payload.baseVersion]);
+            RETURNING version`, [tenantId, event.payload.aggregateId, JSON.stringify(proposed), event.payload.baseVersion]);
           if (updated.rowCount === 0) {
             const current = await client.query("SELECT version, body FROM app.sync_document WHERE tenant_id = $1::uuid AND document_id = $2::uuid", [tenantId, event.payload.aggregateId]);
             if (current.rows[0]) {
-              conflicted = true;
-              await client.query(`
-                INSERT INTO app.sync_conflict
-                  (tenant_id, conflict_id, document_id, event_uuid, base_version, current_version, current_value, proposed_value)
-                VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7::jsonb, $8::jsonb)`,
-              [tenantId, uuid(), event.payload.aggregateId, event.eventUuid, event.payload.baseVersion, current.rows[0].version, JSON.stringify(current.rows[0].body), JSON.stringify(event.payload)]);
+              const base = event.payload.baseValue && typeof event.payload.baseValue === "object" ? event.payload.baseValue : {};
+              const fieldMerge = mergeFields(base, current.rows[0].body, proposed);
+              await client.query("UPDATE app.sync_document SET body = $3::jsonb, version = version + 1, updated_at = clock_timestamp() WHERE tenant_id = $1::uuid AND document_id = $2::uuid AND version = $4", [tenantId, event.payload.aggregateId, JSON.stringify(fieldMerge.merged), current.rows[0].version]);
+              if (fieldMerge.conflicts.length) {
+                conflicted = true;
+                const currentConflict = Object.fromEntries(fieldMerge.conflicts.map((field) => [field, current.rows[0].body[field]]));
+                const proposedConflict = Object.fromEntries(fieldMerge.conflicts.map((field) => [field, proposed[field]]));
+                await client.query(`
+                  INSERT INTO app.sync_conflict
+                    (tenant_id, conflict_id, document_id, event_uuid, base_version, current_version, current_value, proposed_value, conflicting_fields)
+                  VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7::jsonb, $8::jsonb, $9::text[])`,
+                [tenantId, uuid(), event.payload.aggregateId, event.eventUuid, event.payload.baseVersion, current.rows[0].version, JSON.stringify(currentConflict), JSON.stringify(proposedConflict), fieldMerge.conflicts]);
+              }
             } else {
-              await client.query("INSERT INTO app.sync_document (tenant_id, document_id, field_group_id, body) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::jsonb)", [tenantId, event.payload.aggregateId, event.scope || null, JSON.stringify(event.payload)]);
+              await client.query("INSERT INTO app.sync_document (tenant_id, document_id, field_group_id, body) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::jsonb)", [tenantId, event.payload.aggregateId, event.scope || null, JSON.stringify(proposed)]);
             }
           }
         }
@@ -151,19 +173,43 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
     async getQueues(client) {
       const [rejections, conflicts] = await Promise.all([
         client.query(`SELECT rejection_id::text AS id, bundle_id, event_uuids::text[], reason, recovery_action, created_at FROM app.sync_rejection WHERE tenant_id = app.current_tenant_id() ORDER BY created_at DESC LIMIT 100`),
-        client.query(`SELECT conflict_id::text AS id, document_id::text, event_uuid::text, base_version, current_version, current_value, proposed_value, status, created_at FROM app.sync_conflict WHERE tenant_id = app.current_tenant_id() AND status = 'pending' ORDER BY created_at LIMIT 100`),
+        client.query(`SELECT conflict_id::text AS id, document_id::text AS document_id, event_uuid::text AS event_uuid, base_version, current_version, current_value, proposed_value, conflicting_fields, status, created_at FROM app.sync_conflict WHERE tenant_id = app.current_tenant_id() AND status = 'pending' ORDER BY created_at LIMIT 100`),
       ]);
-      return { rejections: rejections.rows.map(queueDto), conflicts: conflicts.rows };
+      return {
+        rejections: rejections.rows.map(queueDto),
+        conflicts: conflicts.rows.map((row) => ({
+          id: row.id, documentId: row.document_id, eventUuid: row.event_uuid,
+          baseVersion: Number(row.base_version), currentVersion: Number(row.current_version),
+          currentValue: row.current_value, proposedValue: row.proposed_value,
+          conflictingFields: row.conflicting_fields, status: row.status,
+          createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+        })),
+      };
     },
 
     async resolveConflict(client, _trusted, conflictId, resolution) {
+      if (resolution.choice !== "server" && resolution.choice !== "device") throw new TypeError("invalid conflict choice");
+      const conflict = await client.query(`
+        SELECT document_id::text, current_value, proposed_value, conflicting_fields
+        FROM app.sync_conflict
+        WHERE tenant_id = app.current_tenant_id() AND conflict_id = $1::uuid AND status = 'pending'
+        FOR UPDATE`, [conflictId]);
+      if (!conflict.rows[0]) return { id: conflictId, status: "not_found" };
+      const selected = resolution.choice === "server" ? conflict.rows[0].current_value : conflict.rows[0].proposed_value;
+      await client.query(`
+        UPDATE app.sync_document SET body = body || $2::jsonb, version = version + 1, updated_at = clock_timestamp()
+        WHERE tenant_id = app.current_tenant_id() AND document_id = $1::uuid`, [conflict.rows[0].document_id, JSON.stringify(selected)]);
       const result = await client.query(`
         UPDATE app.sync_conflict
         SET status = 'resolved', resolution = $2::jsonb, resolved_by = nullif(current_setting('app.user_id', true), '')::uuid, resolved_at = clock_timestamp()
         WHERE tenant_id = app.current_tenant_id() AND conflict_id = $1::uuid AND status = 'pending'
-        RETURNING conflict_id::text AS id, status, resolution, resolved_at`, [conflictId, JSON.stringify(resolution)]);
-      if (!result.rows[0]) return { id: conflictId, status: "not_found" };
+        RETURNING conflict_id::text AS id, status, resolution, resolved_at`, [conflictId, JSON.stringify({ choice: resolution.choice, value: selected })]);
+      await client.query(`
+        INSERT INTO app.sync_change (tenant_id, priority, entity_type, operation, entity_id, data)
+        VALUES (app.current_tenant_id(), 1, 'journal', 'upsert', $1::uuid, $2::jsonb)`, [conflict.rows[0].document_id, JSON.stringify(selected)]);
       return result.rows[0];
     },
   };
 }
+
+export const postgresMvpContract = Object.freeze({ mergeFields });

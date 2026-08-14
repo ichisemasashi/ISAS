@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { MvpGateway, TodayTask } from "./api";
+import type { MvpGateway, QueueSnapshot, TodayTask } from "./api";
 import { demoAuthorization, type AppAuthorization, type TenantOption } from "./auth";
 import { browserStorage, type JournalDraft, type StorageGateway } from "./storage";
 import { synchronize } from "./sync";
@@ -57,6 +57,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
   const [tasks, setTasks] = useState<TodayTask[]>([]);
   const [syncRevision, setSyncRevision] = useState(0);
   const [queueCounts, setQueueCounts] = useState({ rejections: 0, conflicts: 0 });
+  const [queues, setQueues] = useState<QueueSnapshot>({ rejections: [], conflicts: [] });
   const canWrite = authorization.accessMode === "online" || authorization.accessMode === "offline-write";
 
   useEffect(() => {
@@ -89,6 +90,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
     synchronize({ api, storage, authorization, csrfToken, signal: controller.signal }).then(async (summary) => {
       if (controller.signal.aborted) return;
       setPending(summary.pending);
+      setQueues(summary.queues);
       setQueueCounts(await storage.queueCounts(authorization.context.tenantId));
       if (summary.reauthenticationRequired) setNotice("権限が変更されました。未送信データは保持しています。再認証してください。");
       else if (summary.rejected || summary.conflicts) setNotice(`同期結果を確認してください。差し戻し${summary.rejected}件、競合${summary.conflicts}件です。`);
@@ -167,7 +169,14 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
           {route === "journal" && <JournalPage storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
           {route === "pesticide" && <PesticidePage queue={queue} navigate={navigate} />}
           {route === "fields" && <PlaceholderPage title="圃場" description="担当圃場の一覧・地図は、次の縦切りでPostGIS APIへ接続します。" />}
-          {route === "more" && <MorePage theme={theme} locale={locale} queueCounts={queueCounts} />}
+          {route === "more" && <MorePage theme={theme} locale={locale} queueCounts={queueCounts} queues={queues} resolveConflict={async (id, choice) => {
+            await api.resolveConflict(authorization.context.contextId, csrfToken, id, { choice });
+            const next = await api.getQueues(authorization.context.contextId);
+            await storage.saveServerQueues(authorization.context.tenantId, next);
+            setQueues(next);
+            setQueueCounts(await storage.queueCounts(authorization.context.tenantId));
+            setNotice("競合の裁定を保存しました。");
+          }} />}
         </main>
       </div>
 
@@ -233,7 +242,7 @@ function TodayPage({ tasks, userName, punch, punchAction, navigate }: { tasks: T
 }
 
 function JournalPage({ storage, queue, navigate, setNotice }: { storage: StorageGateway; queue: (kind: "journal", payload: Record<string, unknown>) => Promise<boolean>; navigate: (route: Route) => void; setNotice: (message: string) => void }) {
-  const [draft, setDraft] = useState<JournalDraft>({ id: "today-journal", field: "北の1号圃場", workType: "水管理", startedAt: "08:12", endedAt: "09:36", memo: "", updatedAt: new Date().toISOString() });
+  const [draft, setDraft] = useState<JournalDraft>({ id: "today-journal", aggregateId: crypto.randomUUID(), baseVersion: 0, baseValue: {}, field: "北の1号圃場", workType: "水管理", startedAt: "08:12", endedAt: "09:36", memo: "", updatedAt: new Date().toISOString() });
   const update = (key: keyof JournalDraft, value: string) => setDraft((current) => ({ ...current, [key]: value, updatedAt: new Date().toISOString() }));
   const duration = useMemo(() => durationLabel(draft.startedAt, draft.endedAt), [draft.startedAt, draft.endedAt]);
   useEffect(() => {
@@ -241,7 +250,11 @@ function JournalPage({ storage, queue, navigate, setNotice }: { storage: Storage
     return () => window.clearTimeout(timer);
   }, [draft, setNotice, storage]);
   const saveDraft = async () => { await storage.saveDraft(draft); setNotice("下書きを端末に保存しました。"); };
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (await queue("journal", draft)) navigate("today"); };
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const { aggregateId, baseVersion, baseValue, field, workType, startedAt, endedAt, memo } = draft;
+    if (await queue("journal", { aggregateId, baseVersion, baseValue, changes: { field, workType, startedAt, endedAt, memo } })) navigate("today");
+  };
 
   return <div className="page-content narrow-page">
     <PageBack onBack={() => navigate("today")} />
@@ -285,4 +298,9 @@ function PesticidePage({ queue, navigate }: { queue: (kind: "pesticide", payload
 
 function PageBack({ onBack }: { onBack: () => void }) { return <button className="back-button" onClick={onBack}>← 今日の作業へ戻る</button>; }
 function PlaceholderPage({ title, description }: { title: string; description: string }) { return <div className="page-content empty-page"><span className="empty-icon"><Icon name="field"/></span><h1>{title}</h1><p>{description}</p><button className="secondary-action">実装バックログを見る</button></div>; }
-function MorePage({ theme, locale, queueCounts }: { theme: Theme; locale: Locale; queueCounts: { rejections: number; conflicts: number } }) { return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{locale === "ja" ? "日本語" : "English"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div><div><span>差し戻しキュー</span><strong>{queueCounts.rejections}件</strong></div><div><span>競合キュー</span><strong>{queueCounts.conflicts}件</strong></div></div></div>; }
+function MorePage({ theme, locale, queueCounts, queues, resolveConflict }: { theme: Theme; locale: Locale; queueCounts: { rejections: number; conflicts: number }; queues: QueueSnapshot; resolveConflict: (id: string, choice: "server" | "device") => Promise<void> }) {
+  return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態、同期で判断が必要な項目を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{locale === "ja" ? "日本語" : "English"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div><div><span>差し戻しキュー</span><strong>{queueCounts.rejections}件</strong></div><div><span>競合キュー</span><strong>{queueCounts.conflicts}件</strong></div></div>
+    {queues.rejections.length > 0 && <section className="queue-panel"><h2>差し戻し</h2>{queues.rejections.map((item) => <article key={item.id}><strong>{item.reason}</strong><p>束: {item.bundleId}</p><p>回復操作: {item.recoveryAction}</p></article>)}</section>}
+    {queues.conflicts.length > 0 && <section className="queue-panel"><h2>競合の裁定</h2>{queues.conflicts.map((item) => <article key={item.id}><strong>{item.conflictingFields.join("、")} が競合しています</strong><p>サーバ値: {JSON.stringify(item.currentValue)}</p><p>端末値: {JSON.stringify(item.proposedValue)}</p><div className="queue-actions"><button className="secondary-action" onClick={() => void resolveConflict(item.id, "server")}>サーバ値を採用</button><button className="primary-action" onClick={() => void resolveConflict(item.id, "device")}>端末値を採用</button></div></article>)}</section>}
+  </div>;
+}

@@ -1,6 +1,6 @@
 import type { PullChange, QueueSnapshot, TodayTask } from "./api";
 
-export type JournalDraft = { id: string; field: string; workType: string; startedAt: string; endedAt: string; memo: string; updatedAt: string };
+export type JournalDraft = { id: string; aggregateId: string; baseVersion: number; baseValue: Record<string, unknown>; field: string; workType: string; startedAt: string; endedAt: string; memo: string; updatedAt: string };
 export type OutboxRecord = {
   eventUuid: string; bundleId: string; kind: "journal" | "pesticide" | "punch"; payload: Record<string, unknown>;
   createdAt: string; occurredAt: string; tenantId: string; scope?: string;

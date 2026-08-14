@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createPostgresMvpRepository } from "../src/postgres-mvp-repository.mjs";
+import { createPostgresMvpRepository, postgresMvpContract } from "../src/postgres-mvp-repository.mjs";
 
 const T1 = "11111111-1111-7111-8111-111111111111";
 const E1 = "0198a6c0-0000-7000-8000-000000000001";
@@ -44,4 +44,14 @@ test("PostgreSQL pull fixes an MVCC upper bound before reading a page", async ()
   assert.equal(result.snapshotUpper, "42");
   assert.equal(result.nextCursor, "41");
   assert.deepEqual(calls[1].values.slice(0, 2), [40, "42"]);
+});
+
+test("field merge applies independent changes and queues only overlapping fields", () => {
+  const result = postgresMvpContract.mergeFields(
+    { memo: "base", hours: 1, field: "north" },
+    { memo: "server", hours: 1, field: "north" },
+    { memo: "device", hours: 2, field: "north" },
+  );
+  assert.deepEqual(result.conflicts, ["memo"]);
+  assert.deepEqual(result.merged, { memo: "server", hours: 2, field: "north" });
 });
