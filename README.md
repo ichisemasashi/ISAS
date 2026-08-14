@@ -33,7 +33,7 @@ pnpm test
 pnpm build
 ```
 
-Viteの`/api`は開発時に`http://127.0.0.1:3000`へproxyする。認証BFF、当日作業REST、S7 push/pull、圃場PostGIS、差し戻し・競合キューを同一オリジンで提供するBFFを先に起動する。MapLibreの背景地図は`VITE_MAP_STYLE_URL`で配備時に指定する。未設定またはオフラインでも、IndexedDBに保存した担当圃場ポリゴンを背景色上へ描画する。Phase 1全体の完了状況は[開発工程.md §6](docs/開発工程.md#6-マイルストーンと現在地)を参照する。
+Viteの`/api`は開発時に`http://127.0.0.1:3000`へproxyする。認証BFF、当日作業、作業指示・割当、打刻補完、写真付き日誌、訂正・差し戻し、S7 push/pull、圃場PostGIS、同期キューを同一オリジンで提供するBFFを先に起動する。MapLibreの背景地図は`VITE_MAP_STYLE_URL`で配備時に指定する。未設定またはオフラインでも、IndexedDBに保存した担当圃場ポリゴンを背景色上へ描画する。Phase 1全体の完了状況は[開発工程.md §6](docs/開発工程.md#6-マイルストーンと現在地)を参照する。
 
 ## BFFコア
 
@@ -43,7 +43,7 @@ npm test
 npm run check
 ```
 
-PostgreSQL AuthContextトランザクション、MVP REST、S7 push/pull、圃場PostGIS検索、RLS migration、差し戻し・フィールド競合裁定を実装し、PG16で検証済み。具体的なOIDC IdP、永続session store、HTTP runtimeが生成する実pool/driverは配備アダプタとして残る。migration順序、API契約、検証方法は[apps/bff/README.md](apps/bff/README.md)を参照する。
+PostgreSQL AuthContextトランザクション、MVP REST、S7 push/pull、圃場PostGIS検索、作業指示・割当、打刻・写真付き日誌、訂正・差し戻し、RLS migration、フィールド競合裁定を実装し、PG16で検証済み。具体的なOIDC IdP、永続session store、HTTP runtimeが生成する実pool/driverは配備アダプタとして残る。migration順序、API契約、検証方法は[apps/bff/README.md](apps/bff/README.md)を参照する。
 
 ## 進め方（プロジェクトを貫く原則）
 

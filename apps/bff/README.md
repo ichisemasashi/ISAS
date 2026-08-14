@@ -17,6 +17,11 @@ ADR-0009の同一オリジンBFF境界と、ADR-0007/0008のMVP REST・同期面
 
 - `GET /api/v1/today`：RLS適用後の当日作業を返す。Webは成功時にIndexedDB cacheを更新する。
 - `GET /api/v1/fields`：担当圃場をGeoJSONで返す。`bbox`はPostGIS `&& ST_MakeEnvelope`、`q`は圃場名前方検索、`cursor`はUUIDv7ページングに使う。S2の結論に従いSQLへtenant等値を明示する。
+- `GET/POST /api/v1/work-instructions`：担当者は割当済み指示を参照し、`instruction:manage`を持つ管理者は指示を発行する。
+- `PATCH /api/v1/work-instructions/:id/assignment`：再割当はオフライン同期へ載せず、オンライン専用の`expectedVersion`＋行ロックで競合を409にする。
+- `GET /api/v1/journal-bootstrap`：指示、当日打刻からの開始／終了候補、欠落警告、テンプレート、前回値または訂正対象を返す。Webはテンプレート／前回値をIndexedDBへ保存する。
+- `POST /api/v1/journal-attachments`：日誌受理後に、端末保存済みのJPEG/PNG/WebP/HEIC（10MB以下）を冪等アップロードする。同じattachment IDへ異なる内容を送った場合は409とする。
+- `GET /api/v1/journals`／`POST /api/v1/journals/:id/review`：本人の日誌または管理者のレビュー対象を返し、理由必須の差し戻し／承認を楽観ロック付きで行う。差し戻し・訂正・承認は`journal_revision`へ追記し、承認済み日誌の通常更新は拒否する。
 - `POST /api/v1/sync/push`：tenant内の依存束を原子受理し、`(tenant_id,event_uuid)`受理台帳で再送を排除する。現在のcapability、membership version、authorization snapshotを受理時に再検証する。
 - `GET /api/v1/sync/pull`：`(tenant,scope,priority)`別cursorと取得開始時の上限を使う。P0と通常差分は独立cursorである。
 - `GET /api/v1/sync/queues`：権限変更による差し戻しと、フィールド単位の楽観競合を返す。
@@ -33,6 +38,9 @@ psql "$DATABASE_URL" -f spikes/S8_auth_context.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0001_mvp_sync.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0002_conflict_fields.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0003_field_gis.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0004_work_management.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0005_journal_capture.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0006_journal_review.sql
 ```
 
 業務表はすべて`ENABLE/FORCE ROW LEVEL SECURITY`である。tenant policyをpermissive基底、field scopeと競合裁定capabilityをrestrictive条件にしてAND合成する。アプリ接続は必ず`app_user`を使う。
@@ -46,8 +54,12 @@ PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
   -f apps/bff/migrations/0001_mvp_sync.sql \
   -f apps/bff/migrations/0002_conflict_fields.sql \
   -f apps/bff/migrations/0003_field_gis.sql \
+  -f apps/bff/migrations/0004_work_management.sql \
+  -f apps/bff/migrations/0005_journal_capture.sql \
+  -f apps/bff/migrations/0006_journal_review.sql \
   -f apps/bff/migrations/verify/0001_mvp_sync_verify.sql \
-  -f apps/bff/migrations/verify/0003_field_gis_verify.sql
+  -f apps/bff/migrations/verify/0003_field_gis_verify.sql \
+  -f apps/bff/migrations/verify/0006_work_journal_verify.sql
 ```
 
 ## アダプタの保証条件
@@ -67,4 +79,4 @@ npm test
 npm run check
 ```
 
-2026-08-14時点でBFF 29テスト、Web 18テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群がPASSしている。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。
+2026-08-14時点でBFF 36テスト、Web 21テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群がPASSしている。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。
