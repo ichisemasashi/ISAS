@@ -1,0 +1,25 @@
+MVP REST / S7 sync PostgreSQL integration verification
+Date: 2026-08-14
+PostgreSQL: 16.4 (aarch64)
+PostGIS: 3.4.3
+
+Applied in order:
+  spikes/00_common.sql
+  spikes/S8_auth_context.sql
+  apps/bff/migrations/0001_mvp_sync.sql
+  apps/bff/migrations/0002_conflict_fields.sql
+  apps/bff/migrations/verify/0001_mvp_sync_verify.sql
+
+Results:
+  S8 AuthContext DB verification: 12 groups PASS
+  MVP sync migration verification: 6 groups PASS
+    1. task visibility is tenant AND field scope
+    2. cross-tenant task is invisible
+    3. cross-tenant write is rejected by RLS
+    4. tenant + event_uuid receipt deduplicates retry
+    5. conflict cannot be resolved without capability
+    6. conflict:resolve can resolve a conflict
+
+Application regression:
+  BFF: 27 tests PASS; node --check PASS
+  Web: 15 tests PASS; TypeScript + Vite production build PASS

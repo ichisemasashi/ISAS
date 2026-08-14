@@ -55,3 +55,12 @@ test("field merge applies independent changes and queues only overlapping fields
   assert.deepEqual(result.conflicts, ["memo"]);
   assert.deepEqual(result.merged, { memo: "server", hours: 2, field: "north" });
 });
+
+test("conflict resolution performs no write without the current capability", async () => {
+  const calls = [];
+  const client = { async query(sql, values) { calls.push({ sql, values }); return { rows: [{ allowed: false }] }; } };
+  const repository = createPostgresMvpRepository();
+  await assert.rejects(() => repository.resolveConflict(client, {}, "0198a6c0-0000-7000-8000-000000000003", { choice: "device" }), (error) => error.code === "forbidden");
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /has_capability/);
+});

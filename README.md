@@ -33,7 +33,7 @@ pnpm test
 pnpm build
 ```
 
-現時点では「今日の作業→打刻→日誌」「農薬安全確認」の最初の縦切りを実装している。Phase 1全体の完了状況は[開発工程.md §6](docs/開発工程.md#6-マイルストーンと現在地)を参照する。
+Viteの`/api`は開発時に`http://127.0.0.1:3000`へproxyする。認証BFF、当日作業REST、S7 push/pull、差し戻し・競合キューを同一オリジンで提供するBFFを先に起動する。Phase 1全体の完了状況は[開発工程.md §6](docs/開発工程.md#6-マイルストーンと現在地)を参照する。
 
 ## BFFコア
 
@@ -43,7 +43,7 @@ npm test
 npm run check
 ```
 
-PostgreSQL AuthContextトランザクションアダプタとDB検証関数の参照DDLまでは実装・PG16検証済み。本番HTTPサーバ、具体的なOIDC IdP、永続session store、実pool/driverと本番migrationを接続する必要がある。境界とアダプタ保証条件は[apps/bff/README.md](apps/bff/README.md)を参照する。
+PostgreSQL AuthContextトランザクション、MVP REST、S7 push/pull、RLS migration、差し戻し・フィールド競合裁定を実装し、PG16で検証済み。具体的なOIDC IdP、永続session store、HTTP runtimeが生成する実pool/driverは配備アダプタとして残る。migration順序、API契約、検証方法は[apps/bff/README.md](apps/bff/README.md)を参照する。
 
 ## 進め方（プロジェクトを貫く原則）
 

@@ -189,6 +189,12 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
 
     async resolveConflict(client, _trusted, conflictId, resolution) {
       if (resolution.choice !== "server" && resolution.choice !== "device") throw new TypeError("invalid conflict choice");
+      const capability = await client.query("SELECT app.has_capability('conflict:resolve') AS allowed");
+      if (!capability.rows[0]?.allowed) {
+        const error = new Error("conflict resolution requires current capability");
+        error.code = "forbidden";
+        throw error;
+      }
       const conflict = await client.query(`
         SELECT document_id::text, current_value, proposed_value, conflicting_fields
         FROM app.sync_conflict
