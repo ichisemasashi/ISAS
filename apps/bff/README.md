@@ -17,7 +17,7 @@ ADR-0009の同一オリジンBFF境界と、ADR-0007/0008のMVP REST・同期面
 
 - `GET /api/v1/today`：RLS適用後の当日作業を返す。Webは成功時にIndexedDB cacheを更新する。
 - `GET /api/v1/fields`：担当圃場をGeoJSONで返す。`bbox`はPostGIS `&& ST_MakeEnvelope`、`q`は圃場名前方検索、`cursor`はUUIDv7ページングに使う。S2の結論に従いSQLへtenant等値を明示する。
-- `GET/POST /api/v1/work-instructions`：担当者は割当済み指示を参照し、`instruction:manage`を持つ管理者は指示を発行する。
+- `GET/POST /api/v1/work-instructions`：担当者は割当済み指示を参照し、`instruction:manage`を持つ管理者は指示を発行する。Webの今日画面、14日ガント、モバイル作業リストはこの同じ応答を使い、予定開始・終了と選択状態を連動する。
 - `PATCH /api/v1/work-instructions/:id/assignment`：再割当はオフライン同期へ載せず、オンライン専用の`expectedVersion`＋行ロックで競合を409にする。
 - `GET /api/v1/journal-bootstrap`：指示、当日打刻からの開始／終了候補、欠落警告、テンプレート、前回値または訂正対象を返す。Webはテンプレート／前回値をIndexedDBへ保存する。
 - `POST /api/v1/journal-attachments`：日誌受理後に、端末保存済みのJPEG/PNG/WebP/HEIC（10MB以下）を冪等アップロードする。同じattachment IDへ異なる内容を送った場合は409とする。
@@ -91,4 +91,4 @@ npm test
 npm run check
 ```
 
-2026-08-14時点でBFF 49テスト、Web 26テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群がPASSしている。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。
+2026-08-14時点でBFF 49テスト、Web 27テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群がPASSしている。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。
