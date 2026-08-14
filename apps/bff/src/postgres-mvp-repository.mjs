@@ -505,11 +505,20 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         VALUES ($1::uuid, $2::uuid, $3, $4::timestamptz, app.current_user_id())
         RETURNING release_id::text AS id, version, valid_until, published_at`, [tenantId, releaseId, input.version, input.validUntil]);
       for (const item of input.chemicals) {
+        const existingChemical = await client.query(`SELECT chemical_id::text AS id FROM app.agrochemical
+          WHERE tenant_id = $1::uuid AND registration_number = $2 ORDER BY created_at DESC LIMIT 1`, [tenantId, item.registrationNumber]);
+        const chemicalId = existingChemical.rows[0]?.id || (isUuid(item.id) ? item.id : uuid());
         await client.query(`INSERT INTO app.agrochemical
           (tenant_id, chemical_id, release_id, registration_number, name, active_ingredient,
            applicable_crops, dilution_min, dilution_max, max_uses, preharvest_days, revoked_on)
-          VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::text[], $8, $9, $10, $11, $12::date)`,
-        [tenantId, isUuid(item.id) ? item.id : uuid(), releaseId, item.registrationNumber, item.name,
+          VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::text[], $8, $9, $10, $11, $12::date)
+          ON CONFLICT (tenant_id, chemical_id) DO UPDATE SET
+            release_id = EXCLUDED.release_id, registration_number = EXCLUDED.registration_number,
+            name = EXCLUDED.name, active_ingredient = EXCLUDED.active_ingredient,
+            applicable_crops = EXCLUDED.applicable_crops, dilution_min = EXCLUDED.dilution_min,
+            dilution_max = EXCLUDED.dilution_max, max_uses = EXCLUDED.max_uses,
+            preharvest_days = EXCLUDED.preharvest_days, revoked_on = EXCLUDED.revoked_on`,
+        [tenantId, chemicalId, releaseId, item.registrationNumber, item.name,
           item.activeIngredient || "", item.applicableCrops, item.dilutionMin, item.dilutionMax,
           item.maxUses, item.preharvestDays, item.revokedOn || null]);
       }

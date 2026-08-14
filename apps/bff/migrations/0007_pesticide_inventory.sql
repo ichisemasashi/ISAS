@@ -193,6 +193,8 @@ CREATE POLICY pesticide_release_manager_insert ON app.pesticide_master_release A
   WITH CHECK (app.has_capability('pesticide:manage'));
 CREATE POLICY agrochemical_manager_insert ON app.agrochemical AS RESTRICTIVE FOR INSERT TO app_user
   WITH CHECK (app.has_capability('pesticide:manage'));
+CREATE POLICY agrochemical_manager_update ON app.agrochemical AS RESTRICTIVE FOR UPDATE TO app_user
+  USING (app.has_capability('pesticide:manage')) WITH CHECK (app.has_capability('pesticide:manage'));
 CREATE POLICY pesticide_usage_scope ON app.pesticide_usage AS RESTRICTIVE FOR SELECT TO app_user
   USING (app.can_read_scope(field_group_id));
 CREATE POLICY pesticide_usage_writer ON app.pesticide_usage AS RESTRICTIVE FOR INSERT TO app_user
@@ -213,8 +215,9 @@ CREATE POLICY stock_alert_manager_update ON app.stock_alert AS RESTRICTIVE FOR U
 CREATE POLICY stock_alert_trigger_writer ON app.stock_alert AS PERMISSIVE FOR ALL TO app_owner
   USING (true) WITH CHECK (true);
 
-GRANT SELECT, INSERT ON app.pesticide_master_release, app.agrochemical, app.pesticide_usage,
+GRANT SELECT, INSERT ON app.pesticide_master_release, app.pesticide_usage,
   app.pesticide_safety_alert, app.stock_event TO app_user;
+GRANT SELECT, INSERT, UPDATE ON app.agrochemical TO app_user;
 GRANT SELECT ON app.stock_balance, app.stock_alert TO app_user;
 GRANT UPDATE (status, resolved_by, resolved_at, resolution_event_id) ON app.stock_alert TO app_user;
 REVOKE ALL ON FUNCTION app.detect_negative_stock() FROM PUBLIC;
