@@ -76,6 +76,13 @@ function fieldSearch(url) {
   return { bbox, query, limit, cursor };
 }
 
+async function readJsonObject(request) {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("Content-Type") || "")) throw new TypeError("content_type");
+  const body = await request.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new TypeError("body");
+  return body;
+}
+
 export function createMvpApiHandler({ origin, resolveContext, database, repository }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
 
@@ -96,6 +103,26 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (request.method === "GET" && url.pathname === "/api/v1/fields") {
         const search = fieldSearch(url);
         const result = await database.transaction(trusted, (client, canonical) => repository.searchFields(client, canonical ? { ...trusted, authContext: canonical } : trusted, search), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/work-instructions") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.listWorkInstructions(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/work-instructions") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.createWorkInstruction(client, canonical ? { ...trusted, authContext: canonical } : trusted, body));
+        return json(201, result, requestId);
+      }
+
+      const assignmentMatch = url.pathname.match(/^\/api\/v1\/work-instructions\/([^/]+)\/assignment$/);
+      if (request.method === "PATCH" && assignmentMatch) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.reassignWorkInstruction(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(assignmentMatch[1]), body));
         return json(200, result, requestId);
       }
 
@@ -139,6 +166,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (error instanceof RangeError) return problem(413, "request_too_large", "Request too large", requestId);
       if (error?.code === "scope_revoked") return problem(409, "scope_revoked", "Scope was revoked", requestId, undefined, { purgeScope: error.scope });
       if (error?.code === "forbidden") return problem(403, "forbidden", "Forbidden", requestId);
+      if (error?.code === "version_conflict") return problem(409, "version_conflict", "Version conflict", requestId, undefined, { currentVersion: error.currentVersion });
       return problem(500, "request_failed", "Request failed", requestId);
     }
   };

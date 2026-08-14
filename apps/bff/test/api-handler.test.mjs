@@ -7,6 +7,7 @@ const ORIGIN = "https://isas.example";
 
 function fixture(capabilities = ["journal:write"]) {
   const trusted = {
+    userId: "22222222-2222-7222-8222-222222222222",
     csrfToken: "csrf-1",
     membershipVersion: "membership-1",
     authorizationSnapshotId: "snapshot-1",
@@ -99,5 +100,43 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(body.type, "FeatureCollection");
     assert.equal(body.features[0].properties.name, "北圃場");
     assert.equal((await fx.handle(fx.request("/api/v1/fields?bbox=140,38,139,39"))).status, 400);
+  });
+
+  test("lets a manager issue and optimistically reassign work instructions online", async () => {
+    const fx = fixture(["journal:write", "instruction:manage"]);
+    const create = await fx.handle(fx.request("/api/v1/work-instructions", {
+      method: "POST",
+      headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ fieldId: "0198a6c0-0000-7000-8000-000000000101", assigneeUserId: "22222222-2222-7222-8222-222222222222", title: "北圃場の水位確認", workType: "水管理", scheduledStart: "2026-08-14T00:00:00Z", scheduledEnd: "2026-08-14T01:00:00Z" }),
+    }));
+    assert.equal(create.status, 201);
+    const instruction = await create.json();
+    assert.equal(instruction.assignment.assigneeUserId, "22222222-2222-7222-8222-222222222222");
+
+    const reassign = await fx.handle(fx.request(`/api/v1/work-instructions/${instruction.id}/assignment`, {
+      method: "PATCH",
+      headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ assigneeUserId: "33333333-3333-7333-8333-333333333333", expectedVersion: 1 }),
+    }));
+    assert.equal(reassign.status, 200);
+    assert.equal((await reassign.json()).version, 2);
+
+    const stale = await fx.handle(fx.request(`/api/v1/work-instructions/${instruction.id}/assignment`, {
+      method: "PATCH",
+      headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ assigneeUserId: "44444444-4444-7444-8444-444444444444", expectedVersion: 1 }),
+    }));
+    assert.equal(stale.status, 409);
+    assert.equal((await stale.json()).type, "version_conflict");
+  });
+
+  test("rejects work instruction mutation without the manager capability", async () => {
+    const fx = fixture(["journal:write"]);
+    const response = await fx.handle(fx.request("/api/v1/work-instructions", {
+      method: "POST",
+      headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ fieldId: "0198a6c0-0000-7000-8000-000000000101", assigneeUserId: "22222222-2222-7222-8222-222222222222", title: "作業", workType: "水管理", scheduledStart: "2026-08-14T00:00:00Z", scheduledEnd: "2026-08-14T01:00:00Z" }),
+    }));
+    assert.equal(response.status, 403);
   });
 });

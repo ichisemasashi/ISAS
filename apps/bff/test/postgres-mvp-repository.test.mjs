@@ -76,3 +76,17 @@ test("conflict resolution performs no write without the current capability", asy
   assert.equal(calls.length, 1);
   assert.match(calls[0].sql, /has_capability/);
 });
+
+test("work reassignment locks the instruction and rejects a stale expected version", async () => {
+  const calls = [];
+  const client = { async query(sql, values) {
+    calls.push({ sql, values });
+    if (sql.includes("has_capability")) return { rows: [{ allowed: true }] };
+    if (sql.includes("FOR UPDATE")) return { rows: [{ id: E1, field_group_id: "f1111111-1111-7111-8111-111111111111", version: "3" }] };
+    throw new Error(`unexpected query: ${sql}`);
+  } };
+  const repository = createPostgresMvpRepository();
+  await assert.rejects(() => repository.reassignWorkInstruction(client, { authContext: { tenantId: T1 } }, E1, { assigneeUserId: "22222222-2222-7222-8222-222222222222", expectedVersion: 2 }), (error) => error.code === "version_conflict" && error.currentVersion === 3);
+  assert.match(calls[1].sql, /FOR UPDATE/);
+  assert.equal(calls.length, 2);
+});

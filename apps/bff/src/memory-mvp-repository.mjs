@@ -8,12 +8,13 @@ function clone(value) {
   return structuredClone(value);
 }
 
-export function createMemoryMvpRepository({ tasks = [], fields = [] } = {}) {
+export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [] } = {}) {
   const receipts = new Map();
   const changes = [];
   const rejections = [];
   const conflicts = [];
   let sequence = 0;
+  const instructions = clone(workInstructions);
 
   const database = {
     async transaction(_trusted, operation) { return operation({}); },
@@ -30,6 +31,26 @@ export function createMemoryMvpRepository({ tasks = [], fields = [] } = {}) {
         && (!cursor || field.id > cursor)).sort((a, b) => a.id.localeCompare(b.id)).slice(0, limit + 1);
       const page = visible.slice(0, limit);
       return { type: "FeatureCollection", features: clone(page), nextCursor: visible.length > limit ? page.at(-1).id : null };
+    },
+
+    async listWorkInstructions(_client, trusted) {
+      const manager = trusted.authContext.capabilities.includes("instruction:manage");
+      return { instructions: clone(instructions.filter((item) => item.tenantId === trusted.authContext.tenantId && (manager || item.assignment?.assigneeUserId === trusted.userId))) };
+    },
+
+    async createWorkInstruction(_client, trusted, input) {
+      if (!trusted.authContext.capabilities.includes("instruction:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      const item = { ...clone(input), id: `instruction-${instructions.length + 1}`, tenantId: trusted.authContext.tenantId, version: 1, status: "issued", assignment: { id: `assignment-${instructions.length + 1}`, assigneeUserId: input.assigneeUserId, version: 1 } };
+      instructions.push(item); return clone(item);
+    },
+
+    async reassignWorkInstruction(_client, trusted, instructionId, input) {
+      if (!trusted.authContext.capabilities.includes("instruction:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      const item = instructions.find((row) => row.id === instructionId && row.tenantId === trusted.authContext.tenantId);
+      if (!item) throw new TypeError("unknown instruction");
+      if (item.version !== input.expectedVersion) { const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = item.version; throw error; }
+      item.version += 1; item.assignment = { id: `assignment-${instructions.length + item.version}`, assigneeUserId: input.assigneeUserId, version: 1 };
+      return { id: item.id, assignmentId: item.assignment.id, assigneeUserId: input.assigneeUserId, version: item.version };
     },
 
     async pushBundle(_client, trusted, bundle) {
@@ -111,5 +132,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [] } = {}) {
     },
   };
 
-  return { database, repository, state: { receipts, changes, rejections, conflicts } };
+  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions } };
 }

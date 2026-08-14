@@ -39,6 +39,33 @@ function mergeFields(base, current, proposed) {
   return { merged, conflicts };
 }
 
+function isUuid(value) { return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
+
+function validateInstruction(input) {
+  if (!input || !isUuid(input.fieldId) || !isUuid(input.assigneeUserId)
+    || typeof input.title !== "string" || !input.title.trim() || input.title.length > 200
+    || typeof input.workType !== "string" || !input.workType.trim() || input.workType.length > 100
+    || !Number.isFinite(Date.parse(input.scheduledStart)) || !Number.isFinite(Date.parse(input.scheduledEnd))
+    || Date.parse(input.scheduledEnd) < Date.parse(input.scheduledStart)
+    || (input.priority !== undefined && (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 2))) throw new TypeError("invalid instruction");
+}
+
+async function requireCapability(client, capability) {
+  const allowed = await client.query("SELECT app.has_capability($1::text) AS allowed", [capability]);
+  if (!allowed.rows[0]?.allowed) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+}
+
+function workInstructionDto(row) {
+  return {
+    id: row.id, fieldId: row.field_id, fieldGroupId: row.field_group_id,
+    fieldName: row.field_name || null, cropName: row.crop_name || null,
+    title: row.title, workType: row.work_type, details: row.details,
+    scheduledStart: new Date(row.scheduled_start).toISOString(), scheduledEnd: new Date(row.scheduled_end).toISOString(),
+    priority: Number(row.priority), status: row.status, version: Number(row.version),
+    assignment: row.assignment_id ? { id: row.assignment_id, assigneeUserId: row.assignee_user_id, version: Number(row.assignment_version) } : null,
+  };
+}
+
 export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
   return {
     async getToday(client) {
@@ -80,6 +107,90 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         })),
         nextCursor: result.rows.length > limit ? rows.at(-1).id : null,
       };
+    },
+
+    async listWorkInstructions(client) {
+      const result = await client.query(`
+        SELECT instruction.instruction_id::text AS id, instruction.field_id::text AS field_id,
+               instruction.field_group_id::text AS field_group_id, field.name AS field_name,
+               field.crop_name, instruction.title, instruction.work_type, instruction.details,
+               instruction.scheduled_start, instruction.scheduled_end, instruction.priority,
+               instruction.status, instruction.version,
+               assignment.assignment_id::text AS assignment_id,
+               assignment.assignee_user_id::text AS assignee_user_id,
+               assignment.version AS assignment_version
+        FROM app.work_instruction instruction
+        JOIN app.field field ON field.tenant_id = instruction.tenant_id AND field.field_id = instruction.field_id
+        LEFT JOIN app.work_assignment assignment
+          ON assignment.tenant_id = instruction.tenant_id
+         AND assignment.instruction_id = instruction.instruction_id
+         AND assignment.unassigned_at IS NULL
+        WHERE instruction.deleted_at IS NULL
+          AND (assignment.assignee_user_id = app.current_user_id() OR app.has_capability('instruction:manage'))
+        ORDER BY instruction.scheduled_start, instruction.instruction_id`);
+      return { instructions: result.rows.map(workInstructionDto) };
+    },
+
+    async createWorkInstruction(client, trusted, input) {
+      validateInstruction(input);
+      await requireCapability(client, "instruction:manage");
+      const tenantId = trusted.authContext.tenantId;
+      const instructionId = uuid();
+      const assignmentId = uuid();
+      const result = await client.query(`
+        WITH inserted_instruction AS (
+          INSERT INTO app.work_instruction
+            (tenant_id, instruction_id, field_id, field_group_id, title, work_type, details,
+             scheduled_start, scheduled_end, priority, created_by, updated_by)
+          SELECT $1::uuid, $2::uuid, field_id, field_group_id, $4, $5, $6,
+                 $7::timestamptz, $8::timestamptz, $9::smallint, app.current_user_id(), app.current_user_id()
+          FROM app.field WHERE tenant_id = $1::uuid AND field_id = $3::uuid AND deleted_at IS NULL
+          RETURNING *
+        ), inserted_assignment AS (
+          INSERT INTO app.work_assignment
+            (tenant_id, assignment_id, instruction_id, field_group_id, assignee_user_id, assigned_by)
+          SELECT tenant_id, $10::uuid, instruction_id, field_group_id, $11::uuid, app.current_user_id()
+          FROM inserted_instruction
+          RETURNING *
+        )
+        SELECT instruction.instruction_id::text AS id, instruction.field_id::text AS field_id,
+               instruction.field_group_id::text AS field_group_id, instruction.title, instruction.work_type,
+               instruction.details, instruction.scheduled_start, instruction.scheduled_end,
+               instruction.priority, instruction.status, instruction.version,
+               assignment.assignment_id::text AS assignment_id,
+               assignment.assignee_user_id::text AS assignee_user_id,
+               assignment.version AS assignment_version
+        FROM inserted_instruction instruction CROSS JOIN inserted_assignment assignment`,
+      [tenantId, instructionId, input.fieldId, input.title, input.workType, input.details || "", input.scheduledStart, input.scheduledEnd, input.priority ?? 1, assignmentId, input.assigneeUserId]);
+      if (!result.rows[0]) throw new TypeError("unknown field");
+      return workInstructionDto(result.rows[0]);
+    },
+
+    async reassignWorkInstruction(client, trusted, instructionId, input) {
+      if (!isUuid(instructionId) || !isUuid(input.assigneeUserId) || !Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) throw new TypeError("invalid assignment");
+      await requireCapability(client, "instruction:manage");
+      const tenantId = trusted.authContext.tenantId;
+      const locked = await client.query(`
+        SELECT instruction_id::text AS id, field_group_id::text AS field_group_id, version
+        FROM app.work_instruction
+        WHERE tenant_id = $1::uuid AND instruction_id = $2::uuid AND deleted_at IS NULL
+        FOR UPDATE`, [tenantId, instructionId]);
+      if (!locked.rows[0]) throw new TypeError("unknown instruction");
+      if (Number(locked.rows[0].version) !== input.expectedVersion) {
+        const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = Number(locked.rows[0].version); throw error;
+      }
+      await client.query(`UPDATE app.work_assignment SET unassigned_at = clock_timestamp(), version = version + 1
+        WHERE tenant_id = $1::uuid AND instruction_id = $2::uuid AND unassigned_at IS NULL`, [tenantId, instructionId]);
+      const assignmentId = uuid();
+      await client.query(`INSERT INTO app.work_assignment
+        (tenant_id, assignment_id, instruction_id, field_group_id, assignee_user_id, assigned_by)
+        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, app.current_user_id())`,
+      [tenantId, assignmentId, instructionId, locked.rows[0].field_group_id, input.assigneeUserId]);
+      const updated = await client.query(`UPDATE app.work_instruction
+        SET version = version + 1, updated_by = app.current_user_id(), updated_at = clock_timestamp()
+        WHERE tenant_id = $1::uuid AND instruction_id = $2::uuid AND version = $3
+        RETURNING version`, [tenantId, instructionId, input.expectedVersion]);
+      return { id: instructionId, assignmentId, assigneeUserId: input.assigneeUserId, version: Number(updated.rows[0].version) };
     },
 
     async pushBundle(client, trusted, bundle) {
