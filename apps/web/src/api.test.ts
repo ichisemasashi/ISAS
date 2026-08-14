@@ -18,4 +18,15 @@ describe("MVP REST gateway", () => {
     await createMvpGateway(fetcher).getFields("context-1", { bbox: [140.2, 38.1, 140.5, 38.4], query: "北 圃場", limit: 200 });
     expect(fetcher.mock.calls[0]?.[0]).toBe("/api/v1/fields?bbox=140.2%2C38.1%2C140.5%2C38.4&q=%E5%8C%97+%E5%9C%83%E5%A0%B4&limit=200");
   });
+  test("sends migration idempotency and reads an attachment file name", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "job-1" }), { status: 201, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("\uFEFF圃場コード,圃場名\nF-1,北圃場", { status: 200, headers: { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="fields-20260814.csv"' } }));
+    const gateway = createMvpGateway(fetcher);
+    await gateway.createMigrationJob("context-1", "csrf-1", { dataset: "fields", sourceName: "fields.csv", csv: "code\nF-1", mapping: { externalKey: "code" } }, "migration-1");
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toEqual(expect.objectContaining({ "Idempotency-Key": "migration-1", "X-CSRF-Token": "csrf-1" }));
+    const exported = await gateway.exportCsv("context-1", "fields");
+    expect(exported.fileName).toBe("fields-20260814.csv");
+    expect(await exported.blob.text()).toContain("北圃場");
+  });
 });

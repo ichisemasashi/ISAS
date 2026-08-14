@@ -67,6 +67,10 @@ const api: MvpGateway = {
   async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
   async getQueues() { return { rejections: [], conflicts: [] }; },
   async resolveConflict() { return {}; },
+  async createMigrationJob() { throw new Error("not used"); },
+  async getMigrationJobs() { return { jobs: [] }; },
+  async commitMigrationJob() { throw new Error("not used"); },
+  async exportCsv() { throw new Error("not used"); },
 };
 const renderApp = (storage: StorageGateway, authorization = demoAuthorization, gateway = api) => render(<App api={gateway} csrfToken="csrf-1" storage={storage} authorization={authorization} />);
 
@@ -159,5 +163,26 @@ describe("ISAS MVP field flow", () => {
     await user.type(screen.getByLabelText("終了予定"), "2026-08-14T09:00");
     await user.click(screen.getByRole("button", { name: "オンラインで発行" }));
     await waitFor(() => expect(createWorkInstruction).toHaveBeenCalled());
+  });
+
+  test("maps CSV columns, reports duplicates and commits a validated import", async () => {
+    const user = userEvent.setup();
+    const store = memoryStorage();
+    const manager = { ...demoAuthorization, context: { ...demoAuthorization.context, capabilities: [...demoAuthorization.context.capabilities, "migration:manage"] } };
+    const staged = { id: "job-1", dataset: "fields" as const, sourceName: "fields.csv", sourceSha256: "a".repeat(64), mapping: { externalKey: "code", name: "name", fieldGroupId: "group", geometryWkt: "wkt" }, status: "validated" as const, rowCount: 2, validCount: 1, duplicateCount: 1, errorCount: 0, version: 1, createdAt: new Date().toISOString(), committedAt: null, rows: [{ lineNumber: 3, status: "duplicate" as const, duplicateKey: "F-001", errors: [], normalized: {} }] };
+    const createMigrationJob = vi.fn(async () => staged);
+    const commitMigrationJob = vi.fn(async () => ({ ...staged, status: "committed" as const, version: 3, committedAt: new Date().toISOString() }));
+    renderApp(store.gateway, manager, { ...api, createMigrationJob, commitMigrationJob });
+    await user.click(screen.getAllByRole("button", { name: "その他" })[0]);
+    await user.upload(screen.getByLabelText("CSVファイル"), new File(["code,name,group,wkt\nF-001,北圃場,g-1,POLYGON()"], "fields.csv", { type: "text/csv" }));
+    await user.selectOptions(screen.getByLabelText("圃場コード（必須）"), "code");
+    await user.selectOptions(screen.getByLabelText("圃場名（必須）"), "name");
+    await user.selectOptions(screen.getByLabelText("圃場グループID（必須）"), "group");
+    await user.selectOptions(screen.getByLabelText("区画（WKT）（必須）"), "wkt");
+    await user.click(screen.getByRole("button", { name: "重複と入力内容を検査" }));
+    await waitFor(() => expect(createMigrationJob).toHaveBeenCalled());
+    expect(screen.getByText(/重複（F-001）/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "検査済み1件の取込を確定" }));
+    await waitFor(() => expect(commitMigrationJob).toHaveBeenCalledWith(demoAuthorization.context.contextId, "csrf-1", "job-1", 1));
   });
 });

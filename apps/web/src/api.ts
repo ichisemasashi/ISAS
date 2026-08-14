@@ -18,6 +18,10 @@ export type JournalBootstrap = { instruction: null | { id: string; fieldId: stri
 export type Agrochemical = { id: string; registrationNumber: string; name: string; activeIngredient: string; applicableCrops: string[]; dilutionMin: number; dilutionMax: number; maxUses: number; preharvestDays: number; revokedOn: string | null };
 export type PesticideBootstrap = { field: { id: string; fieldGroupId: string; name: string; cropName: string | null; timezone: string }; release: null | { id: string; version: string; validUntil: string; publishedAt: string; syncedAt: string }; chemicals: Agrochemical[]; usage: Array<{ chemicalId: string; usageCount: number; lastAppliedOn: string | null }>; inventory: Array<{ chemicalId: string; quantity: number; updatedAt: string | null }> };
 export type InventorySnapshot = { balances: Array<{ chemicalId: string; name: string; registrationNumber: string; quantity: number; updatedAt: string | null }>; alerts: StockAlert[] };
+export type MigrationDataset = "fields" | "journals" | "pesticide_history";
+export type MigrationRow = { lineNumber: number; status: "valid" | "duplicate" | "invalid" | "committed"; duplicateKey: string | null; errors: string[]; normalized: Record<string, unknown>; entityId?: string | null };
+export type MigrationJob = { id: string; dataset: MigrationDataset; sourceName: string; sourceSha256: string; mapping: Record<string, string>; status: "needs_review" | "validated" | "committing" | "committed"; rowCount: number; validCount: number; duplicateCount: number; errorCount: number; version: number; createdAt: string; committedAt: string | null; rows?: MigrationRow[] };
+export type ExportDataset = "fields" | "journals" | "pesticide-records";
 
 export class ApiProblem extends Error { constructor(public status: number, public type: string, public body: Record<string, unknown>) { super(`${type} (${status})`); } }
 export interface MvpGateway {
@@ -36,6 +40,10 @@ export interface MvpGateway {
   pull(contextId: string, scope: string, priority: "priority" | "normal", cursor: string | null, signal?: AbortSignal): Promise<PullResult>;
   getQueues(contextId: string, signal?: AbortSignal): Promise<QueueSnapshot>;
   resolveConflict(contextId: string, csrfToken: string, conflictId: string, resolution: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>>;
+  createMigrationJob(contextId: string, csrfToken: string, input: { dataset: MigrationDataset; sourceName: string; csv: string; mapping: Record<string, string> }, idempotencyKey: string, signal?: AbortSignal): Promise<MigrationJob>;
+  getMigrationJobs(contextId: string, signal?: AbortSignal): Promise<{ jobs: MigrationJob[] }>;
+  commitMigrationJob(contextId: string, csrfToken: string, jobId: string, expectedVersion: number, signal?: AbortSignal): Promise<MigrationJob>;
+  exportCsv(contextId: string, dataset: ExportDataset, search?: { from?: string; to?: string }, signal?: AbortSignal): Promise<{ blob: Blob; fileName: string }>;
 }
 type FetchLike = typeof fetch;
 async function result<T>(response: Response): Promise<T> { const body = await response.json() as Record<string, unknown>; if (!response.ok) throw new ApiProblem(response.status, typeof body.type === "string" ? body.type : "request_failed", body); return body as T; }
@@ -66,5 +74,18 @@ export function createMvpGateway(fetcher: FetchLike = fetch): MvpGateway {
     pull: (contextId, scope, priority, cursor, signal) => { const query = new URLSearchParams({ scope, priority }); if (cursor) query.set("cursor", cursor); return fetcher(`/api/v1/sync/pull?${query}`, { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<PullResult>(response)); },
     getQueues: (contextId, signal) => fetcher("/api/v1/sync/queues", { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<QueueSnapshot>(response)),
     resolveConflict: (contextId, csrfToken, conflictId, resolution, signal) => fetcher(`/api/v1/sync/conflicts/${encodeURIComponent(conflictId)}/resolve`, { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify({ resolution }), signal }).then((response) => result<Record<string, unknown>>(response)),
+    createMigrationJob: (contextId, csrfToken, input, idempotencyKey, signal) => fetcher("/api/v1/migration-jobs", { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, "Idempotency-Key": idempotencyKey }), body: JSON.stringify(input), signal }).then((response) => result<MigrationJob>(response)),
+    getMigrationJobs: (contextId, signal) => fetcher("/api/v1/migration-jobs", { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<{ jobs: MigrationJob[] }>(response)),
+    commitMigrationJob: (contextId, csrfToken, jobId, expectedVersion, signal) => fetcher(`/api/v1/migration-jobs/${encodeURIComponent(jobId)}/commit`, { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify({ expectedVersion }), signal }).then((response) => result<MigrationJob>(response)),
+    exportCsv: async (contextId, dataset, search = {}, signal) => {
+      const query = new URLSearchParams();
+      if (search.from) query.set("from", search.from);
+      if (search.to) query.set("to", search.to);
+      const response = await fetcher(`/api/v1/exports/${dataset}.csv${query.size ? `?${query}` : ""}`, { credentials: "include", cache: "no-store", headers: headers(contextId, { Accept: "text/csv" }), signal });
+      if (!response.ok) return result<never>(response);
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const matched = disposition.match(/filename="([^"]+)"/i);
+      return { blob: await response.blob(), fileName: matched?.[1] || `${dataset}.csv` };
+    },
   };
 }

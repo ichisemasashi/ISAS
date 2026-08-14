@@ -199,6 +199,12 @@ textarea { padding-top: 12px; resize: vertical; }
 .queue-panel h2 { margin-bottom: 16px; }
 .queue-panel article { padding: 16px 0; border-top: 1px solid var(--line); }
 .queue-panel article p { margin: 6px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.form-hint { margin: 0 0 14px; color: var(--muted); overflow-wrap: anywhere; }
+.migration-result { margin-top: 20px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.migration-result .primary-action { margin-top: 16px; }
+.migration-history { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.migration-history p { margin: 8px 0; color: var(--muted); overflow-wrap: anywhere; }
+.export-range { margin: 18px 0; }
 .queue-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
 .fields-page { width: min(1440px, calc(100% - 5vw)); }
 .field-search { width: min(520px, 100%); margin-bottom: 20px; }

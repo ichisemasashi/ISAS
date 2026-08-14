@@ -29,6 +29,8 @@ const api: MvpGateway = {
   async uploadJournalAttachment() { throw new Error("not used"); },
   async push() { return { results: [] }; }, async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
   async getQueues() { return { rejections: [], conflicts: [] }; }, async resolveConflict() { return {}; },
+  async createMigrationJob() { throw new Error("not used"); }, async getMigrationJobs() { return { jobs: [] }; },
+  async commitMigrationJob() { throw new Error("not used"); }, async exportCsv() { throw new Error("not used"); },
 };
 
 describe("AuthBoundary", () => {

@@ -4,6 +4,7 @@ import { demoAuthorization, type AppAuthorization, type TenantOption } from "./a
 import { browserStorage, type JournalDraft, type StorageGateway } from "./storage";
 import { synchronize } from "./sync";
 import { evaluatePesticideUse, safetyReasonLabel } from "./pesticide-safety";
+import { DataMigrationPanel } from "./DataMigrationPanel";
 
 const FieldsPage = lazy(() => import("./FieldsPage").then((module) => ({ default: module.FieldsPage })));
 
@@ -446,6 +447,8 @@ function PageBack({ onBack }: { onBack: () => void }) { return <button className
 function MorePage({ api, csrfToken, authorization, online, instructions, setInstructions, journals, setJournals, correctJournal, setNotice, theme, locale, queueCounts, queues, resolveConflict }: { api: MvpGateway; csrfToken: string; authorization: AppAuthorization; online: boolean; instructions: WorkInstruction[]; setInstructions: React.Dispatch<React.SetStateAction<WorkInstruction[]>>; journals: JournalEntry[]; setJournals: React.Dispatch<React.SetStateAction<JournalEntry[]>>; correctJournal: (id: string) => void; setNotice: (message: string) => void; theme: Theme; locale: Locale; queueCounts: { rejections: number; conflicts: number }; queues: QueueSnapshot; resolveConflict: (id: string, choice: "server" | "device") => Promise<void> }) {
   const manager = authorization.context.capabilities.includes("instruction:manage");
   const reviewer = authorization.context.capabilities.includes("journal:review");
+  const migrationManager = authorization.context.capabilities.includes("migration:manage");
+  const exportReader = authorization.context.capabilities.includes("export:read");
   const [returnReasons, setReturnReasons] = useState<Record<string, string>>({});
   const [assignees, setAssignees] = useState<Record<string, string>>({});
   const refreshJournals = async () => setJournals((await api.getJournals(authorization.context.contextId)).journals);
@@ -476,5 +479,6 @@ function MorePage({ api, csrfToken, authorization, online, instructions, setInst
     {journals.some((journal) => journal.workerUserId === authorization.user.id && journal.status === "returned") && <section className="queue-panel"><h2>訂正が必要な日誌</h2>{journals.filter((journal) => journal.workerUserId === authorization.user.id && journal.status === "returned").map((journal) => <article key={journal.id}><strong>{journal.fieldName || "作業日誌"}</strong><p>{journal.returnReason ? `差し戻し理由: ${journal.returnReason}` : `${String(journal.body.workType || "")}を確認し、訂正理由とともに再提出してください。`}</p><button className="primary-action" onClick={() => correctJournal(journal.id)}>訂正する</button></article>)}</section>}
     {queues.rejections.length > 0 && <section className="queue-panel"><h2>差し戻し</h2>{queues.rejections.map((item) => <article key={item.id}><strong>{item.reason}</strong><p>束: {item.bundleId}</p><p>回復操作: {item.recoveryAction}</p></article>)}</section>}
     {queues.conflicts.length > 0 && <section className="queue-panel"><h2>競合の裁定</h2>{queues.conflicts.map((item) => <article key={item.id}><strong>{item.conflictingFields.join("、")} が競合しています</strong><p>サーバ値: {JSON.stringify(item.currentValue)}</p><p>端末値: {JSON.stringify(item.proposedValue)}</p><div className="queue-actions"><button className="secondary-action" onClick={() => void resolveConflict(item.id, "server")}>サーバ値を採用</button><button className="primary-action" onClick={() => void resolveConflict(item.id, "device")}>端末値を採用</button></div></article>)}</section>}
+    {(migrationManager || exportReader) && <DataMigrationPanel api={api} contextId={authorization.context.contextId} csrfToken={csrfToken} online={online} canImport={migrationManager} canExport={exportReader} setNotice={setNotice}/>}
   </div>;
 }
