@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { App } from "./App";
+import type { MvpGateway } from "./api";
 import type { AppAuthorization, AuthBootstrap, AuthGateway, RequestContext } from "./auth";
 
 type BoundaryState =
@@ -8,7 +9,7 @@ type BoundaryState =
   | { status: "error"; message: string }
   | { status: "ready"; bootstrap: AuthBootstrap; context: RequestContext };
 
-export function AuthBoundary({ gateway }: { gateway: AuthGateway }) {
+export function AuthBoundary({ gateway, api }: { gateway: AuthGateway; api: MvpGateway }) {
   const [state, setState] = useState<BoundaryState>({ status: "loading" });
   const contextRequest = useRef(0);
 
@@ -53,7 +54,7 @@ export function AuthBoundary({ gateway }: { gateway: AuthGateway }) {
     }
   };
 
-  return <App authorization={authorization} tenants={state.bootstrap.tenants} onTenantChange={switchTenant} />;
+  return <App api={api} csrfToken={state.bootstrap.csrfToken} authorization={authorization} tenants={state.bootstrap.tenants} onTenantChange={switchTenant} />;
 }
 
 function AuthScreen({ title, description, actionLabel, onAction, busy = false }: { title: string; description: string; actionLabel?: string; onAction?: () => void; busy?: boolean }) {

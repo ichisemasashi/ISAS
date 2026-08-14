@@ -1,17 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import type { MvpGateway, TodayTask } from "./api";
 import { demoAuthorization, type AppAuthorization, type TenantOption } from "./auth";
 import { browserStorage, type JournalDraft, type StorageGateway } from "./storage";
+import { synchronize } from "./sync";
 
 type Route = "today" | "journal" | "pesticide" | "fields" | "more";
 type PunchState = "idle" | "working" | "break";
 type Theme = "field" | "dark" | "contrast";
 type Locale = "ja" | "en";
-
-const tasks = [
-  { id: "t1", time: "08:30", field: "北の1号圃場", crop: "つや姫", work: "水位を確認", status: "次の作業" },
-  { id: "t2", time: "10:00", field: "西のハウス", crop: "ミニトマト", work: "誘引・わき芽取り", status: "今日" },
-  { id: "t3", time: "14:00", field: "南の3号圃場", crop: "雪若丸", work: "除草剤散布", status: "要安全確認" },
-] as const;
 
 const copy = {
   ja: { today: "今日", record: "記録", fields: "圃場", more: "その他", online: "オンライン", offline: "オフライン" },
@@ -32,8 +28,13 @@ const Icon = ({ name }: { name: "today" | "record" | "field" | "more" | "sync" |
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 };
 
-function eventId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function eventId(): string {
+  const time = Date.now().toString(16).padStart(12, "0").slice(-12);
+  const bytes = crypto.getRandomValues(new Uint8Array(9));
+  const random = [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+  const variant = ((Number.parseInt(random[3], 16) & 0x3) | 0x8).toString(16);
+  const raw = `${time}7${random.slice(0, 3)}${variant}${random.slice(3, 6)}${random.slice(6, 18)}`;
+  return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
 }
 
 function durationLabel(startedAt: string, endedAt: string): string {
@@ -45,7 +46,7 @@ function durationLabel(startedAt: string, endedAt: string): string {
   return hours ? `${hours}時間${rest ? `${rest}分` : ""}` : `${rest}分`;
 }
 
-export function App({ storage = browserStorage, authorization = demoAuthorization, tenants = [], onTenantChange }: { storage?: StorageGateway; authorization?: AppAuthorization; tenants?: TenantOption[]; onTenantChange?: (tenantId: string) => Promise<void> }) {
+export function App({ api, csrfToken, storage = browserStorage, authorization = demoAuthorization, tenants = [], onTenantChange }: { api: MvpGateway; csrfToken: string; storage?: StorageGateway; authorization?: AppAuthorization; tenants?: TenantOption[]; onTenantChange?: (tenantId: string) => Promise<void> }) {
   const [route, setRoute] = useState<Route>("today");
   const [online, setOnline] = useState(() => navigator.onLine);
   const [pending, setPending] = useState(0);
@@ -53,10 +54,13 @@ export function App({ storage = browserStorage, authorization = demoAuthorizatio
   const [theme, setTheme] = useState<Theme>("field");
   const [locale, setLocale] = useState<Locale>("ja");
   const [notice, setNotice] = useState("");
+  const [tasks, setTasks] = useState<TodayTask[]>([]);
+  const [syncRevision, setSyncRevision] = useState(0);
+  const [queueCounts, setQueueCounts] = useState({ rejections: 0, conflicts: 0 });
   const canWrite = authorization.accessMode === "online" || authorization.accessMode === "offline-write";
 
   useEffect(() => {
-    storage.pendingCount().then(setPending).catch(() => setNotice("端末保存を確認できませんでした。もう一度お試しください。"));
+    storage.pendingCount(authorization.context.tenantId).then(setPending).catch(() => setNotice("端末保存を確認できませんでした。もう一度お試しください。"));
     const wentOnline = () => setOnline(true);
     const wentOffline = () => setOnline(false);
     window.addEventListener("online", wentOnline);
@@ -66,7 +70,31 @@ export function App({ storage = browserStorage, authorization = demoAuthorizatio
       window.removeEventListener("online", wentOnline);
       window.removeEventListener("offline", wentOffline);
     };
-  }, [storage]);
+  }, [authorization.context.tenantId, storage]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const tenantId = authorization.context.tenantId;
+    storage.getToday(tenantId).then((cached) => { if (!controller.signal.aborted) setTasks(cached); }).catch(() => undefined);
+    if (online) api.getToday(authorization.context.contextId, controller.signal).then(async ({ tasks: current }) => {
+      await storage.saveToday(tenantId, current);
+      if (!controller.signal.aborted) setTasks(current);
+    }).catch(() => { if (!controller.signal.aborted) setNotice("今日の作業を更新できませんでした。端末の保存内容を表示します。"); });
+    return () => controller.abort();
+  }, [api, authorization.context.contextId, authorization.context.tenantId, online, storage]);
+
+  useEffect(() => {
+    if (!online || authorization.accessMode !== "online") return;
+    const controller = new AbortController();
+    synchronize({ api, storage, authorization, csrfToken, signal: controller.signal }).then(async (summary) => {
+      if (controller.signal.aborted) return;
+      setPending(summary.pending);
+      setQueueCounts(await storage.queueCounts(authorization.context.tenantId));
+      if (summary.reauthenticationRequired) setNotice("権限が変更されました。未送信データは保持しています。再認証してください。");
+      else if (summary.rejected || summary.conflicts) setNotice(`同期結果を確認してください。差し戻し${summary.rejected}件、競合${summary.conflicts}件です。`);
+    }).catch(() => { if (!controller.signal.aborted) setNotice("同期できませんでした。未送信データは端末に保持し、オンライン時に再試行します。"); });
+    return () => controller.abort();
+  }, [api, authorization, csrfToken, online, storage, syncRevision]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -84,16 +112,21 @@ export function App({ storage = browserStorage, authorization = demoAuthorizatio
       setNotice(authorization.accessMode === "offline-read" ? "オフライン猶予の読取期間です。再認証するまで新しい記録は確定できません。" : "認証の猶予が終了しました。再認証後に記録を再開できます。");
       return false;
     }
+    const id = eventId();
+    const occurredAt = new Date().toISOString();
     await storage.enqueue({
-      eventUuid: eventId(kind),
+      eventUuid: id,
+      bundleId: id,
       kind,
       payload,
-      createdAt: new Date().toISOString(),
+      createdAt: occurredAt,
+      occurredAt,
       tenantId: authorization.context.tenantId,
       authorizationSnapshotId: authorization.context.authorizationSnapshotId,
       membershipVersion: authorization.context.membershipVersion,
     });
     setPending((value) => value + 1);
+    if (online) setSyncRevision((value) => value + 1);
     setNotice(online ? "端末に保存しました。まもなく同期します。" : "端末に保存しました。電波が戻ると自動で同期します。");
     return true;
   };
@@ -130,11 +163,11 @@ export function App({ storage = browserStorage, authorization = demoAuthorizatio
 
         <main id="main" tabIndex={-1}>
           {authorization.accessMode !== "online" && <div className={`authorization-banner mode-${authorization.accessMode}`} role="status"><strong>{authorization.accessMode === "offline-write" ? "オフライン認証の猶予中" : authorization.accessMode === "offline-read" ? "読取専用へ移行しました" : "認証の猶予が終了しました"}</strong><span>{authorization.accessMode === "offline-write" ? "現場記録だけを端末へ保存できます。機微操作は利用できません。" : authorization.accessMode === "offline-read" ? "下書きは保持されますが、再認証まで記録を確定できません。" : "未同期データを保持しています。オンライン復帰後に再認証してください。"}</span></div>}
-          {route === "today" && <TodayPage userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} />}
+          {route === "today" && <TodayPage tasks={tasks} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} />}
           {route === "journal" && <JournalPage storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
           {route === "pesticide" && <PesticidePage queue={queue} navigate={navigate} />}
           {route === "fields" && <PlaceholderPage title="圃場" description="担当圃場の一覧・地図は、次の縦切りでPostGIS APIへ接続します。" />}
-          {route === "more" && <MorePage theme={theme} locale={locale} />}
+          {route === "more" && <MorePage theme={theme} locale={locale} queueCounts={queueCounts} />}
         </main>
       </div>
 
@@ -158,11 +191,11 @@ function Nav({ route, locale, navigate }: { route: Route; locale: Locale; naviga
   return <div className="nav-items">{items.map((item) => <button key={item.route} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined} onClick={() => navigate(item.route)}><Icon name={item.icon}/><span>{item.label}</span></button>)}</div>;
 }
 
-function TodayPage({ userName, punch, punchAction, navigate }: { userName: string; punch: PunchState; punchAction: (state: PunchState) => Promise<void>; navigate: (route: Route) => void }) {
+function TodayPage({ tasks, userName, punch, punchAction, navigate }: { tasks: TodayTask[]; userName: string; punch: PunchState; punchAction: (state: PunchState) => Promise<void>; navigate: (route: Route) => void }) {
   const date = new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" }).format(new Date());
   return <div className="page-content">
     <section className="welcome-row">
-      <div><p className="eyebrow">{date}</p><h1>おはようございます、{userName}さん</h1><p>今日の作業は3件です。安全確認が必要な作業があります。</p></div>
+      <div><p className="eyebrow">{date}</p><h1>おはようございます、{userName}さん</h1><p>今日の作業は{tasks.length}件です。{tasks.some((task) => task.status === "safety_check") && "安全確認が必要な作業があります。"}</p></div>
       <button className="primary-action desktop-only" onClick={() => navigate("journal")}><Icon name="record"/>日誌をつける</button>
     </section>
 
@@ -179,10 +212,10 @@ function TodayPage({ userName, punch, punchAction, navigate }: { userName: strin
     <div className="content-grid">
       <section className="task-section" aria-labelledby="tasks-title">
         <div className="section-head"><div><span className="section-kicker">MY TASKS</span><h2 id="tasks-title">今日の作業</h2></div><button className="text-link">すべて見る</button></div>
-        <div className="task-list">{tasks.map((task, index) => <article className={`task-card ${index === 2 ? "needs-check" : ""}`} key={task.id}>
-          <div className="task-time"><strong>{task.time}</strong><span>{task.status}</span></div>
+        <div className="task-list">{tasks.length === 0 && <p className="empty-list">今日の作業は登録されていません。</p>}{tasks.map((task) => <article className={`task-card ${task.status === "safety_check" ? "needs-check" : ""}`} key={task.id}>
+          <div className="task-time"><strong>{task.time}</strong><span>{{ next: "次の作業", today: "今日", safety_check: "要安全確認", completed: "完了", cancelled: "中止" }[task.status]}</span></div>
           <div className="task-main"><h3>{task.work}</h3><p>{task.field}<span aria-hidden="true">・</span>{task.crop}</p></div>
-          {index === 2 ? <button className="task-button warning-button" onClick={() => navigate("pesticide")}><Icon name="warning"/>安全確認</button> : <button className="task-button" onClick={() => navigate("journal")}>記録する</button>}
+          {task.status === "safety_check" ? <button className="task-button warning-button" onClick={() => navigate("pesticide")}><Icon name="warning"/>安全確認</button> : <button className="task-button" onClick={() => navigate("journal")}>記録する</button>}
         </article>)}</div>
       </section>
 
@@ -252,4 +285,4 @@ function PesticidePage({ queue, navigate }: { queue: (kind: "pesticide", payload
 
 function PageBack({ onBack }: { onBack: () => void }) { return <button className="back-button" onClick={onBack}>← 今日の作業へ戻る</button>; }
 function PlaceholderPage({ title, description }: { title: string; description: string }) { return <div className="page-content empty-page"><span className="empty-icon"><Icon name="field"/></span><h1>{title}</h1><p>{description}</p><button className="secondary-action">実装バックログを見る</button></div>; }
-function MorePage({ theme, locale }: { theme: Theme; locale: Locale }) { return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{locale === "ja" ? "日本語" : "English"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div></div></div>; }
+function MorePage({ theme, locale, queueCounts }: { theme: Theme; locale: Locale; queueCounts: { rejections: number; conflicts: number } }) { return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{locale === "ja" ? "日本語" : "English"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div><div><span>差し戻しキュー</span><strong>{queueCounts.rejections}件</strong></div><div><span>競合キュー</span><strong>{queueCounts.conflicts}件</strong></div></div></div>; }

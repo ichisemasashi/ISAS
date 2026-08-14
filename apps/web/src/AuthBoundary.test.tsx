@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { AuthBoundary } from "./AuthBoundary";
+import type { MvpGateway } from "./api";
 import type { AuthGateway } from "./auth";
 
 function gateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
@@ -14,11 +15,17 @@ function gateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
   };
 }
 
+const api: MvpGateway = {
+  async getToday() { return { tasks: [], serverTime: new Date().toISOString() }; },
+  async push() { return { results: [] }; }, async pull() { return { changes: [], nextCursor: "0", hasMore: false }; },
+  async getQueues() { return { rejections: [], conflicts: [] }; }, async resolveConflict() { return {}; },
+};
+
 describe("AuthBoundary", () => {
   test("offers BFF login when the session is anonymous", async () => {
     const user = userEvent.setup();
     const auth = gateway();
-    render(<AuthBoundary gateway={auth} />);
+    render(<AuthBoundary gateway={auth} api={api} />);
 
     await user.click(await screen.findByRole("button", { name: "ログインする" }));
 
@@ -44,7 +51,7 @@ describe("AuthBoundary", () => {
       }),
     });
 
-    render(<AuthBoundary gateway={auth} />);
+    render(<AuthBoundary gateway={auth} api={api} />);
 
     expect(await screen.findByRole("heading", { name: /認証 利用者さん/ })).toBeInTheDocument();
     expect(auth.createContext).toHaveBeenCalledWith("tenant-1", "csrf-1", expect.any(AbortSignal));
