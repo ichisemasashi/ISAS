@@ -1,9 +1,12 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { parseCsv } from "./csv.mjs";
+import { mapMigrationRows } from "./migration.mjs";
 
 const MAX_PUSH_BYTES = 1024 * 1024;
 const MAX_BUNDLES = 100;
 const MAX_EVENTS_PER_BUNDLE = 100;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
 
 function json(status, body, correlationId, contentType = "application/json; charset=utf-8") {
@@ -85,6 +88,25 @@ async function readJsonObject(request) {
   return body;
 }
 
+async function readMigrationJob(request) {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("Content-Type") || "")) throw new TypeError("content_type");
+  const declared = Number(request.headers.get("Content-Length") || 0);
+  if (declared > MAX_IMPORT_BYTES) throw new RangeError("import_too_large");
+  const text = await request.text();
+  if (Buffer.byteLength(text) > MAX_IMPORT_BYTES) throw new RangeError("import_too_large");
+  const body = JSON.parse(text || "{}");
+  if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.csv !== "string"
+    || typeof body.dataset !== "string" || typeof body.sourceName !== "string") throw new TypeError("invalid import job");
+  const parsed = parseCsv(body.csv);
+  return {
+    dataset: body.dataset,
+    sourceName: body.sourceName,
+    sourceSha256: createHash("sha256").update(body.csv).digest("hex"),
+    mapping: body.mapping,
+    rows: mapMigrationRows(body.dataset, parsed.headers, parsed.rows, body.mapping),
+  };
+}
+
 async function readAttachment(request) {
   const contentType = (request.headers.get("Content-Type") || "").toLowerCase();
   const declared = Number(request.headers.get("Content-Length") || 0);
@@ -152,6 +174,28 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
 
       if (request.method === "GET" && url.pathname === "/api/v1/inventory") {
         const result = await database.transaction(trusted, (client, canonical) => repository.listInventory(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/migration-jobs") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const idempotencyKey = request.headers.get("Idempotency-Key");
+        if (!idempotencyKey || !/^[A-Za-z0-9._:-]{1,200}$/.test(idempotencyKey)) return problem(400, "invalid_request", "Invalid idempotency key", requestId);
+        const input = await readMigrationJob(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.createMigrationJob(client, canonical ? { ...trusted, authContext: canonical } : trusted, { ...input, idempotencyKey }));
+        return json(201, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/migration-jobs") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.listMigrationJobs(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      const migrationCommitMatch = url.pathname.match(/^\/api\/v1\/migration-jobs\/([^/]+)\/commit$/);
+      if (request.method === "POST" && migrationCommitMatch) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.commitMigrationJob(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(migrationCommitMatch[1]), body));
         return json(200, result, requestId);
       }
 

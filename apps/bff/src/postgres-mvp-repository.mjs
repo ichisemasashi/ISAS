@@ -55,6 +55,43 @@ function validateMasterRelease(input) {
   }
 }
 
+function migrationJobDto(row, rows = undefined) {
+  return {
+    id: row.id, dataset: row.dataset, sourceName: row.source_name, sourceSha256: row.source_sha256,
+    mapping: row.mapping, status: row.status, rowCount: Number(row.row_count), validCount: Number(row.valid_count),
+    duplicateCount: Number(row.duplicate_count), errorCount: Number(row.error_count), version: Number(row.version),
+    createdAt: iso(row.created_at), committedAt: iso(row.committed_at) || null,
+    ...(rows ? { rows: rows.map((item) => ({ lineNumber: item.line_number, status: item.row_status,
+      duplicateKey: item.duplicate_key, errors: item.errors, normalized: item.normalized_data, entityId: item.entity_id || null })) } : {}),
+  };
+}
+
+async function inspectDatabaseDuplicate(client, dataset, value) {
+  if (dataset === "fields") {
+    const result = await client.query("SELECT field_id::text AS id FROM app.field WHERE tenant_id = app.current_tenant_id() AND external_key = $1 AND deleted_at IS NULL", [value.externalKey]);
+    return result.rows[0] ? { status: "duplicate", errors: [] } : { status: "valid", errors: [] };
+  }
+  if (dataset === "journals") {
+    const [duplicate, field] = await Promise.all([
+      client.query("SELECT journal_id::text AS id FROM app.work_journal WHERE tenant_id = app.current_tenant_id() AND external_key = $1", [value.externalKey]),
+      client.query("SELECT field_id::text AS id FROM app.field WHERE tenant_id = app.current_tenant_id() AND external_key = $1 AND deleted_at IS NULL", [value.fieldExternalKey]),
+    ]);
+    if (!field.rows[0]) return { status: "invalid", errors: ["unknown_field_external_key"] };
+    return duplicate.rows[0] ? { status: "duplicate", errors: [] } : { status: "valid", errors: [] };
+  }
+  const reference = await client.query(`SELECT field.field_id::text AS field_id, chemical.chemical_id::text AS chemical_id,
+      summary.summary_id::text AS summary_id
+    FROM app.field field
+    JOIN app.agrochemical chemical ON chemical.tenant_id = field.tenant_id AND chemical.registration_number = $2
+    LEFT JOIN app.pesticide_usage_summary summary
+      ON summary.tenant_id = field.tenant_id AND summary.field_id = field.field_id
+     AND summary.crop_name = $3 AND summary.chemical_id = chemical.chemical_id AND summary.season_year = $4
+    WHERE field.tenant_id = app.current_tenant_id() AND field.external_key = $1 AND field.deleted_at IS NULL
+    ORDER BY chemical.created_at DESC LIMIT 1`, [value.fieldExternalKey, value.registrationNumber, value.cropName, value.seasonYear]);
+  if (!reference.rows[0]) return { status: "invalid", errors: ["unknown_field_or_chemical"] };
+  return reference.rows[0].summary_id ? { status: "duplicate", errors: [] } : { status: "valid", errors: [] };
+}
+
 function pesticideSafety({ chemical, cropName, dilution, appliedOn, plannedHarvestOn, usageCount, now = new Date() }) {
   const reasons = [];
   if (!chemical.current_chemical_id) reasons.push("master_entry_not_current");
@@ -468,12 +505,21 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         client.query(`SELECT chemical_id::text AS id, registration_number, name, active_ingredient,
             applicable_crops, dilution_min, dilution_max, max_uses, preharvest_days, revoked_on
           FROM app.agrochemical WHERE tenant_id = $1::uuid AND release_id = $2::uuid ORDER BY name`, [tenantId, release.rows[0].id]),
-        client.query(`SELECT chemical_id::text AS chemical_id, count(*)::integer AS usage_count,
-            max(applied_on)::text AS last_applied_on
-          FROM app.pesticide_usage
-          WHERE tenant_id = $1::uuid AND field_id = $2::uuid AND crop_name = $3
-            AND extract(year FROM applied_on) = extract(year FROM current_date)
-          GROUP BY chemical_id`, [tenantId, fieldId, field.rows[0].crop_name]),
+        client.query(`WITH combined AS (
+            SELECT chemical_id, count(*)::integer AS usage_count, max(applied_on) AS last_applied_on
+            FROM app.pesticide_usage
+            WHERE tenant_id = $1::uuid AND field_id = $2::uuid AND crop_name = $3
+              AND extract(year FROM applied_on) = extract(year FROM current_date)
+            GROUP BY chemical_id
+            UNION ALL
+            SELECT chemical_id, usage_count, last_applied_on
+            FROM app.pesticide_usage_summary
+            WHERE tenant_id = $1::uuid AND field_id = $2::uuid AND crop_name = $3
+              AND season_year = extract(year FROM current_date)::integer
+          )
+          SELECT chemical_id::text AS chemical_id, sum(usage_count)::integer AS usage_count,
+                 max(last_applied_on)::text AS last_applied_on
+          FROM combined GROUP BY chemical_id`, [tenantId, fieldId, field.rows[0].crop_name]),
         client.query(`SELECT balance.chemical_id::text AS chemical_id, balance.quantity, balance.updated_at
           FROM app.stock_balance balance
           JOIN app.agrochemical chemical ON chemical.tenant_id = balance.tenant_id AND chemical.chemical_id = balance.chemical_id
@@ -553,6 +599,146 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         balances: balances.rows.map((row) => ({ chemicalId: row.chemical_id, name: row.name, registrationNumber: row.registration_number, quantity: Number(row.quantity), updatedAt: iso(row.updated_at) || null })),
         alerts: alerts.rows.map((row) => ({ id: row.id, chemicalId: row.chemical_id, name: row.name, negativeQuantity: Number(row.negative_quantity), triggeringEventId: row.triggering_event_id, status: row.status, createdAt: iso(row.created_at) })),
       };
+    },
+
+    async createMigrationJob(client, trusted, input) {
+      await requireCapability(client, "migration:manage");
+      if (!input || !["fields", "journals", "pesticide_history"].includes(input.dataset)
+        || typeof input.idempotencyKey !== "string" || typeof input.sourceName !== "string" || !input.sourceName.trim()
+        || typeof input.sourceSha256 !== "string" || !/^[0-9a-f]{64}$/.test(input.sourceSha256)
+        || !Array.isArray(input.rows) || input.rows.length > 50000) throw new TypeError("invalid migration job");
+      const tenantId = trusted.authContext.tenantId;
+      const existing = await client.query(`SELECT job_id::text AS id, dataset, source_name, source_sha256, mapping,
+          status, row_count, valid_count, duplicate_count, error_count, version, created_at, committed_at
+        FROM app.migration_job WHERE tenant_id = $1::uuid AND idempotency_key = $2`, [tenantId, input.idempotencyKey]);
+      if (existing.rows[0]) {
+        if (existing.rows[0].source_sha256 !== input.sourceSha256) { const error = new Error("idempotency conflict"); error.code = "idempotency_conflict"; throw error; }
+        const savedRows = await client.query(`SELECT line_number, row_status, duplicate_key, errors,
+            normalized_data, entity_id::text AS entity_id FROM app.migration_row
+          WHERE tenant_id = $1::uuid AND job_id = $2::uuid ORDER BY line_number LIMIT 200`, [tenantId, existing.rows[0].id]);
+        return migrationJobDto(existing.rows[0], savedRows.rows);
+      }
+
+      const inspected = [];
+      for (const row of input.rows) {
+        if (!row || !Number.isInteger(row.lineNumber) || !["valid", "duplicate", "invalid"].includes(row.status)) throw new TypeError("invalid migration row");
+        if (row.status !== "valid") { inspected.push(row); continue; }
+        const databaseResult = await inspectDatabaseDuplicate(client, input.dataset, row.normalized);
+        inspected.push({ ...row, status: databaseResult.status, errors: [...row.errors, ...databaseResult.errors] });
+      }
+      const counts = {
+        valid: inspected.filter((row) => row.status === "valid").length,
+        duplicate: inspected.filter((row) => row.status === "duplicate").length,
+        error: inspected.filter((row) => row.status === "invalid").length,
+      };
+      const jobId = uuid();
+      const status = counts.error ? "needs_review" : "validated";
+      const inserted = await client.query(`INSERT INTO app.migration_job
+        (tenant_id, job_id, idempotency_key, dataset, source_name, source_sha256, mapping, status,
+         row_count, valid_count, duplicate_count, error_count, created_by)
+        VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, app.current_user_id())
+        RETURNING job_id::text AS id, dataset, source_name, source_sha256, mapping, status,
+          row_count, valid_count, duplicate_count, error_count, version, created_at, committed_at`,
+      [tenantId, jobId, input.idempotencyKey, input.dataset, input.sourceName, input.sourceSha256,
+        JSON.stringify(input.mapping), status, inspected.length, counts.valid, counts.duplicate, counts.error]);
+      for (const row of inspected) {
+        await client.query(`INSERT INTO app.migration_row
+          (tenant_id, job_id, line_number, raw_data, normalized_data, row_status, duplicate_key, errors)
+          VALUES ($1::uuid, $2::uuid, $3, $4::jsonb, $5::jsonb, $6, $7, $8::text[])`,
+        [tenantId, jobId, row.lineNumber, JSON.stringify(row.raw), JSON.stringify(row.normalized), row.status, row.duplicateKey, row.errors]);
+      }
+      return migrationJobDto(inserted.rows[0], inspected.slice(0, 200).map((row) => ({ line_number: row.lineNumber,
+        row_status: row.status, duplicate_key: row.duplicateKey, errors: row.errors, normalized_data: row.normalized, entity_id: null })));
+    },
+
+    async listMigrationJobs(client) {
+      await requireCapability(client, "migration:manage");
+      const result = await client.query(`SELECT job_id::text AS id, dataset, source_name, source_sha256, mapping,
+          status, row_count, valid_count, duplicate_count, error_count, version, created_at, committed_at
+        FROM app.migration_job WHERE tenant_id = app.current_tenant_id() ORDER BY created_at DESC LIMIT 100`);
+      return { jobs: result.rows.map((row) => migrationJobDto(row)) };
+    },
+
+    async commitMigrationJob(client, trusted, jobId, input) {
+      if (!isUuid(jobId) || !Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) throw new TypeError("invalid migration commit");
+      await requireCapability(client, "migration:manage");
+      const tenantId = trusted.authContext.tenantId;
+      const locked = await client.query(`SELECT job_id::text AS id, dataset, source_name, source_sha256, mapping,
+          status, row_count, valid_count, duplicate_count, error_count, version, created_at, committed_at
+        FROM app.migration_job WHERE tenant_id = $1::uuid AND job_id = $2::uuid FOR UPDATE`, [tenantId, jobId]);
+      const job = locked.rows[0];
+      if (!job) throw new TypeError("unknown migration job");
+      if (Number(job.version) !== input.expectedVersion) { const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = Number(job.version); throw error; }
+      if (job.status === "committed") return migrationJobDto(job);
+      if (job.status !== "validated" || Number(job.error_count) > 0) throw new TypeError("migration job is not committable");
+      await client.query("UPDATE app.migration_job SET status = 'committing', version = version + 1 WHERE tenant_id = $1::uuid AND job_id = $2::uuid", [tenantId, jobId]);
+      const sourceRows = await client.query(`SELECT line_number, normalized_data FROM app.migration_row
+        WHERE tenant_id = $1::uuid AND job_id = $2::uuid AND row_status = 'valid' ORDER BY line_number`, [tenantId, jobId]);
+      let committed = 0;
+      let concurrentDuplicates = 0;
+      for (const source of sourceRows.rows) {
+        const value = source.normalized_data;
+        let inserted;
+        if (job.dataset === "fields") {
+          const entityId = uuid();
+          inserted = await client.query(`INSERT INTO app.field
+            (tenant_id, field_id, field_group_id, external_key, name, crop_name, timezone, geom, import_job_id, import_source_row)
+            VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7,
+              ST_Multi(ST_GeomFromText($8, 4326)), $9::uuid, $10)
+            ON CONFLICT (tenant_id, external_key) WHERE external_key IS NOT NULL AND deleted_at IS NULL DO NOTHING
+            RETURNING field_id::text AS id`, [tenantId, entityId, value.fieldGroupId, value.externalKey, value.name,
+            value.cropName || null, value.timezone, value.geometryWkt, jobId, source.line_number]);
+        } else if (job.dataset === "journals") {
+          const entityId = uuid();
+          inserted = await client.query(`INSERT INTO app.work_journal
+            (tenant_id, journal_id, field_id, field_group_id, worker_user_id, external_key, body,
+             status, import_job_id, import_source_row)
+            SELECT $1::uuid, $2::uuid, field_id, field_group_id, $3::uuid, $4,
+              jsonb_build_object('field', name, 'workType', $5::text, 'workedOn', $6::text,
+                'startedAt', $7::text, 'endedAt', $8::text, 'memo', $9::text),
+              'approved', $10::uuid, $11
+            FROM app.field WHERE tenant_id = $1::uuid AND external_key = $12 AND deleted_at IS NULL
+            ON CONFLICT (tenant_id, external_key) WHERE external_key IS NOT NULL DO NOTHING
+            RETURNING journal_id::text AS id`, [tenantId, entityId, value.workerUserId, value.externalKey, value.workType,
+            value.workedOn, value.startedAt, value.endedAt, value.memo, jobId, source.line_number, value.fieldExternalKey]);
+        } else {
+          const entityId = uuid();
+          inserted = await client.query(`INSERT INTO app.pesticide_usage_summary
+            (tenant_id, summary_id, field_id, field_group_id, crop_name, chemical_id, season_year,
+             usage_count, last_applied_on, import_job_id, import_source_row)
+            SELECT $1::uuid, $2::uuid, field.field_id, field.field_group_id, $3, chemical.chemical_id,
+              $4, $5, $6::date, $7::uuid, $8
+            FROM app.field field JOIN app.agrochemical chemical
+              ON chemical.tenant_id = field.tenant_id AND chemical.registration_number = $9
+            WHERE field.tenant_id = $1::uuid AND field.external_key = $10 AND field.deleted_at IS NULL
+            ORDER BY chemical.created_at DESC LIMIT 1
+            ON CONFLICT (tenant_id, field_id, crop_name, chemical_id, season_year) DO NOTHING
+            RETURNING summary_id::text AS id`, [tenantId, entityId, value.cropName, value.seasonYear,
+            value.usageCount, value.lastAppliedOn, jobId, source.line_number, value.registrationNumber, value.fieldExternalKey]);
+        }
+        const entityId = inserted.rows[0]?.id;
+        if (entityId) {
+          committed += 1;
+          await client.query(`UPDATE app.migration_row SET row_status = 'committed', entity_id = $4::uuid
+            WHERE tenant_id = $1::uuid AND job_id = $2::uuid AND line_number = $3`, [tenantId, jobId, source.line_number, entityId]);
+          await client.query(`INSERT INTO app.sync_change
+            (tenant_id, priority, entity_type, operation, entity_id, data)
+            VALUES ($1::uuid, 1, $2, 'upsert', $3::uuid, jsonb_build_object('importJobId', $4::text, 'sourceRow', $5::integer))`,
+          [tenantId, job.dataset === "fields" ? "field" : job.dataset === "journals" ? "journal" : "pesticide_history", entityId, jobId, source.line_number]);
+        } else {
+          concurrentDuplicates += 1;
+          await client.query(`UPDATE app.migration_row SET row_status = 'duplicate', errors = array_append(errors, 'duplicate_at_commit')
+            WHERE tenant_id = $1::uuid AND job_id = $2::uuid AND line_number = $3`, [tenantId, jobId, source.line_number]);
+        }
+      }
+      const completed = await client.query(`UPDATE app.migration_job
+        SET status = 'committed', committed_at = clock_timestamp(), version = version + 1,
+            valid_count = $3, duplicate_count = duplicate_count + $4
+        WHERE tenant_id = $1::uuid AND job_id = $2::uuid
+        RETURNING job_id::text AS id, dataset, source_name, source_sha256, mapping, status,
+          row_count, valid_count, duplicate_count, error_count, version, created_at, committed_at`,
+      [tenantId, jobId, committed, concurrentDuplicates]);
+      return migrationJobDto(completed.rows[0]);
     },
 
     async pushBundle(client, trusted, bundle) {

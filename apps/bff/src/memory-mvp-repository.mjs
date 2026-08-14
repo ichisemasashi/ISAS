@@ -25,6 +25,7 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   const pesticideUsages = [];
   const pesticideAlerts = [];
   const stockAlerts = [];
+  const migrationJobs = [];
 
   const database = {
     async transaction(_trusted, operation) { return operation({}); },
@@ -119,6 +120,40 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
         quantity: inventoryEvents.filter((item) => item.chemicalId === chemical.id).reduce((sum, item) => sum + item.quantityDelta, 0), updatedAt: null,
       }));
       return { balances, alerts: clone(stockAlerts.filter((item) => item.tenantId === trusted.authContext.tenantId && item.status === "pending")) };
+    },
+
+    async createMigrationJob(_client, trusted, input) {
+      if (!trusted.authContext.capabilities.includes("migration:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      const existing = migrationJobs.find((item) => item.tenantId === trusted.authContext.tenantId && item.idempotencyKey === input.idempotencyKey);
+      if (existing) {
+        if (existing.sourceSha256 !== input.sourceSha256) { const error = new Error("idempotency conflict"); error.code = "idempotency_conflict"; throw error; }
+        return clone(existing);
+      }
+      const rows = input.rows.map((row) => clone(row));
+      const job = { id: `0198a6c0-0000-7000-8000-${String(migrationJobs.length + 1).padStart(12, "0")}`,
+        tenantId: trusted.authContext.tenantId, idempotencyKey: input.idempotencyKey, dataset: input.dataset,
+        sourceName: input.sourceName, sourceSha256: input.sourceSha256, mapping: clone(input.mapping),
+        status: rows.some((row) => row.status === "invalid") ? "needs_review" : "validated",
+        rowCount: rows.length, validCount: rows.filter((row) => row.status === "valid").length,
+        duplicateCount: rows.filter((row) => row.status === "duplicate").length,
+        errorCount: rows.filter((row) => row.status === "invalid").length, version: 1,
+        createdAt: new Date().toISOString(), committedAt: null, rows };
+      migrationJobs.push(job); return clone(job);
+    },
+
+    async listMigrationJobs(_client, trusted) {
+      if (!trusted.authContext.capabilities.includes("migration:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      return { jobs: clone(migrationJobs.filter((item) => item.tenantId === trusted.authContext.tenantId).map(({ rows: _rows, ...item }) => item)) };
+    },
+
+    async commitMigrationJob(_client, trusted, jobId, input) {
+      if (!trusted.authContext.capabilities.includes("migration:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      const job = migrationJobs.find((item) => item.id === jobId && item.tenantId === trusted.authContext.tenantId);
+      if (!job || job.status !== "validated") throw new TypeError("migration job is not committable");
+      if (job.version !== input.expectedVersion) { const error = new Error("version conflict"); error.code = "version_conflict"; error.currentVersion = job.version; throw error; }
+      job.status = "committed"; job.version += 2; job.committedAt = new Date().toISOString();
+      for (const row of job.rows) if (row.status === "valid") row.status = "committed";
+      return clone(job);
     },
 
     async pushBundle(_client, trusted, bundle) {
@@ -229,5 +264,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments, journals, revisions, chemicals, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts } };
+  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments, journals, revisions, chemicals, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs } };
 }

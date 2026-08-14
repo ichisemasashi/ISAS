@@ -218,4 +218,40 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(resolved.alerts.length, 0);
     assert.equal(fx.state.inventoryEvents.length, 2);
   });
+
+  test("stages mapped CSV rows, reports duplicates and commits only a validated migration job", async () => {
+    const fx = fixture(["migration:manage"]);
+    const create = await fx.handle(fx.request("/api/v1/migration-jobs", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1", "Idempotency-Key": "fields-20260814" },
+      body: JSON.stringify({ dataset: "fields", sourceName: "fields.csv",
+        csv: "code,name,group,wkt\nF-001,北圃場,f1111111-1111-7111-8111-111111111111,\"POLYGON((140 38,141 38,141 39,140 38))\"\nF-001,重複圃場,f1111111-1111-7111-8111-111111111111,\"POLYGON((140 38,141 38,141 39,140 38))\"\n",
+        mapping: { externalKey: "code", name: "name", fieldGroupId: "group", geometryWkt: "wkt" } }),
+    }));
+    assert.equal(create.status, 201);
+    const job = await create.json();
+    assert.equal(job.status, "validated");
+    assert.equal(job.validCount, 1);
+    assert.equal(job.duplicateCount, 1);
+    const committed = await fx.handle(fx.request(`/api/v1/migration-jobs/${job.id}/commit`, {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" }, body: JSON.stringify({ expectedVersion: 1 }),
+    })).then((response) => response.json());
+    assert.equal(committed.status, "committed");
+    assert.equal(fx.state.migrationJobs[0].rows[0].status, "committed");
+  });
+
+  test("keeps invalid migration rows for correction and refuses commit", async () => {
+    const fx = fixture(["migration:manage"]);
+    const create = await fx.handle(fx.request("/api/v1/migration-jobs", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1", "Idempotency-Key": "journals-invalid" },
+      body: JSON.stringify({ dataset: "journals", sourceName: "journals.csv", csv: "id,field,worker,work,date,start,end\nJ1,,bad,除草,2026/08/14,10:00,09:00\n",
+        mapping: { externalKey: "id", fieldExternalKey: "field", workerUserId: "worker", workType: "work", workedOn: "date", startedAt: "start", endedAt: "end" } }),
+    }));
+    const job = await create.json();
+    assert.equal(job.status, "needs_review");
+    assert.equal(job.rows[0].errors.includes("required:fieldExternalKey"), true);
+    const commit = await fx.handle(fx.request(`/api/v1/migration-jobs/${job.id}/commit`, {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" }, body: JSON.stringify({ expectedVersion: 1 }),
+    }));
+    assert.equal(commit.status, 400);
+  });
 });
