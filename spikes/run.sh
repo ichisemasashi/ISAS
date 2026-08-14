@@ -20,8 +20,8 @@ if [[ "$TARGET" == "S7" ]]; then
   run_s7
   exit 0
 fi
-if [[ "$TARGET" != "S1" && "$TARGET" != "S2" && "$TARGET" != "S2LOAD" && "$TARGET" != "S4" && "$TARGET" != "S5" && "$TARGET" != "S8" && "$TARGET" != "all" ]]; then
-  echo "unknown target: $TARGET (S1|S2|S2LOAD|S4|S5|S7|S8|all)"
+if [[ "$TARGET" != "S1" && "$TARGET" != "S2" && "$TARGET" != "S2LOAD" && "$TARGET" != "S4" && "$TARGET" != "S5" && "$TARGET" != "S7LOAD" && "$TARGET" != "S8" && "$TARGET" != "all" ]]; then
+  echo "unknown target: $TARGET (S1|S2|S2LOAD|S4|S5|S7|S7LOAD|S8|all)"
   exit 1
 fi
 
@@ -62,6 +62,7 @@ case "$TARGET" in
   S2LOAD) run_one S2_spatial_concurrency.sql; python3 load/run_load.py S2 ;;
   S4) run_one S4_rls_scale.sql ;;
   S5) run_one S5_audit_chain.sql; python3 load/run_load.py S5 ;;
+  S7LOAD) run_one S7_integration.sql; python3 load/S7_integration_load.py ;;
   S8) run_one S8_auth_context.sql ;;
   all)
      run_one S1_partition_rls_unique.sql

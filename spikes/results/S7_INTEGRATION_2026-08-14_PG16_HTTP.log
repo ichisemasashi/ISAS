@@ -1,0 +1,35 @@
+S7 real DB / HTTP-TCP integrated load
+Date: 2026-08-14 Asia/Tokyo
+Environment: PostgreSQL 16.4 (Docker arm64), Python stdlib HTTP servers, psql 14.23 clients
+Command: ./run.sh S7LOAD
+
+Topology:
+- 2 independent HTTP server processes on 127.0.0.1:18087/18088
+- 8 persistent PostgreSQL TCP connections per process (16 total)
+- PostgreSQL FORCE RLS on receipt, change and attachment tables
+- actual HTTP/TCP loopback traffic
+- link behavior emulated in the server: 100ms RTT and 10Mbps serialization
+
+Acceptance:
+- push and pull p95 <= 500ms
+- idempotent retry creates no duplicate change
+- one day: 50 x 1KiB records plus 10 x 100KB photos completes <= 300s
+- no request errors and receipt/change/attachment counts remain exact
+
+S7-push: PASS
+requests=1200 accepted=1000 duplicate=200 p50=116.61ms p95=135.73ms
+
+S7-pull: PASS
+pages=8 p50=69.57ms p95=78.05ms
+
+S7-day-sync: PASS
+records=50 photos=10 photo_bytes=1000000 elapsed=0.632s budget=300s
+
+S7-integrity: PASS
+receipts=1050 changes=1050 attachments=10 duplicate_changes=0
+
+Conclusion and evidence boundary:
+- The reference state-machine result is now backed by a real PostgreSQL/FORCE-RLS and real HTTP/TCP integration path with two server processes.
+- Idempotency, change-log insertion and attachment persistence remained consistent under concurrent requests.
+- The 100ms/10Mbps link is deterministic application-level emulation over loopback, not a carrier/Wi-Fi field trace. Production deployment must rerun the same scenario through its ingress, TLS, pooler, object store and chosen regional network before release acceptance.
+- Payload shape is a load-spike contract, not the production BFF HTTP runtime; the production runtime/pool driver remains a separate M6 integration item.
