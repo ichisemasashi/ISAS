@@ -5,14 +5,12 @@ import type { FieldCollection, FieldFeature, MvpGateway } from "./api";
 import type { AppAuthorization } from "./auth";
 import type { StorageGateway } from "./storage";
 
-const MAP_STYLE: StyleSpecification = {
+const OFFLINE_STYLE: StyleSpecification = {
   version: 8,
-  sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenStreetMap contributors" } },
-  layers: [
-    { id: "background", type: "background", paint: { "background-color": "#e8eee7" } },
-    { id: "osm", type: "raster", source: "osm", minzoom: 0, maxzoom: 19 },
-  ],
+  sources: {},
+  layers: [{ id: "background", type: "background", paint: { "background-color": "#e8eee7" } }],
 };
+const MAP_STYLE: string | StyleSpecification = import.meta.env.VITE_MAP_STYLE_URL || OFFLINE_STYLE;
 
 export function geometryBounds(fields: FieldFeature[]): [[number, number], [number, number]] | null {
   const points = fields.flatMap((field) => field.geometry.coordinates.flatMap((polygon) => polygon.flatMap((ring) => ring)));

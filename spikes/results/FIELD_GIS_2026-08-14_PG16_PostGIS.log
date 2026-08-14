@@ -1,0 +1,23 @@
+Field GIS vertical slice PostgreSQL integration verification
+Date: 2026-08-14
+PostgreSQL: 16.4 (aarch64)
+PostGIS: 3.4.3
+
+Applied after S8 and MVP migrations:
+  apps/bff/migrations/0003_field_gis.sql
+  apps/bff/migrations/verify/0003_field_gis_verify.sql
+
+Results: 4 groups PASS
+  1. field list visibility is tenant AND assigned field group
+  2. PostGIS bbox search returns only assigned fields
+  3. same bbox cannot cross tenant boundary
+  4. generated PostGIS geography area is available
+
+Application regression:
+  BFF: 29 tests PASS; node --check PASS
+  Web: 18 tests PASS; TypeScript + Vite production build PASS
+  MapLibre GL JS: 6.3.0, loaded as a route-specific ESM chunk
+
+Operational boundary:
+  Assigned field GeoJSON is cached in IndexedDB and rendered offline.
+  Basemap style/tiles are deployment configuration (VITE_MAP_STYLE_URL) and are not included in the offline cache.
