@@ -165,6 +165,23 @@ describe("ISAS MVP field flow", () => {
     await waitFor(() => expect(createWorkInstruction).toHaveBeenCalled());
   });
 
+  test("shows the same work instructions in the timeline and opens their mobile-list journal flow", async () => {
+    const user = userEvent.setup();
+    const store = memoryStorage();
+    const instructions = [{ id: "instruction-schedule-1", fieldId: "0198a6c0-0000-7000-8000-000000000101", fieldGroupId: "f1111111-1111-7111-8111-111111111111", fieldName: "北圃場", cropName: "つや姫", title: "水位確認", workType: "水管理", details: "取水口を確認", scheduledStart: "2026-08-14T00:00:00Z", scheduledEnd: "2026-08-16T03:00:00Z", priority: 1, status: "issued" as const, version: 1, assignment: { id: "assignment-1", assigneeUserId: "22222222-2222-7222-8222-222222222222", version: 1 } }];
+    renderApp(store.gateway, demoAuthorization, { ...api, async getWorkInstructions() { return { instructions }; } });
+    expect(await screen.findByText("水位確認")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "すべて見る" }));
+    expect(screen.getByRole("heading", { name: "作業予定" })).toBeInTheDocument();
+    const bar = screen.getByRole("button", { name: /水位確認、.*から/ });
+    await user.click(bar);
+    expect(screen.getByText("予定開始")).toBeInTheDocument();
+    expect(screen.getByText("予定終了")).toBeInTheDocument();
+    expect(screen.getByText("22222222-2222-7222-8222-222222222222")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "この作業の日誌をつける" }));
+    expect(screen.getByRole("heading", { name: "作業日誌をつける" })).toBeInTheDocument();
+  });
+
   test("maps CSV columns, reports duplicates and commits a validated import", async () => {
     const user = userEvent.setup();
     const store = memoryStorage();

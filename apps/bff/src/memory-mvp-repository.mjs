@@ -51,7 +51,8 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
 
     async createWorkInstruction(_client, trusted, input) {
       if (!trusted.authContext.capabilities.includes("instruction:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
-      const item = { ...clone(input), id: `instruction-${instructions.length + 1}`, tenantId: trusted.authContext.tenantId, version: 1, status: "issued", assignment: { id: `assignment-${instructions.length + 1}`, assigneeUserId: input.assigneeUserId, version: 1 } };
+      const field = fields.find((candidate) => candidate.id === input.fieldId && (!candidate.tenantId || candidate.tenantId === trusted.authContext.tenantId));
+      const item = { ...clone(input), fieldName: field?.properties.name || null, cropName: field?.properties.cropName || null, id: `instruction-${instructions.length + 1}`, tenantId: trusted.authContext.tenantId, version: 1, status: "issued", assignment: { id: `assignment-${instructions.length + 1}`, assigneeUserId: input.assigneeUserId, version: 1 } };
       instructions.push(item); return clone(item);
     },
 

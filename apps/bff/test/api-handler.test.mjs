@@ -113,6 +113,7 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(create.status, 201);
     const instruction = await create.json();
     assert.equal(instruction.assignment.assigneeUserId, "22222222-2222-7222-8222-222222222222");
+    assert.equal(instruction.fieldName, "北圃場");
 
     const reassign = await fx.handle(fx.request(`/api/v1/work-instructions/${instruction.id}/assignment`, {
       method: "PATCH",

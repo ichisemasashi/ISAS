@@ -5,22 +5,24 @@ import { browserStorage, type JournalDraft, type StorageGateway } from "./storag
 import { synchronize } from "./sync";
 import { evaluatePesticideUse, safetyReasonLabel } from "./pesticide-safety";
 import { DataMigrationPanel } from "./DataMigrationPanel";
+import { SchedulePage } from "./SchedulePage";
 
 const FieldsPage = lazy(() => import("./FieldsPage").then((module) => ({ default: module.FieldsPage })));
 
-type Route = "today" | "journal" | "pesticide" | "inventory" | "fields" | "more";
+type Route = "today" | "schedule" | "journal" | "pesticide" | "inventory" | "fields" | "more";
 type PunchState = "idle" | "working" | "break";
 type Theme = "field" | "dark" | "contrast";
 type Locale = "ja" | "en";
 
 const copy = {
-  ja: { today: "今日", record: "記録", fields: "圃場", more: "その他", online: "オンライン", offline: "オフライン" },
-  en: { today: "Today", record: "Record", fields: "Fields", more: "More", online: "Online", offline: "Offline" },
+  ja: { today: "今日", schedule: "予定", record: "記録", fields: "圃場", more: "その他", online: "オンライン", offline: "オフライン" },
+  en: { today: "Today", schedule: "Schedule", record: "Record", fields: "Fields", more: "More", online: "Online", offline: "Offline" },
 } as const;
 
-const Icon = ({ name }: { name: "today" | "record" | "field" | "more" | "sync" | "clock" | "leaf" | "warning" }) => {
+const Icon = ({ name }: { name: "today" | "schedule" | "record" | "field" | "more" | "sync" | "clock" | "leaf" | "warning" }) => {
   const paths = {
     today: <><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18"/></>,
+    schedule: <><path d="M4 5h16v14H4zM4 10h16M9 5v14M14 5v14"/><path d="M10 13h3v3h-3z"/></>,
     record: <><path d="M5 3h11l3 3v15H5z"/><path d="M8 12h8m-8 4h6M15 3v4h4"/></>,
     field: <><path d="M3 18c5-5 8-9 9-15 5 2 8 6 9 12-6 0-12 2-18 3Z"/><path d="M6 20c3-5 7-8 12-11"/></>,
     more: <><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
@@ -61,6 +63,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
   const [tasks, setTasks] = useState<TodayTask[]>([]);
   const [instructions, setInstructions] = useState<WorkInstruction[]>([]);
   const [selectedInstructionId, setSelectedInstructionId] = useState<string | undefined>();
+  const [selectedScheduleInstructionId, setSelectedScheduleInstructionId] = useState<string | undefined>();
   const [selectedJournalId, setSelectedJournalId] = useState<string | undefined>();
   const [journals, setJournals] = useState<JournalEntry[]>([]);
   const [syncRevision, setSyncRevision] = useState(0);
@@ -186,7 +189,13 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
 
         <main id="main" tabIndex={-1}>
           {authorization.accessMode !== "online" && <div className={`authorization-banner mode-${authorization.accessMode}`} role="status"><strong>{authorization.accessMode === "offline-write" ? "オフライン認証の猶予中" : authorization.accessMode === "offline-read" ? "読取専用へ移行しました" : "認証の猶予が終了しました"}</strong><span>{authorization.accessMode === "offline-write" ? "現場記録だけを端末へ保存できます。機微操作は利用できません。" : authorization.accessMode === "offline-read" ? "下書きは保持されますが、再認証まで記録を確定できません。" : "未同期データを保持しています。オンライン復帰後に再認証してください。"}</span></div>}
-          {route === "today" && <TodayPage tasks={tasks} instructions={instructions} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} recordInstruction={(id) => { setSelectedJournalId(undefined); setSelectedInstructionId(id || undefined); navigate("journal"); }} />}
+          {route === "today" && <TodayPage tasks={tasks} instructions={instructions} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} openSchedule={(id) => { setSelectedScheduleInstructionId(id || undefined); navigate("schedule"); }} recordInstruction={(id) => { setSelectedJournalId(undefined); setSelectedInstructionId(id || undefined); navigate("journal"); }} />}
+          {route === "schedule" && <SchedulePage
+            instructions={instructions}
+            selectedId={selectedScheduleInstructionId}
+            onSelect={setSelectedScheduleInstructionId}
+            recordInstruction={(id) => { setSelectedJournalId(undefined); setSelectedInstructionId(id); navigate("journal"); }}
+          />}
           {route === "journal" && <JournalPage api={api} csrfToken={csrfToken} authorization={authorization} online={online} instructionId={selectedInstructionId} journalId={selectedJournalId} storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
           {route === "pesticide" && <PesticidePage api={api} authorization={authorization} online={online} storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
           {route === "inventory" && <InventoryPage api={api} authorization={authorization} online={online} storage={storage} queue={queue} navigate={navigate} setNotice={setNotice} />}
@@ -213,8 +222,9 @@ function Brand({ compact = false }: { compact?: boolean }) {
 }
 
 function Nav({ route, locale, navigate }: { route: Route; locale: Locale; navigate: (route: Route) => void }) {
-  const items: { route: Route; label: string; icon: "today" | "record" | "field" | "more" }[] = [
+  const items: { route: Route; label: string; icon: "today" | "schedule" | "record" | "field" | "more" }[] = [
     { route: "today", label: copy[locale].today, icon: "today" },
+    { route: "schedule", label: copy[locale].schedule, icon: "schedule" },
     { route: "journal", label: copy[locale].record, icon: "record" },
     { route: "fields", label: copy[locale].fields, icon: "field" },
     { route: "more", label: copy[locale].more, icon: "more" },
@@ -222,7 +232,7 @@ function Nav({ route, locale, navigate }: { route: Route; locale: Locale; naviga
   return <div className="nav-items">{items.map((item) => <button key={item.route} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined} onClick={() => navigate(item.route)}><Icon name={item.icon}/><span>{item.label}</span></button>)}</div>;
 }
 
-function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate, recordInstruction }: { tasks: TodayTask[]; instructions: WorkInstruction[]; userName: string; punch: PunchState; punchAction: (state: PunchState) => Promise<void>; navigate: (route: Route) => void; recordInstruction: (id: string) => void }) {
+function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate, openSchedule, recordInstruction }: { tasks: TodayTask[]; instructions: WorkInstruction[]; userName: string; punch: PunchState; punchAction: (state: PunchState) => Promise<void>; navigate: (route: Route) => void; openSchedule: (id: string) => void; recordInstruction: (id: string) => void }) {
   const date = new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" }).format(new Date());
   return <div className="page-content">
     <section className="welcome-row">
@@ -242,11 +252,11 @@ function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate
 
     <div className="content-grid">
       <section className="task-section" aria-labelledby="tasks-title">
-        <div className="section-head"><div><span className="section-kicker">MY TASKS</span><h2 id="tasks-title">今日の作業</h2></div><button className="text-link">すべて見る</button></div>
+        <div className="section-head"><div><span className="section-kicker">MY TASKS</span><h2 id="tasks-title">今日の作業</h2></div><button className="text-link" onClick={() => openSchedule("")}>すべて見る</button></div>
         <div className="task-list">{instructions.length === 0 && tasks.length === 0 && <p className="empty-list">今日の作業は登録されていません。</p>}{instructions.map((instruction) => <article className="task-card" key={instruction.id}>
           <div className="task-time"><strong>{new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date(instruction.scheduledStart))}</strong><span>{{ issued: "未着手", in_progress: "進行中", completed: "完了", cancelled: "中止" }[instruction.status]}</span></div>
           <div className="task-main"><h3>{instruction.title}</h3><p>{instruction.fieldName}<span aria-hidden="true">・</span>{instruction.cropName || instruction.workType}</p>{instruction.details && <small>{instruction.details}</small>}</div>
-          <button className="task-button" onClick={() => recordInstruction(instruction.id)}>記録する</button>
+          <div className="task-actions"><button className="task-button" onClick={() => openSchedule(instruction.id)}>予定</button><button className="task-button" onClick={() => recordInstruction(instruction.id)}>記録する</button></div>
         </article>)}{instructions.length === 0 && tasks.map((task) => <article className={`task-card ${task.status === "safety_check" ? "needs-check" : ""}`} key={task.id}>
           <div className="task-time"><strong>{task.time}</strong><span>{{ next: "次の作業", today: "今日", safety_check: "要安全確認", completed: "完了", cancelled: "中止" }[task.status]}</span></div>
           <div className="task-main"><h3>{task.work}</h3><p>{task.field}<span aria-hidden="true">・</span>{task.crop}</p></div>

@@ -322,13 +322,16 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           RETURNING *
         )
         SELECT instruction.instruction_id::text AS id, instruction.field_id::text AS field_id,
-               instruction.field_group_id::text AS field_group_id, instruction.title, instruction.work_type,
+               instruction.field_group_id::text AS field_group_id, field.name AS field_name, field.crop_name,
+               instruction.title, instruction.work_type,
                instruction.details, instruction.scheduled_start, instruction.scheduled_end,
                instruction.priority, instruction.status, instruction.version,
                assignment.assignment_id::text AS assignment_id,
                assignment.assignee_user_id::text AS assignee_user_id,
                assignment.version AS assignment_version
-        FROM inserted_instruction instruction CROSS JOIN inserted_assignment assignment`,
+        FROM inserted_instruction instruction
+        JOIN app.field field ON field.tenant_id = instruction.tenant_id AND field.field_id = instruction.field_id
+        CROSS JOIN inserted_assignment assignment`,
       [tenantId, instructionId, input.fieldId, input.title, input.workType, input.details || "", input.scheduledStart, input.scheduledEnd, input.priority ?? 1, assignmentId, input.assigneeUserId]);
       if (!result.rows[0]) throw new TypeError("unknown field");
       return workInstructionDto(result.rows[0]);
