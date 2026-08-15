@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "profileId": "jp-prod-aws-tokyo-v1",
+  "deploymentId": "isas-jp-prod-01",
+  "jurisdiction": "JP",
+  "cloud": "aws",
+  "accountAlias": "isas-jp-prod",
+  "region": "ap-northeast-1",
+  "availabilityZoneCount": 3,
+  "crossRegionReplication": false,
+  "compute": { "service": "ecs-fargate", "minimumBffTasks": 3 },
+  "database": {
+    "service": "rds-postgresql-multi-az-db-cluster",
+    "postgresVersion": "16.14R2",
+    "postgisVersion": "3.4.6",
+    "pooler": "pgbouncer-1.24.x"
+  },
+  "identity": { "service": "cognito-user-pools", "primaryFactor": "webauthn-passkey", "fallbackMfa": "totp" },
+  "sessionStore": { "service": "dynamodb-standard", "globalTable": false, "table": "isas-jp-prod-session-context" },
+  "objectStore": { "service": "s3-standard", "public": false, "versioning": true, "crossRegionReplication": false },
+  "queue": { "service": "sqs-standard", "deadLetterQueues": true },
+  "keys": { "service": "kms", "regionality": "single-region", "customerManaged": true },
+  "cicd": { "service": "github-actions", "awsAuthentication": "iam-oidc", "longLivedKeys": false },
+  "artifactRegistry": { "service": "ecr-private", "immutableTags": true, "enhancedScanning": true },
+  "telemetry": { "collector": "adot", "store": ["cloudwatch", "xray"], "region": "ap-northeast-1" },
+  "backup": { "dailyRestorePoints": 30, "weeklyRestorePoints": 12, "region": "ap-northeast-1" },
+  "productionReleaseStatus": "BLOCKED_PENDING_IAC_AND_ACCEPTANCE"
+}
