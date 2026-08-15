@@ -96,11 +96,14 @@ export const browserStorage: StorageGateway = {
   getCursor: (tenantId, scope, priority) => inTransaction("cursors", "readonly", async ({ cursors }) => (await idbRequest<{ cursor: string } | undefined>(cursors.get(cursorKey(tenantId, scope, priority))))?.cursor || null),
   setCursor: (tenantId, scope, priority, cursor) => inTransaction("cursors", "readwrite", ({ cursors }) => idbRequest(cursors.put({ key: cursorKey(tenantId, scope, priority), tenantId, scope, priority, cursor })).then(() => undefined)),
   applyChanges: (tenantId, scope, changes) => inTransaction("changes", "readwrite", ({ changes: store }) => { for (const change of changes) store.put({ ...change, key: `${tenantId}:${scope}:${change.type}:${change.entityId || change.eventUuid || change.serverSeq}`, tenantId, scope }); }),
-  purgeScope: (tenantId, scope) => inTransaction(["cursors", "changes", "fields", "pesticideBootstrap"], "readwrite", async ({ cursors, changes, fields, pesticideBootstrap }) => {
+  purgeScope: (tenantId, scope) => inTransaction(["cursors", "changes", "fields", "pesticideBootstrap", "today", "journalBootstrap", "serverQueues"], "readwrite", async ({ cursors, changes, fields, pesticideBootstrap, today, journalBootstrap, serverQueues }) => {
     for (const row of await idbRequest<Array<{ key: string; tenantId: string; scope: string }>>(cursors.getAll())) if (row.tenantId === tenantId && row.scope === scope) cursors.delete(row.key);
     for (const row of await idbRequest<Array<{ key: string; tenantId: string; scope: string }>>(changes.getAll())) if (row.tenantId === tenantId && row.scope === scope) changes.delete(row.key);
     for (const row of await idbRequest<Array<{ key: string; tenantId: string; properties: { fieldGroupId: string } }>>(fields.getAll())) if (row.tenantId === tenantId && row.properties.fieldGroupId === scope) fields.delete(row.key);
     for (const row of await idbRequest<Array<{ key: string; tenantId: string; value: PesticideBootstrap }>>(pesticideBootstrap.getAll())) if (row.tenantId === tenantId && row.value.field.fieldGroupId === scope) pesticideBootstrap.delete(row.key);
+    today.delete(tenantId);
+    journalBootstrap.delete(tenantId);
+    serverQueues.delete(tenantId);
   }),
   saveToday: (tenantId, tasks) => inTransaction("today", "readwrite", ({ today }) => idbRequest(today.put({ tenantId, tasks, savedAt: new Date().toISOString() })).then(() => undefined)),
   getToday: (tenantId) => inTransaction("today", "readonly", async ({ today }) => (await idbRequest<{ tasks: TodayTask[] } | undefined>(today.get(tenantId)))?.tasks || []),

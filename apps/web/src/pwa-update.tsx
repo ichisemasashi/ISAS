@@ -3,15 +3,18 @@ import { browserStorage, type StorageGateway } from "./storage";
 
 export type PwaUpdateResult =
   | { status: "blocked"; pending: number }
+  | { status: "blocked-input"; pending: 0 }
   | { status: "activating"; pending: 0 };
 
 export async function activateWaitingWorker(
   registration: Pick<ServiceWorkerRegistration, "waiting">,
   storage: Pick<StorageGateway, "pendingCount">,
   beforeActivate: () => void = () => undefined,
+  hasOpenForm: () => boolean = () => typeof document !== "undefined" && document.querySelector("form") !== null,
 ): Promise<PwaUpdateResult> {
   const pending = await storage.pendingCount();
   if (pending > 0) return { status: "blocked", pending };
+  if (hasOpenForm()) return { status: "blocked-input", pending: 0 };
   if (!registration.waiting) throw new Error("待機中の更新が見つかりません");
   beforeActivate();
   registration.waiting.postMessage({ type: "SKIP_WAITING" });
@@ -47,6 +50,7 @@ export function observeWaitingWorker(
 export function PwaUpdateGate({ storage = browserStorage }: { storage?: Pick<StorageGateway, "pendingCount"> }) {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const [blocked, setBlocked] = useState<number | null>(null);
+  const [blockedInput, setBlockedInput] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -74,6 +78,10 @@ export function PwaUpdateGate({ storage = browserStorage }: { storage?: Pick<Sto
         setBlocked(result.pending);
         return;
       }
+      if (result.status === "blocked-input") {
+        setBlockedInput(true);
+        return;
+      }
     } catch {
       setError("更新を適用できませんでした。時間をおいて再度お試しください。");
     }
@@ -84,7 +92,7 @@ export function PwaUpdateGate({ storage = browserStorage }: { storage?: Pick<Sto
     <aside className="pwa-update" role="status" aria-live="polite">
       {registration && <>
         <strong>アプリの更新があります</strong>
-        <span>{blocked === null ? "未同期データがないことを確認してから安全に更新します。" : `未同期${blocked}件を送信するまで更新を保留します。`}</span>
+        <span>{blockedInput ? "入力中の画面があります。保存または記録して「今日」へ戻ってから更新してください。" : blocked === null ? "未同期データがないことを確認してから安全に更新します。" : `未同期${blocked}件を送信するまで更新を保留します。`}</span>
         <button type="button" onClick={() => void update()}>更新する</button>
       </>}
       {error && <span>{error}</span>}

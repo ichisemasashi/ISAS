@@ -9,7 +9,13 @@ async function pullChannel(api: MvpGateway, storage: StorageGateway, authorizati
   try {
     let next = cursor;
     do { const page = await api.pull(authorization.context.contextId, scope, priority, next, signal); await storage.applyChanges(tenantId, scope, page.changes); await storage.setCursor(tenantId, scope, priority, page.nextCursor); next = page.nextCursor; if (!page.hasMore) break; } while (!signal?.aborted);
-  } catch (error) { if (error instanceof ApiProblem && error.type === "scope_revoked") await storage.purgeScope(tenantId, scope); throw error; }
+  } catch (error) {
+    if (error instanceof ApiProblem && error.type === "scope_revoked") {
+      const revokedScope = typeof error.body.purgeScope === "string" && error.body.purgeScope ? error.body.purgeScope : scope;
+      await storage.purgeScope(tenantId, revokedScope);
+    }
+    throw error;
+  }
 }
 export async function synchronize({ api, storage, authorization, csrfToken, signal }: { api: MvpGateway; storage: StorageGateway; authorization: AppAuthorization; csrfToken: string; signal?: AbortSignal }): Promise<SyncSummary> {
   const tenantId = authorization.context.tenantId; let accepted = 0; let rejected = 0; let conflicts = 0;

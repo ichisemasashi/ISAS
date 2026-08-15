@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { App, durationLabel } from "./App";
-import type { MvpGateway } from "./api";
+import { ApiProblem, type MvpGateway } from "./api";
 import { demoAuthorization } from "./auth";
 import type { JournalDraft, OutboxRecord, StorageGateway } from "./storage";
 
@@ -88,6 +88,18 @@ describe("ISAS MVP field flow", () => {
     expect(await screen.findByText("水位を確認")).toBeInTheDocument();
     expect(screen.getByText("未同期 0件")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "作業を始める" })).toBeEnabled();
+  });
+
+  test("locks the UI and hides tenant data after a scope revocation", async () => {
+    const store = memoryStorage();
+    const revokedApi: MvpGateway = {
+      ...api,
+      async pull() { throw new ApiProblem(409, "scope_revoked", { purgeScope: "f1111111-1111-7111-8111-111111111111" }); },
+    };
+    renderApp(store.gateway, demoAuthorization, revokedApi);
+    expect(await screen.findByRole("heading", { name: "再認証が必要です" })).toBeInTheDocument();
+    expect(screen.queryByText("水位を確認")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "作業を始める" })).not.toBeInTheDocument();
   });
 
   test("queues a punch and a journal without requiring a network response", async () => {

@@ -71,7 +71,9 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
   const [syncRevision, setSyncRevision] = useState(0);
   const [queueCounts, setQueueCounts] = useState({ rejections: 0, conflicts: 0 });
   const [queues, setQueues] = useState<QueueSnapshot>({ rejections: [], conflicts: [] });
-  const canWrite = authorization.accessMode === "online" || authorization.accessMode === "offline-write";
+  const [reauthenticationRequired, setReauthenticationRequired] = useState(false);
+  const effectiveAccessMode = reauthenticationRequired ? "locked" : authorization.accessMode;
+  const canWrite = effectiveAccessMode === "online" || effectiveAccessMode === "offline-write";
 
   useEffect(() => {
     storage.pendingCount(authorization.context.tenantId).then(setPending).catch(() => setNotice("端末保存を確認できませんでした。もう一度お試しください。"));
@@ -110,18 +112,27 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
   }, [api, authorization.context.contextId, online]);
 
   useEffect(() => {
-    if (!online || authorization.accessMode !== "online") return;
+    if (!online || authorization.accessMode !== "online" || reauthenticationRequired) return;
     const controller = new AbortController();
     synchronize({ api, storage, authorization, csrfToken, signal: controller.signal }).then(async (summary) => {
       if (controller.signal.aborted) return;
       setPending(summary.pending);
       setQueues(summary.queues);
       setQueueCounts(await storage.queueCounts(authorization.context.tenantId));
-      if (summary.reauthenticationRequired) setNotice("権限が変更されました。未送信データは保持しています。再認証してください。");
+      if (summary.reauthenticationRequired) {
+        setReauthenticationRequired(true);
+        setTasks([]);
+        setInstructions([]);
+        setJournals([]);
+        setQueues({ rejections: [], conflicts: [] });
+        setQueueCounts({ rejections: 0, conflicts: 0 });
+        setRoute("today");
+        setNotice("権限が変更されました。未送信データは保持しています。再認証してください。");
+      }
       else if (summary.rejected || summary.conflicts) setNotice(`同期結果を確認してください。差し戻し${summary.rejected}件、競合${summary.conflicts}件です。`);
     }).catch(() => { if (!controller.signal.aborted) setNotice("同期できませんでした。未送信データは端末に保持し、オンライン時に再試行します。"); });
     return () => controller.abort();
-  }, [api, authorization, csrfToken, online, storage, syncRevision]);
+  }, [api, authorization, csrfToken, online, reauthenticationRequired, storage, syncRevision]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -136,7 +147,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
 
   const queue = async (kind: "journal" | "pesticide" | "punch" | "stock", payload: Record<string, unknown>, scope?: string): Promise<boolean> => {
     if (!canWrite) {
-      setNotice(authorization.accessMode === "offline-read" ? "オフライン猶予の読取期間です。再認証するまで新しい記録は確定できません。" : "認証の猶予が終了しました。再認証後に記録を再開できます。");
+      setNotice(effectiveAccessMode === "offline-read" ? "オフライン猶予の読取期間です。再認証するまで新しい記録は確定できません。" : "認証の猶予が終了しました。再認証後に記録を再開できます。");
       return false;
     }
     const id = eventId();
@@ -178,7 +189,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
           <div className="mobile-brand"><Brand compact /></div>
           <div className="system-status" aria-live="polite">
             <span className={`connection ${online ? "is-online" : "is-offline"}`}><span className="status-dot" />{online ? copy[locale].online : copy[locale].offline}</span>
-            <span className={`auth-state mode-${authorization.accessMode}`}>{authorization.accessMode === "online" ? "認証済み" : authorization.accessMode === "offline-write" ? "オフライン記録可" : authorization.accessMode === "offline-read" ? "オフライン読取のみ" : "再認証が必要"}</span>
+            <span className={`auth-state mode-${effectiveAccessMode}`}>{effectiveAccessMode === "online" ? "認証済み" : effectiveAccessMode === "offline-write" ? "オフライン記録可" : effectiveAccessMode === "offline-read" ? "オフライン読取のみ" : "再認証が必要"}</span>
             <span className="sync-state"><Icon name="sync" />未同期 {pending}件</span>
           </div>
           <div className="preferences">
@@ -190,7 +201,8 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
         </header>
 
         <main id="main" tabIndex={-1}>
-          {authorization.accessMode !== "online" && <div className={`authorization-banner mode-${authorization.accessMode}`} role="status"><strong>{authorization.accessMode === "offline-write" ? "オフライン認証の猶予中" : authorization.accessMode === "offline-read" ? "読取専用へ移行しました" : "認証の猶予が終了しました"}</strong><span>{authorization.accessMode === "offline-write" ? "現場記録だけを端末へ保存できます。機微操作は利用できません。" : authorization.accessMode === "offline-read" ? "下書きは保持されますが、再認証まで記録を確定できません。" : "未同期データを保持しています。オンライン復帰後に再認証してください。"}</span></div>}
+          {effectiveAccessMode !== "online" && <div className={`authorization-banner mode-${effectiveAccessMode}`} role="status"><strong>{effectiveAccessMode === "offline-write" ? "オフライン認証の猶予中" : effectiveAccessMode === "offline-read" ? "読取専用へ移行しました" : "認証の猶予が終了しました"}</strong><span>{effectiveAccessMode === "offline-write" ? "現場記録だけを端末へ保存できます。機微操作は利用できません。" : effectiveAccessMode === "offline-read" ? "下書きは保持されますが、再認証まで記録を確定できません。" : "未同期データを保持しています。オンライン復帰後に再認証してください。"}</span></div>}
+          {reauthenticationRequired ? <section className="empty-page"><div className="empty-icon"><Icon name="warning"/></div><h1>再認証が必要です</h1><p>担当範囲または権限が変更されました。旧い参照データは端末から削除しました。未同期データは保持しています。</p><button className="primary-action" onClick={() => window.location.reload()}>再認証する</button></section> : <>
           {route === "today" && <TodayPage tasks={tasks} instructions={instructions} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} openSchedule={(id) => { setSelectedScheduleInstructionId(id || undefined); navigate("schedule"); }} recordInstruction={(id) => { setSelectedJournalId(undefined); setSelectedInstructionId(id || undefined); navigate("journal"); }} />}
           {route === "schedule" && <SchedulePage
             instructions={instructions}
@@ -210,6 +222,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
             setQueueCounts(await storage.queueCounts(authorization.context.tenantId));
             setNotice("競合の裁定を保存しました。");
           }} />}
+          </>}
         </main>
       </div>
 

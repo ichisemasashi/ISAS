@@ -54,7 +54,7 @@ export function AuthBoundary({ gateway, api }: { gateway: AuthGateway; api: MvpG
     }
   };
 
-  return <App api={api} csrfToken={state.bootstrap.csrfToken} authorization={authorization} tenants={state.bootstrap.tenants} onTenantChange={switchTenant} />;
+  return <App key={state.context.contextId} api={api} csrfToken={state.bootstrap.csrfToken} authorization={authorization} tenants={state.bootstrap.tenants} onTenantChange={switchTenant} />;
 }
 
 function AuthScreen({ title, description, actionLabel, onAction, busy = false }: { title: string; description: string; actionLabel?: string; onAction?: () => void; busy?: boolean }) {

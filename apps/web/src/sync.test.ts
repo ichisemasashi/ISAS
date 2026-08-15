@@ -39,3 +39,11 @@ test("marks journal photos ready after journal acceptance before uploading them"
   expect(fx.api.uploadJournalAttachment).toHaveBeenCalledWith(demoAuthorization.context.contextId, "csrf-1", attachment, undefined);
   expect(fx.storage.acknowledgeAttachment).toHaveBeenCalledWith("photo-1");
 });
+
+test("purges the server-declared field scope after revocation", async () => {
+  const fx = fixture();
+  vi.mocked(fx.api.pull).mockRejectedValueOnce(new (await import("./api")).ApiProblem(409, "scope_revoked", { purgeScope: "field-group-revoked" }));
+  const summary = await synchronize({ api: fx.api, storage: fx.storage, authorization: demoAuthorization, csrfToken: "csrf-1" });
+  expect(summary.reauthenticationRequired).toBe(true);
+  expect(fx.storage.purgeScope).toHaveBeenCalledWith(demoAuthorization.context.tenantId, "field-group-revoked");
+});
