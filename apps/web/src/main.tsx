@@ -30,7 +30,7 @@ function UtModeBanner() {
     setOffline(next);
     window.dispatchEvent(new Event(next ? "offline" : "online"));
   };
-  return <div className={`ut-mode-banner ${offline ? "is-offline" : ""}`} role="note"><span>ユーザビリティ試験用・架空データです。実際の農薬散布には使用しないでください。</span><button type="button" onClick={toggle}>{offline ? "進行役：通信を戻す" : "進行役：圏外を模擬"}</button></div>;
+  return <div className={`ut-mode-banner ${offline ? "is-offline" : ""}`} role="note"><span>ユーザビリティ試験用・架空データです。実際の農薬散布には使用しないでください。</span><button type="button" tabIndex={-1} onClick={toggle}>{offline ? "進行役：通信を戻す" : "進行役：圏外を模擬"}</button></div>;
 }
 
 void renderApplication();
