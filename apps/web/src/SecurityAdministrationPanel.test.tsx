@@ -37,3 +37,13 @@ test("submits tenant role, field-group scope and expiry as a pending change", as
   await user.click(screen.getByRole("button", { name: "二人承認へ申請" }));
   await waitFor(() => expect(requestSecurityChange).toHaveBeenCalledWith("context-1", "csrf-1", expect.objectContaining({ changeType: "user_change", proposedState: expect.objectContaining({ fieldGroupIds: ["44444444-4444-7444-8444-444444444444"] }) })));
 });
+
+test("runs the step-up protected attachment reconciliation from the administrator screen", async () => {
+  const reconcileAttachmentStorage = vi.fn(async () => ({ scanned: 4, taggedOrphans: 1, finalized: 1, quarantined: 0 }));
+  const setNotice = vi.fn();
+  const api = { getSecurityAdministration: vi.fn(async () => ({ ...snapshot, changeRequests: [] })), getPesticideMasterReviews: vi.fn(async () => ({ reviews: [] })), reconcileAttachmentStorage } as unknown as MvpGateway;
+  render(<SecurityAdministrationPanel api={api} contextId="context-1" csrfToken="csrf-1" actorUserId={actor} capabilities={["security:manage"]} online setNotice={setNotice}/>);
+  await userEvent.click(await screen.findByRole("button", { name: "写真ストレージを照合" }));
+  await waitFor(() => expect(reconcileAttachmentStorage).toHaveBeenCalledWith("context-1", "csrf-1"));
+  expect(setNotice).toHaveBeenCalledWith(expect.stringContaining("孤立候補 1"));
+});

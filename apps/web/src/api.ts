@@ -52,6 +52,7 @@ export interface MvpGateway {
   commitMigrationJob(contextId: string, csrfToken: string, jobId: string, expectedVersion: number, signal?: AbortSignal): Promise<MigrationJob>;
   exportCsv(contextId: string, dataset: ExportDataset, search?: { from?: string; to?: string }, signal?: AbortSignal): Promise<{ blob: Blob; fileName: string }>;
   getSecurityAdministration(contextId: string, signal?: AbortSignal): Promise<SecuritySnapshot>;
+  reconcileAttachmentStorage(contextId: string, csrfToken: string, signal?: AbortSignal): Promise<{ scanned: number; taggedOrphans: number; finalized: number; quarantined: number }>;
   requestSecurityChange(contextId: string, csrfToken: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ requestId: string; status: string }>;
   decideSecurityChange(contextId: string, csrfToken: string, requestId: string, input: { decision: "approve" | "reject"; note: string }, signal?: AbortSignal): Promise<Record<string, unknown>>;
   createPrivacyRequest(contextId: string, csrfToken: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ requestId: string; status: string }>;
@@ -104,6 +105,7 @@ export function createMvpGateway(fetcher: FetchLike = fetch): MvpGateway {
       return { blob: await response.blob(), fileName: matched?.[1] || `${dataset}.csv` };
     },
     getSecurityAdministration: (contextId, signal) => fetcher("/api/v1/security-admin", { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<SecuritySnapshot>(response)),
+    reconcileAttachmentStorage: (contextId, csrfToken, signal) => fetcher("/api/v1/security-admin/attachment-storage/reconcile", { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "X-CSRF-Token": csrfToken }), signal }).then((response) => result<{ scanned: number; taggedOrphans: number; finalized: number; quarantined: number }>(response)),
     requestSecurityChange: (contextId, csrfToken, input, signal) => fetcher("/api/v1/security-admin/change-requests", { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<{ requestId: string; status: string }>(response)),
     decideSecurityChange: (contextId, csrfToken, requestId, input, signal) => fetcher(`/api/v1/security-admin/change-requests/${encodeURIComponent(requestId)}/decision`, { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<Record<string, unknown>>(response)),
     createPrivacyRequest: (contextId, csrfToken, input, signal) => fetcher("/api/v1/security-admin/privacy-requests", { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<{ requestId: string; status: string }>(response)),

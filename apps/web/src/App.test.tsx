@@ -80,6 +80,7 @@ const api: MvpGateway = {
   async commitMigrationJob() { throw new Error("not used"); },
   async exportCsv() { throw new Error("not used"); },
   async getSecurityAdministration() { return { users: [], roles: [], changeRequests: [], breakGlassGrants: [], privacyRequests: [] }; },
+  async reconcileAttachmentStorage() { return { scanned: 0, taggedOrphans: 0, finalized: 0, quarantined: 0 }; },
   async requestSecurityChange() { return { requestId: "request-1", status: "pending" }; }, async decideSecurityChange() { return {}; },
   async createPrivacyRequest() { return { requestId: "privacy-1", status: "submitted" }; }, async transitionPrivacyRequest() { return {}; },
   async getPesticideMasterReviews() { return { reviews: [] }; }, async requestPesticideMasterReview() { throw new Error("not used"); }, async decidePesticideMasterReview() { return {}; },

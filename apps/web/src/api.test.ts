@@ -34,4 +34,11 @@ describe("MVP REST gateway", () => {
     await createMvpGateway(fetcher).requestSecurityChange("context-1", "csrf-1", { changeType: "user_revoke" });
     expect(fetcher).toHaveBeenCalledWith("/api/v1/security-admin/change-requests", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-1", "X-ISAS-Context": "context-1" }) }));
   });
+
+  test("reconciles private attachment storage with CSRF and AuthContext", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ scanned: 3, taggedOrphans: 1, finalized: 1, quarantined: 0 }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const api = createMvpGateway(fetcher);
+    await api.reconcileAttachmentStorage("context-1", "csrf-1");
+    expect(fetcher).toHaveBeenCalledWith("/api/v1/security-admin/attachment-storage/reconcile", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-1", "X-ISAS-Context": "context-1" }) }));
+  });
 });
