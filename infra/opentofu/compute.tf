@@ -21,13 +21,16 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
 
 data "aws_iam_policy_document" "ecs_execution_secrets" {
   statement {
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = concat([for secret in aws_secretsmanager_secret.database_role : secret.arn], [aws_rds_cluster.core.master_user_secret[0].secret_arn])
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = concat(
+      [for secret in aws_secretsmanager_secret.database_role : secret.arn],
+      [aws_rds_cluster.core.master_user_secret[0].secret_arn, aws_secretsmanager_secret.actor_pseudonym.arn],
+    )
   }
 
   statement {
     actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.data.arn]
+    resources = [aws_kms_key.data.arn, aws_kms_key.token_session.arn]
   }
 }
 
@@ -46,12 +49,15 @@ data "aws_iam_policy_document" "application" {
   statement {
     actions = [
       "dynamodb:DeleteItem",
+      "dynamodb:BatchWriteItem",
+      "dynamodb:DescribeTable",
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:Query",
+      "dynamodb:TransactWriteItems",
       "dynamodb:UpdateItem",
     ]
-    resources = [aws_dynamodb_table.session_context.arn]
+    resources = [aws_dynamodb_table.session_context.arn, "${aws_dynamodb_table.session_context.arn}/index/*"]
   }
 
   statement {
@@ -75,15 +81,16 @@ data "aws_iam_policy_document" "application" {
 
   statement {
     actions = [
-      "cognito-idp:GlobalSignOut",
-      "cognito-idp:RevokeToken",
+      "cognito-idp:AdminUserGlobalSignOut",
+      "cognito-idp:DescribeUserPoolClient",
+      "cognito-idp:GetUserPoolMfaConfig",
     ]
     resources = [aws_cognito_user_pool.main.arn]
   }
 
   statement {
     actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
-    resources = [aws_kms_key.data.arn, aws_kms_key.object.arn, aws_kms_key.queue.arn]
+    resources = [aws_kms_key.data.arn, aws_kms_key.token_session.arn, aws_kms_key.object.arn, aws_kms_key.queue.arn]
   }
 
   statement {
@@ -218,6 +225,10 @@ resource "aws_ecs_task_definition" "bff" {
         { name = "OBJECT_BUCKET", value = aws_s3_bucket.private_objects.id },
         { name = "COGNITO_USER_POOL_ID", value = aws_cognito_user_pool.main.id },
         { name = "COGNITO_CLIENT_ID", value = aws_cognito_user_pool_client.web.id },
+        { name = "COGNITO_ISSUER", value = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main.id}" },
+        { name = "COGNITO_MANAGED_LOGIN_ORIGIN", value = "https://${var.cognito_custom_domain}" },
+        { name = "AUTHORIZATION_REVOCATION_QUEUE_URL", value = aws_sqs_queue.main["authorization-revocation"].url },
+        { name = "TOKEN_SESSION_KMS_KEY_ARN", value = aws_kms_key.token_session.arn },
         ], flatten([
           for pool_class in sort(tolist(local.db_roles)) : [
             { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_HOST", value = "pgbouncer-${pool_class}.${local.name}.internal" },
@@ -227,12 +238,15 @@ resource "aws_ecs_task_definition" "bff" {
           ]
         ])
       )
-      secrets = flatten([
-        for pool_class in sort(tolist(local.db_roles)) : [
-          { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_USER", valueFrom = "${aws_secretsmanager_secret.database_role[pool_class].arn}:username::" },
-          { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_PASSWORD", valueFrom = "${aws_secretsmanager_secret.database_role[pool_class].arn}:password::" },
-        ]
-      ])
+      secrets = concat(
+        flatten([
+          for pool_class in sort(tolist(local.db_roles)) : [
+            { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_USER", valueFrom = "${aws_secretsmanager_secret.database_role[pool_class].arn}:username::" },
+            { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_PASSWORD", valueFrom = "${aws_secretsmanager_secret.database_role[pool_class].arn}:password::" },
+          ]
+        ]),
+        [{ name = "ACTOR_PSEUDONYM_KEY", valueFrom = aws_secretsmanager_secret.actor_pseudonym.arn }],
+      )
       readonlyRootFilesystem = true
       healthCheck = {
         command     = ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))\""]

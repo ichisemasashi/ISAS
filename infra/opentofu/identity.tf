@@ -80,7 +80,7 @@ resource "aws_cognito_user_pool_client" "web" {
   generate_secret                      = false
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
-  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+  allowed_oauth_scopes                 = ["openid", "email", "profile", "aws.cognito.signin.user.admin"]
   supported_identity_providers         = ["COGNITO"]
   callback_urls                        = ["https://${var.domain_name}/api/bff/callback"]
   logout_urls                          = ["https://${var.domain_name}/"]

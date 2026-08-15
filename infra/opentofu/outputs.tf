@@ -51,16 +51,20 @@ output "deployment_manifest" {
       ops_evidence_bucket   = aws_s3_bucket.ops_evidence.id
       backup_vault          = aws_backup_vault.main.name
     }
+    secrets = {
+      actor_pseudonym_secret_arn = aws_secretsmanager_secret.actor_pseudonym.arn
+    }
     queues = { for key, queue in aws_sqs_queue.main : key => {
       url     = queue.url
       dlq_arn = aws_sqs_queue.dead_letter[key].arn
     } }
     kms_key_arns = {
-      data    = aws_kms_key.data.arn
-      object  = aws_kms_key.object.arn
-      queue   = aws_kms_key.queue.arn
-      backup  = aws_kms_key.backup.arn
-      signing = aws_kms_key.signing.arn
+      data          = aws_kms_key.data.arn
+      token_session = aws_kms_key.token_session.arn
+      object        = aws_kms_key.object.arn
+      queue         = aws_kms_key.queue.arn
+      backup        = aws_kms_key.backup.arn
+      signing       = aws_kms_key.signing.arn
     }
     operations = {
       dashboard_name = aws_cloudwatch_dashboard.overview.dashboard_name

@@ -28,16 +28,16 @@
 - scope失効：server指定field groupがpurgeされ、作業ボタン／旧tenant参照／権限付き画面が再認証まで表示されないことを確認。
 - PWA更新：未同期あり、formあり、双方なしの3状態で`SKIP_WAITING`送信可否を確認。
 - 性能波及：S2合格SQLがrepository単体試験と追加migration検証の双方に存在することを確認。
-- セキュリティ回帰：BFF 50件、Web 36件、本番buildを通過。
+- セキュリティ回帰：BFF 74件、Web 36件、本番buildを通過。
 
 新規High 0件、Medium 0件。今回実装差分は収束とする。
 
 ## 未クローズのリリース阻害条件
 
-以下は今回のコード不整合ではなく、実配備対象が未接続であるため検証不能なHighリスクである。完了扱いにはしない。
+以下は今回のコード不整合ではなく、実AWS stagingまたは実端末・実利用者で未検証のHighリスクである。完了扱いにはしない。
 
-1. 実IdP／MFA／step-up、永続session/context store、失効event配信。
-2. TLS ingress、SPA CSP／Trusted Types、rate limit、実HTTP runtime／pooler。
+1. 実Cognito userによるMFA／step-up／回復／複数browser logoutと、実DynamoDB／SQS停止を含む失効event配信。
+2. TLS ingress、SPA CSP／Trusted Types、rate limit、実HTTP runtime／poolerのAWS staging受入。
 3. S9端末暗号化・暗号消去・offline recovery・鍵交代とiOS／Android S6実機。
 4. object storage、画像scan／再encode、輸出期限・step-up・監査。
 5. 本番相当データによる地図描画、一覧1万件、ガント500件、写真保存、ログインのend-to-end p95。

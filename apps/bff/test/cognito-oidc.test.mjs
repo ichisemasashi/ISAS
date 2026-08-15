@@ -29,13 +29,13 @@ function fixture(overrides = {}) {
   const cognito = { async send(command) {
     calls.push(command);
     if (command.constructor.name === "GetUserAuthFactorsCommand") return { ConfiguredUserAuthFactors: ["WEB_AUTHN"] };
-    if (command.constructor.name === "DescribeUserPoolCommand") return overrides.weakPool
-      ? { UserPool: { MfaConfiguration: "OPTIONAL", WebAuthnConfiguration: { UserVerification: "preferred" } } }
-      : { UserPool: { MfaConfiguration: "ON", WebAuthnConfiguration: { UserVerification: "required", FactorConfiguration: "MULTI_FACTOR_WITH_USER_VERIFICATION" } } };
+    if (command.constructor.name === "GetUserPoolMfaConfigCommand") return overrides.weakPool
+      ? { MfaConfiguration: "OPTIONAL", SoftwareTokenMfaConfiguration: { Enabled: false }, WebAuthnConfiguration: { UserVerification: "preferred" } }
+      : { MfaConfiguration: "ON", SoftwareTokenMfaConfiguration: { Enabled: true }, WebAuthnConfiguration: { UserVerification: "required", FactorConfiguration: "MULTI_FACTOR_WITH_USER_VERIFICATION" } };
     if (command.constructor.name === "DescribeUserPoolClientCommand") return { UserPoolClient: {
       AllowedOAuthFlows: ["code"],
-      AllowedOAuthScopes: ["openid", "profile", "email", "aws.cognito.signin.user.admin"],
-      EnableTokenRevocation: true,
+      AllowedOAuthScopes: overrides.weakClient ? ["openid"] : ["openid", "profile", "email", "aws.cognito.signin.user.admin"],
+      EnableTokenRevocation: !overrides.weakClient,
       GenerateSecret: false,
       CallbackURLs: ["https://isas.example/api/bff/callback"],
       LogoutURLs: ["https://isas.example/"],
@@ -53,7 +53,7 @@ function fixture(overrides = {}) {
     clock: () => NOW,
     jwtVerifier: async () => ({ payload: claims }),
     fetchImpl: async () => new Response(JSON.stringify({
-      id_token: "id-token", access_token: accessToken, refresh_token: "refresh-token",
+      id_token: "id-token", access_token: accessToken, refresh_token: "refresh-token", token_type: "Bearer",
     }), { status: 200, headers: { "Content-Type": "application/json" } }),
     enqueueRevocation: async (event) => queued.push(event),
   });
@@ -104,4 +104,8 @@ test("startup read-back refuses a Cognito configuration weaker than mandatory MF
   await assert.rejects(() => bad.provider.startupCheck({
     redirectUri: "https://isas.example/api/bff/callback", logoutUri: "https://isas.example/",
   }), /MFA must be ON/);
+  const weakClient = fixture({ weakClient: true });
+  await assert.rejects(() => weakClient.provider.startupCheck({
+    redirectUri: "https://isas.example/api/bff/callback", logoutUri: "https://isas.example/",
+  }), /required scopes and token revocation/);
 });

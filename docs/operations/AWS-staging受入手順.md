@@ -10,7 +10,7 @@ OpenTofu root module、migration image、実AWS証跡collector、18項目の判�
 2. `backend.hcl`と`staging.tfvars`へ台帳の実値を設定する。
 3. `tofu fmt -check -recursive`、`tofu validate`、保存planを実行し、二人でplanを承認する。
 4. `tofu apply staging.tfplan`を実行する。
-5. PgBouncer用の5 DB role secretを個別に投入する。
+5. PgBouncer用の5 DB role secretと、32 byte以上のactor pseudonym keyを個別に投入する。
 6. `collect-staging-evidence.sh`を実行する。collectorがmigration taskを起動し、AuthContextを`0000`として最初に適用する。
 7. backup recovery pointとSNS subscriptionが未準備なら、初回backup完了と通知確認後にcollectorを再実行する。
 8. `STAGING ACCEPTANCE: PASS (18/18)`、証跡digest、実行者、確認者、日時をchange ticketへ記録する。
@@ -22,9 +22,9 @@ OpenTofu root module、migration image、実AWS証跡collector、18項目の判�
 |---|---|
 | 配備境界 | account／東京region、3 AZ ID、single-region KMS |
 | database | RDS PostgreSQL Multi-AZ 3 member、PostgreSQL／PostGIS |
-| migration | version `0000` AuthContext、owner／FORCE RLS／監査trigger本番SQL |
+| migration | version `0000`〜`0010`、owner／FORCE RLS／監査trigger／identity runtime関数の本番SQL |
 | runtime | ECS全serviceのdesired=running、全image digest固定 |
-| 認証 | Cognito MFA／advanced security |
+| 認証 | Cognito MFA／advanced security／WebAuthn user verification／public code flow／必須scope／token revocation |
 | data | DynamoDB SSE／PITR、S3非公開／versioning／KMS、SQS DLQ／KMS |
 | 運用 | 完了backup recovery point、alarm＋確認済みSNS購読 |
 | 入口／CI | HTTPS health、WAF association、GitHub staging Environment OIDC |

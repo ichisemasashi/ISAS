@@ -63,6 +63,14 @@ resource "aws_kms_key" "data" {
   policy                  = data.aws_iam_policy_document.kms.json
 }
 
+resource "aws_kms_key" "token_session" {
+  description             = "${var.deployment_id} application envelope encryption for tokens and sessions"
+  enable_key_rotation     = true
+  multi_region            = false
+  deletion_window_in_days = 30
+  policy                  = data.aws_iam_policy_document.kms.json
+}
+
 resource "aws_kms_key" "object" {
   description             = "${var.deployment_id} private objects"
   enable_key_rotation     = true
@@ -99,6 +107,11 @@ resource "aws_kms_key" "signing" {
 resource "aws_kms_alias" "data" {
   name          = "alias/${local.name}/data"
   target_key_id = aws_kms_key.data.key_id
+}
+
+resource "aws_kms_alias" "token_session" {
+  name          = "alias/${local.name}/token-session"
+  target_key_id = aws_kms_key.token_session.key_id
 }
 
 resource "aws_kms_alias" "object" {

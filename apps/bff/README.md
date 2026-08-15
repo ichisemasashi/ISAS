@@ -1,6 +1,6 @@
 # ISAS BFF core
 
-ADR-0009の同一オリジンBFF境界と、ADR-0007/0008のMVP REST・同期面を実装したコアである。Production runtimeはNode.js HTTP server、graceful shutdown、health probe、`pg` driverによる優先度別poolを提供し、永続ストアとOIDC製品は配備アダプタとして注入する。
+ADR-0009の同一オリジンBFF境界と、ADR-0007/0008のMVP REST・同期面を実装したコアである。Production runtimeはNode.js HTTP server、graceful shutdown、health probe、`pg` driverによる優先度別poolに加え、Cognito OIDC、KMS envelope暗号化、DynamoDB session/context、SQS失効consumerを`runtime-adapters/aws.mjs`で実接続する。
 
 ## Production runtimeの操作
 
@@ -42,16 +42,19 @@ npm run service:stop
 | HTTP/OIDC | `ISAS_PUBLIC_ORIGIN`、任意の`ISAS_OIDC_REDIRECT_URI` | HTTPS exact origin。redirectは同originの`/api/bff/callback`だけ |
 | adapter | `ISAS_RUNTIME_ADAPTER_MODULE` | local module。`createRuntimeAdapters`と全必須methodを起動前に検査 |
 | DB | `ISAS_DB_{P0,AUTH_P1,P1,P2,OPS}_{HOST,PORT,NAME,USER,PASSWORD,SSLMODE}` | productionは5つの異なるPgBouncer endpoint、TLS必須。P1は`app_user` |
+| Cognito | `COGNITO_USER_POOL_ID`、`COGNITO_CLIENT_ID`、`COGNITO_ISSUER`、`COGNITO_MANAGED_LOGIN_ORIGIN` | 東京pool、public code-flow client、allowlist済みHTTPS issuer／managed-login origin |
+| 永続store | `SESSION_TABLE`、`AUTHORIZATION_REVOCATION_QUEUE_URL`、`TOKEN_SESSION_KMS_KEY_ARN` | DynamoDBの`user-index`、SQS DLQ、single-region KMS keyが起動時read-backで有効 |
+| 認証DB secret | `ACTOR_PSEUDONYM_KEY` | 32 byte以上のランダム値。Secrets Managerから注入し、log／planへ出さない |
 
 DBは各classについて上記componentの代わりに`ISAS_DB_<CLASS>_URL`も指定できる。ただしURLをlogや手順書へ貼らない。既定pool上限はP0=8、Auth-P1=12、P1=16、P2=8、Ops=4、statement timeoutは順に3/5/15/30/60秒である。共通調整値は`ISAS_DB_CONNECTION_TIMEOUT_MS`、`ISAS_DB_IDLE_TIMEOUT_MS`、HTTP調整値は`ISAS_REQUEST_TIMEOUT_MS`、`ISAS_HEADERS_TIMEOUT_MS`、`ISAS_KEEP_ALIVE_TIMEOUT_MS`、`ISAS_DRAIN_TIMEOUT_MS`、`ISAS_BODY_LIMIT_BYTES`、`ISAS_READINESS_CACHE_MS`を使う。body上限は最大16MiBで、既定11MiB（10MiB写真とmultipart等の余裕）である。
 
 ## 実装済みの境界
 
-- `GET /api/bff/login`：単回state、nonce、PKCE S256を生成し、同一オリジンの`return_to`だけを保持する。
+- `GET /api/bff/login`：単回state、nonce、PKCE S256を生成し、同一オリジンの`return_to`だけを保持する。`step_up=1`では現在主体を固定し、`prompt=login`と`max_age=0`で再認証する。
 - `GET /api/bff/callback`：ログイン試行を単回消費し、検証済みOIDC主体から内部userを解決して、不透明sessionを発行する。
 - `GET /api/bff/session`：HttpOnly Cookieから利用者と現在の所属候補だけを返す。OIDC tokenは返さない。
 - `POST /api/bff/contexts`：Origin、CSRF、JSONを検証し、現在権限から短TTLのタブ用contextを発行する。
-- `POST /api/bff/logout`：session/contextを失効し、IdP token失効アダプタを呼ぶ。
+- `POST /api/bff/logout`：DynamoDB session/contextを先に失効し、Cognito refresh token revokeとglobal sign-outを行う。SQS停止時は暗号化済みtoken jobをDynamoDBへ耐久退避し、応答headerのmanaged-login logout URLへWebを遷移させる。
 - `createContextResolver`：Cookieと`X-ISAS-Context`の束縛、期限、用途、現在権限を再検証し、業務API／DBアダプタだけが使う信頼済みAuthContextを返す。外部HTTPのuser／role／capabilityヘッダは入力に使わない。
 - `createPostgresAuthContextAdapter`：`app_user`が非所有者・非superuser・非BYPASSRLSであることを確認し、`app_private.validate_auth_context(...)`が返した正規値だけを同一トランザクション内のGUCへ注入する。DBはBFFが提示したtenant／scope／capability集合を拒否または縮小できるが、主体・書込tenantの置換や集合の拡張はできない。業務コールバックには`SET`、`set_config`、transaction制御を許さない制限付きclientを渡し、ROLLBACK失敗時は接続を破棄する。
 - `createIsasApplication`：上記BFFと実pool向けPostgreSQL repositoryを同一オリジンへ組み込み、認証で再導出した正規AuthContextだけをRESTへ渡す。
@@ -94,6 +97,7 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0006_journal_review.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0007_pesticide_inventory.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0008_data_migration.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0009_field_bbox_prefilter.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0010_identity_runtime.sql
 ```
 
 旧データを移す場合は、法域内の隔離環境で`backfill/0000_auth_context_v1_stage.sql`を適用し、review済みCSVを`migration_stage`へ`\copy`してから`backfill/0000_auth_context_v1_backfill.sql`を実行する。backfillは全対象userのversionを進めて失効eventを作り、完了時にstaging schemaを削除する。`rollback/0000_auth_context_v1_rollback.sql`は業務表も永続userもない場合だけ成功し、それ以外はdropせず停止する。
@@ -117,22 +121,34 @@ PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
   -f apps/bff/migrations/0007_pesticide_inventory.sql \
   -f apps/bff/migrations/0008_data_migration.sql \
   -f apps/bff/migrations/0009_field_bbox_prefilter.sql \
+  -f apps/bff/migrations/0010_identity_runtime.sql \
   -f apps/bff/migrations/verify/0001_mvp_sync_verify.sql \
   -f apps/bff/migrations/verify/0003_field_gis_verify.sql \
   -f apps/bff/migrations/verify/0006_work_journal_verify.sql \
   -f apps/bff/migrations/verify/0007_pesticide_inventory_verify.sql \
   -f apps/bff/migrations/verify/0008_data_migration_verify.sql \
-  -f apps/bff/migrations/verify/0009_field_bbox_prefilter_verify.sql
+  -f apps/bff/migrations/verify/0009_field_bbox_prefilter_verify.sql \
+  -f apps/bff/migrations/verify/0010_identity_runtime_verify.sql
 ```
 
-## アダプタの保証条件
+## AWS production adapterの保証条件
 
-- `identityProvider.authorizationUrl`はallowlist済みissuerの認可endpointだけを返す。
-- `identityProvider.exchangeCode`は認可コード交換に加え、ID Tokenの署名、`iss`、`aud`、`exp`、`nonce`、必要な`azp`と認証強度allowlistを検証し、token setは保存時暗号化済みの値だけを返す。
+- Cognito clientはpublic authorization code flow、PKCE S256、必須scope、token revocationを使う。BFFはJWKSからRS256署名、`iss`、`aud`、`exp`、`token_use`、`nonce`、`at_hash`、`auth_time`を検証し、MFAが`ON`かつpasskey user verificationがMFA要素であることを起動時にread-backする。
+- `GetUserAuthFactors`と`GlobalSignOut`はaccess token、`RevokeToken`はrefresh tokenで認可され、IAM policyへ偽の許可を追加しない。application IAM roleにはpool設定read-backと管理者back-channel logoutだけを最小付与する。
+- password利用者はTOTP、passkey利用者はuser verificationを必須とする。Cognito ID Tokenから個別方式を断定できないため、sessionの強度は誇張せず`mfa`とし、機微操作は10分以内のstep-upを要求する。
+- access／refresh tokenはブラウザへ返さず、KMS `GenerateDataKey(AES_256)`＋AES-256-GCMで暗号化する。AADはdeployment、法域、用途、resource IDへ束縛し、session idle 30分、絶対12時間、context 5分で期限判定する。DynamoDB TTLの非同期削除だけを認可判定に使わない。
 - `users.resolve`は`(issuer, subject)`だけを不変キーとして内部userを解決し、メールによる自動結合をしない。
 - `authorization.listTenants`と`deriveContext`は認証専用DB経路から現在の所属・role・scope・capabilityを導出する。context IDや過去のsnapshotを権限の真実源にしない。
-- `stores`の本番実装はsession ID、state、context IDのハッシュだけをキーとして保存し、絶対期限を持つ。メモリ実装は自動テスト専用であり、本番利用しない。
-- PostgreSQL poolは`app_user`へ直接接続し、`app_private.validate_auth_context(user_id, tenant_id, allowed_tenants, scope_field_groups, caps, employer_subject_users)`を呼べるものとする。この関数の参照DDLは[`spikes/S8_auth_context.sql`](../../spikes/S8_auth_context.sql)にあり、PostgreSQL 16で12群PASS、ADR-0005 v8で採用済み。版管理・永続失効イベント・索引・backfillを含むAuthContext本番migrationへの昇格は残る。
+- session ID、state、context IDはハッシュだけをDynamoDB keyへ使う。単調`authorization_version`のmarkerと`user-index`により、session、context、server offline snapshotを再送安全に削除し、旧versionでの再作成をtransaction guardで拒否する。
+- `0010_identity_runtime.sql`は`auth_role`専用のOIDC主体解決、所属・scope導出、失効outbox lease関数を追加する。関数はNOLOGIN／NOBYPASSRLS owner、固定`search_path`、PUBLIC実行権限なしであり、Auth-P1 poolだけが呼ぶ。
+
+失効queueが受けるmessageは次の3種類である。成功したmessageだけを削除し、重複は単調versionで冪等処理する。`cognito_backchannel_logout`のproducerは管理者の失効transactionと同じ`authorizationVersion`／`eventId`を渡し、Cognito usernameだけを信頼源にしない。
+
+```json
+{"type":"authorization_revoked","eventId":"123","userId":"uuid","authorizationVersion":"8","occurredAt":"2026-08-15T00:00:00Z"}
+{"type":"cognito_token_revoke","tokenSetCiphertext":"kms-envelope-wrapper"}
+{"type":"cognito_backchannel_logout","eventId":"124","userId":"uuid","username":"cognito-username","authorizationVersion":"9","occurredAt":"2026-08-15T00:01:00Z"}
+```
 
 ## 検証
 
@@ -142,4 +158,4 @@ npm test
 npm run check
 ```
 
-2026-08-15時点でBFF 60テスト、Web 36テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群がPASSしている。backfillと安全条件付きrollbackも実DBで確認済みである。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。HTTP runtimeと優先度別PostgreSQL pool driverは実装済みで、具体的なCognito OIDC adapter、DynamoDB session/context store、永続失効consumerは配備adapter側の残件である。
+2026-08-15時点でBFF 74テスト、Web 36テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群＋identity runtimeがPASSしている。backfill、安全条件付きrollback、production owner／FORCE RLS／監査trigger／runtime関数検査も実DBで確認済みである。Cognito／DynamoDB／KMS／SQS adapterは実装済みだが、実AWS stagingへのapplyと受入はcredential・DNS・署名済みimage・課金承認待ちである。

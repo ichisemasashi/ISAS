@@ -145,4 +145,14 @@ run "staging_plan" {
     condition     = length(output.deployment_manifest.ecs.services.poolers) == 5
     error_message = "All five PgBouncer isolation classes must be planned."
   }
+
+  assert {
+    condition     = contains(keys(output.deployment_manifest.kms_key_arns), "token_session")
+    error_message = "The deployment manifest must identify the dedicated token and session KMS key."
+  }
+
+  assert {
+    condition     = output.deployment_manifest.secrets.actor_pseudonym_secret_arn != ""
+    error_message = "The deployment manifest must identify the actor pseudonym secret without exposing its value."
+  }
 }

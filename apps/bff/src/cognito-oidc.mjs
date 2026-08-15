@@ -2,8 +2,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import {
   AdminUserGlobalSignOutCommand,
   DescribeUserPoolClientCommand,
-  DescribeUserPoolCommand,
   GetUserAuthFactorsCommand,
+  GetUserPoolMfaConfigCommand,
   GlobalSignOutCommand,
   RevokeTokenCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
@@ -138,7 +138,8 @@ export function createCognitoOidc({
       } finally {
         clearTimeout(timer);
       }
-      if (typeof tokens.id_token !== "string" || typeof tokens.access_token !== "string" || typeof tokens.refresh_token !== "string") {
+      if (typeof tokens.id_token !== "string" || typeof tokens.access_token !== "string" || typeof tokens.refresh_token !== "string"
+        || String(tokens.token_type).toLowerCase() !== "bearer") {
         throw new Error("Cognito token response is incomplete");
       }
       const verified = await verify(tokens.id_token);
@@ -158,7 +159,9 @@ export function createCognitoOidc({
       const hasTotp = factors.UserMFASettingList?.includes("SOFTWARE_TOKEN_MFA");
       if (!hasPasskey && !hasTotp) throw new Error("Cognito user has no approved MFA factor");
 
-      const resourceId = `${claims.sub}:${claims.origin_jti || claims.jti}`;
+      const tokenFamilyId = claims.origin_jti || claims.jti;
+      if (typeof tokenFamilyId !== "string" || !tokenFamilyId) throw new Error("Cognito token revocation identifier is missing");
+      const resourceId = `${claims.sub}:${tokenFamilyId}`;
       const envelope = await crypto.encrypt({
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
@@ -192,12 +195,14 @@ export function createCognitoOidc({
 
     async startupCheck({ redirectUri, logoutUri }) {
       const [pool, client] = await Promise.all([
-        cognito.send(new DescribeUserPoolCommand({ UserPoolId: userPoolId })),
+        cognito.send(new GetUserPoolMfaConfigCommand({ UserPoolId: userPoolId })),
         cognito.send(new DescribeUserPoolClientCommand({ UserPoolId: userPoolId, ClientId: clientId })),
       ]);
-      if (pool.UserPool?.MfaConfiguration !== "ON") throw new Error("Cognito MFA must be ON");
-      if (pool.UserPool?.WebAuthnConfiguration?.UserVerification !== "required"
-        || pool.UserPool?.WebAuthnConfiguration?.FactorConfiguration !== "MULTI_FACTOR_WITH_USER_VERIFICATION") {
+      if (pool.MfaConfiguration !== "ON" || pool.SoftwareTokenMfaConfiguration?.Enabled !== true) {
+        throw new Error("Cognito MFA must be ON with TOTP enabled");
+      }
+      if (pool.WebAuthnConfiguration?.UserVerification !== "required"
+        || pool.WebAuthnConfiguration?.FactorConfiguration !== "MULTI_FACTOR_WITH_USER_VERIFICATION") {
         throw new Error("Cognito WebAuthn must require user verification as an MFA factor");
       }
       const configured = client.UserPoolClient;

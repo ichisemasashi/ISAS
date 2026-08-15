@@ -160,6 +160,26 @@ resource "aws_dynamodb_table" "session_context" {
     type = "S"
   }
 
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "user-index"
+    projection_type = "ALL"
+
+    key_schema {
+      attribute_name = "user_id"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "context_id"
+      key_type       = "RANGE"
+    }
+  }
+
   ttl {
     attribute_name = "expires_at_epoch"
     enabled        = true
@@ -206,6 +226,13 @@ resource "aws_secretsmanager_secret" "database_role" {
   name                    = "${local.name}/database/${each.key}"
   description             = "PgBouncer credential for ${each.key}; operator populates JSON keys username and password"
   kms_key_id              = aws_kms_key.data.arn
+  recovery_window_in_days = 30
+}
+
+resource "aws_secretsmanager_secret" "actor_pseudonym" {
+  name                    = "${local.name}/application/actor-pseudonym-key"
+  description             = "At least 32 random bytes for one-way audit actor pseudonyms; operator populates the value"
+  kms_key_id              = aws_kms_key.token_session.arn
   recovery_window_in_days = 30
 }
 

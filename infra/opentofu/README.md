@@ -74,11 +74,13 @@ tofu output -json deployment_manifest > /tmp/isas-staging-deployment-manifest.js
 
 `apply`後、Secrets Managerの5個のPgBouncer用secretへmigration担当が生成した個別DB role credentialをJSON `{"username":"<role>","password":"<random>"}` として投入する。P1の`username`は必ず`app_user`とし、5 secretを同じcredentialにしない。BFF taskはECS secret selectorで各JSON keyだけを対応する`ISAS_DB_<CLASS>_{USER,PASSWORD}`へ注入する。RDS master secretをapplicationへ渡さず、値をterminal、plan、ticketへ表示しない。
 
+同時に`<deployment>/application/actor-pseudonym-key`へ32 byte以上のランダム値を投入する。値をshell履歴へ残さないため、承認済みsecret生成手段から一時ファイルを介さず`aws secretsmanager put-secret-value --secret-id <ARN> --secret-string fileb:///dev/stdin`へ渡し、投入後は`describe-secret`の`LastChangedDate`だけを確認する。BFFはこの値、Cognito、DynamoDB `user-index`、SQSのDLQ、token/session KMS key、Auth-P1 DB関数をlisten前にread-backし、どれか不整合なら起動しない。
+
 BFF imageには`bff_runtime_adapter_module`（既定`/app/runtime-adapters/aws.mjs`）を含める。module欠落、adapter契約不一致、5 poolのrole不一致、P1のread replica接続のどれかがあればBFFはlisten前に失敗する。ECS container healthは`/health/live`、ALB traffic判定は全依存を検査する`/health/ready`を使用し、ECSの30秒停止猶予内でBFFが15秒drainを完了する。
 
 ## 4. AuthContext migration
 
-`infra/images/migration/Dockerfile`はmigration専用imageである。最初にNOLOGIN／NOBYPASSRLS owner roleを用意し、`0000_auth_context_v1.sql`から`0009`までchecksum ledger付きで順番に適用する。その後、fixtureをtransaction rollbackするAuthContext verifyと`production_auth_context_security.sql`を実行する。`0001`以降の既存verifyはfixtureを永続化するためstaging／productionでは実行せず、使い捨てDBで`RUN_DESTRUCTIVE_FIXTURE_VERIFICATION=true`かつ`ALLOW_DISPOSABLE_DATABASE=true`を明示したCIだけで実行する。
+`infra/images/migration/Dockerfile`はmigration専用imageである。最初にNOLOGIN／NOBYPASSRLS owner roleを用意し、`0000_auth_context_v1.sql`から`0010_identity_runtime.sql`までchecksum ledger付きで順番に適用する。その後、fixtureをtransaction rollbackするAuthContext／identity runtime verifyと`production_auth_context_security.sql`を実行する。`0001`以降の既存verifyはfixtureを永続化するためstaging／productionでは実行せず、使い捨てDBで`RUN_DESTRUCTIVE_FIXTURE_VERIFICATION=true`かつ`ALLOW_DISPOSABLE_DATABASE=true`を明示したCIだけで実行する。
 
 最後の検査は次をDB catalogから判定し、1件でも不一致ならECS taskを非0終了させる。
 
@@ -86,6 +88,7 @@ BFF imageには`bff_runtime_adapter_module`（既定`/app/runtime-adapters/aws.m
 - 全9表がRLS有効かつ`FORCE ROW LEVEL SECURITY`
 - append-only監査表以外の全AuthContext表に有効な`z_auth_change_audit` trigger
 - owner roleがNOLOGIN、非superuser、NOBYPASSRLS
+- OIDC主体解決、所属／scope導出、失効outboxの6 runtime関数が存在
 - PostGISが正確に`3.4.6`
 
 backfillは[migration backfill](../../apps/bff/migrations/backfill/0000_auth_context_v1_backfill.sql)をreview済みCSV staging後に別taskで実行する。rollbackは[安全rollback](../../apps/bff/migrations/rollback/0000_auth_context_v1_rollback.sql)が業務表／永続userを検出して停止するため、productionの通常rollbackはapplicationのroll-forwardを優先する。

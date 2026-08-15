@@ -47,7 +47,7 @@ npm test
 npm run check
 ```
 
-PostgreSQL AuthContextトランザクション、MVP REST、S7 push/pull、圃場PostGIS検索、作業指示・割当、打刻・写真付き日誌、訂正・差し戻し、農薬マスタ・使用基準再判定、追記型在庫・マイナス在庫裁定、RLS migration、フィールド競合裁定を実装し、PG16で検証済み。具体的なOIDC IdP、永続session store、HTTP runtimeが生成する実pool/driverは配備アダプタとして残る。migration順序、API契約、検証方法は[apps/bff/README.md](apps/bff/README.md)を参照する。
+PostgreSQL AuthContextトランザクション、MVP REST、S7 push/pull、圃場PostGIS検索、作業指示・日誌、農薬・在庫、CSV、RLS migration、競合裁定に加え、Production HTTP runtime、5優先度pool、Cognito OIDC＋PKCE、MFA／step-up、KMS暗号化DynamoDB session/context、SQS失効consumerを実装した。PG16＋PostGISのmigration実証は完了し、実AWS staging受入は未実施である。migration順序、API契約、検証方法は[apps/bff/README.md](apps/bff/README.md)を参照する。
 
 ## 進め方（プロジェクトを貫く原則）
 

@@ -21,7 +21,7 @@
 | Service Worker | PASS | `/api/`、Authorization付き応答、private/no-store、Set-Cookie応答をcacheしない。更新はoutbox空のときだけ適用 |
 | secret／tokenの混入 | PASS（追跡ファイル） | 秘密鍵、主要provider token形式、コード内password代入を追跡ファイルから検索し該当なし。OIDC token setは暗号文のみstoreへ渡す契約 |
 | 本番依存脆弱性 | PASS | `pnpm audit --prod --audit-level high`：既知脆弱性0件（2026-08-15照会） |
-| 回帰試験 | PASS | BFF 50件、構文checkがPASS |
+| 回帰試験 | PASS | BFF 74件、Web 36件、構文checkがPASS |
 
 ## 今回の是正
 
@@ -32,12 +32,12 @@
 
 ## リリース阻害条件
 
-以下は設計済みだが、現在のrepositoryには本番adapterまたは配備構成がない。解消するまで「本番セキュリティPASS」とはしない。
+以下はrepository内実装だけでは実証できない。実AWS staging証跡が揃うまで「本番セキュリティPASS」とはしない。
 
-1. 実IdPでのID Token署名／issuer／audience／nonce／`azp`／認証強度検証、MFA・step-up・回復フロー。
-2. 暗号化済みtoken setを扱う永続session/context store、単調version付き失効配信、rate limit。
-3. TLS ingress、信頼proxyの限定、SPA静的配信の厳格CSP（nonce/hashとTrusted Types）、HSTS、成果物署名／SBOM。
-4. 実装済み5系統PostgreSQL pool driver／AuthContext正式migrationをAWS stagingで検証し、Secrets Manager／KMS配備adapterを接続。
+1. 実Cognito userでID Token署名／issuer／audience／nonce、MFA、step-up、回復、複数browser logoutをAWS staging実証する。
+2. 実DynamoDB／KMS／SQSで暗号化session/context、単調version失効、queue停止・再送、DLQ、旧offline snapshot拒否を実証する。
+3. TLS ingress、信頼proxyの限定、SPA静的配信の厳格CSP（nonce/hashとTrusted Types）、HSTS、rate limit、成果物署名／SBOM。
+4. 実装済み5系統PostgreSQL pool／AuthContext・identity migration／Secrets Manager注入をAWS stagingで検証する。
 5. 添付の隔離object storage、マルウェアscan／安全な再encode、期限付きdownload、輸出step-up／監査／自動削除。
 6. ADR-0017 S9の端末暗号化、暗号消去、offline recovery wrap、鍵交代／復旧試験。ブラウザPWAを高機微・長期offline用途へ無条件に適用しない。
 7. 構造化security log、異常検知、失効dead-letter、監査ハッシュchain検証の運用監視。
