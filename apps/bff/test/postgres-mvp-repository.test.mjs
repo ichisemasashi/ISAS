@@ -23,6 +23,8 @@ test("PostGIS repository makes tenant equality and bbox explicit while returning
   assert.equal(result.type, "FeatureCollection");
   assert.equal(result.features[0].properties.areaSqm, 1234.5);
   assert.match(calls[0].sql, /tenant_id = \$1::uuid/);
+  assert.match(calls[0].sql, /bbox_min_x <= \$7/);
+  assert.match(calls[0].sql, /bbox_max_y >= \$6/);
   assert.match(calls[0].sql, /geom && ST_MakeEnvelope/);
   assert.deepEqual(calls[0].values.slice(0, 8), [T1, null, "北", true, 140.2, 38.1, 140.5, 38.4]);
 });

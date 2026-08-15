@@ -28,7 +28,7 @@
 |---|---|---|
 | `00_common.sql` | 拡張・**ロール7種**（app_owner／app_user／admin_role／auth_role／bootstrap_owner／**auth_context_owner**／audit_writer）・**スキーマ `part`・`priv`**・UUIDv7ヘルパ・**`clamp_event_ts`** | ✅ |
 | `S1_partition_rls_unique.sql` | パーティション×RLS×冪等×FORCE RLS×**受理台帳**×**capability**×**ブートストラップ**×**子直接参照**×**注入漏れ**×**版履歴・監査トリガ** | ✅ **全項目PASS**（PG16で (14) `security_invoker`、(15) 所有者・トリガ・監査経路も実測） |
-| `S2_spatial_rls.sql`＋`S2_spatial_concurrency.sql` | 空間索引×RLSと100万ポリゴン・64接続の本番規模負荷（**PostGIS 必須**） | ✅ **数値bbox事前絞込＋明示tenantでPASS**。本番field migrationへの昇格が必要 |
+| `S2_spatial_rls.sql`＋`S2_spatial_concurrency.sql` | 空間索引×RLSと100万ポリゴン・64接続の本番規模負荷（**PostGIS 必須**） | ✅ **数値bbox事前絞込＋明示tenantでPASS**。2026-08-15に`0009_field_bbox_prefilter.sql`へ昇格済み |
 | `S4_rls_scale.sql` | RLS×規模（10万行・スコープ restrictive） | ✅ 実行済 |
 | `S5_audit_chain.sql`＋`load/S5_*.sql` | `(tenant_id, 月)`監査ハッシュチェーンの同一テナント集中／テナント分散並行負荷と鎖検証 | ✅ **PG16・32接続・500書込/秒でPASS** |
 | `S6_device_capabilities.html`＋`S6_DEVICE_TEST.md` | iOS／Android PWAのStorage・SW・Background Sync・Push・位置・再起動後生存の実機証跡 | 🟡 **ハーネス完成、実機マトリクス未実測** |
@@ -82,7 +82,7 @@ psql -h /tmp/pg -p 5544 -U postgres -v ON_ERROR_STOP=1 -f S1_partition_rls_uniqu
 
 PostGIS `&&`だけの初回はp95 2,499.26msで不合格となり、PG-M2が本番規模で顕在化した。危険な`LEAKPROOF`指定やRLS迂回は行わず、書込時に数値bbox 4列を保持し、明示tenant＋leakproofな浮動小数比較で候補を減らしてからPostGISで厳密判定する方式へ変更した。再測はbbox 1,000件が199.9 tps／p95 80.71ms、KNN 20件が194.5 tps／p95 54.41ms、失敗・skip・他tenant漏洩0でPASSした。
 
-したがってS2の方式検証と本番規模負荷は完了とする。ただしこのPASSは**数値bbox列・索引を本番field migrationへ昇格することが実装条件**であり、現行migrationのPostGIS-only検索をそのまま本番規模合格とはしない。
+したがってS2の方式検証と本番規模負荷は完了とする。数値bbox列・tenant付き索引は2026-08-15に`apps/bff/migrations/0009_field_bbox_prefilter.sql`へ、事前絞込＋厳密PostGIS判定は実repositoryへ昇格した。配備先では同migration適用後に同じハーネスを再受入する。
 
 ## 2026-08-14 の実行結果（S8・PostgreSQL 16.4／PostGIS 3.4.3）
 

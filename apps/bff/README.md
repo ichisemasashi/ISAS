@@ -50,6 +50,7 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0005_journal_capture.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0006_journal_review.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0007_pesticide_inventory.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0008_data_migration.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0009_field_bbox_prefilter.sql
 ```
 
 業務表はすべて`ENABLE/FORCE ROW LEVEL SECURITY`である。tenant policyをpermissive基底、field scopeと競合裁定capabilityをrestrictive条件にしてAND合成する。アプリ接続は必ず`app_user`を使う。
@@ -68,11 +69,13 @@ PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
   -f apps/bff/migrations/0006_journal_review.sql \
   -f apps/bff/migrations/0007_pesticide_inventory.sql \
   -f apps/bff/migrations/0008_data_migration.sql \
+  -f apps/bff/migrations/0009_field_bbox_prefilter.sql \
   -f apps/bff/migrations/verify/0001_mvp_sync_verify.sql \
   -f apps/bff/migrations/verify/0003_field_gis_verify.sql \
   -f apps/bff/migrations/verify/0006_work_journal_verify.sql \
   -f apps/bff/migrations/verify/0007_pesticide_inventory_verify.sql \
-  -f apps/bff/migrations/verify/0008_data_migration_verify.sql
+  -f apps/bff/migrations/verify/0008_data_migration_verify.sql \
+  -f apps/bff/migrations/verify/0009_field_bbox_prefilter_verify.sql
 ```
 
 ## アダプタの保証条件

@@ -259,7 +259,11 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           AND deleted_at IS NULL
           AND ($2::uuid IS NULL OR field_id > $2::uuid)
           AND ($3::text = '' OR lower(name) LIKE lower($3::text) || '%')
-          AND ($4::boolean = false OR geom && ST_MakeEnvelope($5, $6, $7, $8, 4326))
+          AND ($4::boolean = false OR (
+            bbox_min_x <= $7 AND bbox_max_x >= $5
+            AND bbox_min_y <= $8 AND bbox_max_y >= $6
+            AND geom && ST_MakeEnvelope($5, $6, $7, $8, 4326)
+          ))
         ORDER BY field_id
         LIMIT $9`, [trusted.authContext.tenantId, cursor, query, Boolean(bbox), bbox?.[0] || 0, bbox?.[1] || 0, bbox?.[2] || 0, bbox?.[3] || 0, limit + 1]);
       const rows = result.rows.slice(0, limit);
