@@ -20,6 +20,7 @@
 | PostgreSQL | PASS | PG16.4＋PostGIS 3.4.3、S8 12群、MVP既存31群、bbox追加3群 |
 | S7状態機械 | 15/15 PASS | Python 3.9／3.14双方で実行可能 |
 | UT集計器 | 3/3 PASS | 閾値判定器のみ。実参加者データは未収集 |
+| Release readiness検査 | 3/3 PASS | 未合格gate、no-data、error budget、期限切れDR、二重承認を拒否。実manifestは未作成 |
 | 敵対的レビュー | 2巡収束 | 実装範囲High 4／Medium 3／Low 1を全処置、再レビューH0/M0 |
 
 ## 実行コマンド
@@ -30,6 +31,7 @@ cd apps/bff && npm test && npm run check
 cd research/quality && python3 -m unittest -v test_check_slo.py && python3 check_slo.py
 cd research/ut && python3 -m unittest -v test_analyze_ut.py
 /usr/bin/python3 spikes/S7_offline_sync.py
+node --test ops/test/check-release-readiness.test.mjs
 ```
 
 PostgreSQLは検証専用`spike` DBを再構築し、`0001`〜`0009`と対応verifyを順番適用した。production依存は`pnpm audit --prod --audit-level high`で2026-08-15時点の既知脆弱性0件を確認した。
@@ -53,5 +55,6 @@ PostgreSQLは検証専用`spike` DBを再構築し、`0001`〜`0009`と対応ver
 5. 本番相当fixtureと実ネットワークで地図、一覧1万、ガント500、写真保存、一般GET、ログインのp95を測る。
 6. screen reader、200% zoom、contrast、端末向き、屋外／手袋を含む手動WCAG／端末確認を行う。
 7. 作業員・高齢者・技能実習生の実ユーザーUTで成功率90%、日誌30秒、農薬60秒、SUS 75、全員のオフライン理解を実測する。
+8. ADR-0019〜0021の法域別provider／製品／ownerを実manifestへ固定し、同一digest段階配備、月次restore、四半期DRを本番候補環境で合格させる。
 
-詳細は[PWA試験](PWA更新・データ消失試験.md)、[セキュリティレビュー](MVPセキュリティレビュー.md)、[性能SLO](MVP性能SLO確認.md)、[敵対的レビュー](MVP敵対的レビュー.md)を参照する。
+詳細は[PWA試験](PWA更新・データ消失試験.md)、[セキュリティレビュー](MVPセキュリティレビュー.md)、[性能SLO](MVP性能SLO確認.md)、[敵対的レビュー](MVP敵対的レビュー.md)、[リリース運用手順](../operations/README.md)を参照する。
