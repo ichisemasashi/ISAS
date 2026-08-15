@@ -26,11 +26,12 @@ function fixture() {
       };
     },
     async revoke(value) { calls.revoke.push(value); },
+    logoutUrl(returnTo) { return `https://idp.example/logout?return_to=${encodeURIComponent(returnTo)}`; },
   };
   const users = {
     async resolve(issuer, subject) {
       return issuer === "https://idp.example" && subject === "subject-1"
-        ? { id: "user-1", displayName: "佐藤 一郎", initials: "佐" }
+        ? { id: "user-1", displayName: "佐藤 一郎", initials: "佐", authorizationVersion: "7" }
         : null;
     },
   };
@@ -47,6 +48,7 @@ function fixture() {
         tenantName: "山形みどり農園",
         roleLabel: "現場チーム",
         membershipVersion: "membership-1",
+        authorizationVersion: "7",
         authorizationSnapshotId: "snapshot-1",
         actorPseudonym: "actor-user-1",
         scopeFieldGroups: ["field-group-1"],
@@ -99,6 +101,21 @@ describe("BFF OIDC and session boundary", () => {
     assert.equal(JSON.stringify(body).includes("encrypted-token-set"), false);
   });
 
+  test("forces fresh authentication for step-up and replaces only the same subject session", async () => {
+    const fx = fixture();
+    const oldCookie = await login(fx);
+    const start = await fx.handle(new Request(`${ORIGIN}/api/bff/login?step_up=1&return_to=%2Fexports`, {
+      headers: { Cookie: oldCookie },
+    }));
+    assert.equal(fx.calls.authorize.at(-1).prompt, "login");
+    assert.equal(fx.calls.authorize.at(-1).maxAge, 0);
+    const state = new URL(start.headers.get("Location")).searchParams.get("state");
+    const callback = await fx.handle(new Request(`${REDIRECT_URI}?code=step-up&state=${state}`));
+    assert.equal(callback.status, 302);
+    assert.equal(callback.headers.get("Location"), "/exports");
+    assert.equal((await fx.handle(new Request(`${ORIGIN}/api/bff/session`, { headers: { Cookie: oldCookie } }))).status, 401);
+  });
+
   test("requires same-origin CSRF proof and derives tenant context server-side", async () => {
     const fx = fixture();
     const cookie = await login(fx);
@@ -133,6 +150,7 @@ describe("BFF OIDC and session boundary", () => {
 
     assert.equal(logout.status, 204);
     assert.match(logout.headers.get("Set-Cookie"), /Max-Age=0/);
+    assert.match(logout.headers.get("X-ISAS-Logout-Location"), /^https:\/\/idp\.example\/logout/);
     assert.deepEqual(fx.calls.revoke, ["encrypted-token-set"]);
     assert.equal((await fx.handle(new Request(`${ORIGIN}/api/bff/session`, { headers: { Cookie: cookie } }))).status, 401);
   });

@@ -8,6 +8,7 @@ const MAX_EVENTS_PER_BUNDLE = 100;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 const MAX_JSON_BYTES = 256 * 1024;
+const STEP_UP_MAX_AGE_MS = 10 * 60 * 1000;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
 
 function json(status, body, correlationId, contentType = "application/json; charset=utf-8") {
@@ -49,6 +50,23 @@ function validWrite(request, origin, csrfToken) {
   return request.headers.get("Origin") === origin
     && (!fetchSite || fetchSite === "same-origin")
     && equalSecret(request.headers.get("X-CSRF-Token"), csrfToken);
+}
+
+function hasRecentStepUp(trusted, now) {
+  const authenticatedAt = Date.parse(trusted.authenticatedAt);
+  return ["mfa", "phishing-resistant"].includes(trusted.authenticationLevel)
+    && Number.isFinite(authenticatedAt)
+    && authenticatedAt <= now + 5000
+    && now - authenticatedAt <= STEP_UP_MAX_AGE_MS;
+}
+
+function privilegedPath(method, path) {
+  return path.startsWith("/api/v1/migration-jobs")
+    || path.startsWith("/api/v1/exports/")
+    || (method === "POST" && path === "/api/v1/pesticide-master/releases")
+    || (method === "POST" && /^\/api\/v1\/journals\/[^/]+\/review$/.test(path))
+    || (method === "PATCH" && /^\/api\/v1\/work-instructions\/[^/]+\/assignment$/.test(path))
+    || (method === "POST" && /^\/api\/v1\/sync\/conflicts\/[^/]+\/resolve$/.test(path));
 }
 
 async function readPush(request) {
@@ -167,7 +185,7 @@ async function readAttachment(request) {
   };
 }
 
-export function createMvpApiHandler({ origin, resolveContext, database, repository }) {
+export function createMvpApiHandler({ origin, resolveContext, database, repository, clock = () => Date.now() }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
 
   return async function handle(request) {
@@ -177,6 +195,11 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
 
     const trusted = await resolveContext(request);
     if (!trusted) return problem(401, "authentication_required", "Authentication required", requestId);
+    if (privilegedPath(request.method, url.pathname) && !hasRecentStepUp(trusted, clock())) {
+      return problem(403, "step_up_required", "Recent MFA authentication required", requestId, undefined, {
+        stepUpUrl: `/api/bff/login?step_up=1&return_to=${encodeURIComponent(`${url.pathname}${url.search}`)}`,
+      });
+    }
 
     try {
       if (request.method === "GET" && url.pathname === "/api/v1/today") {
@@ -288,6 +311,12 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (request.method === "POST" && url.pathname === "/api/v1/sync/push") {
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
         const input = await readPush(request);
+        const adjustsInventory = input.bundles.some((bundle) => bundle.events.some((event) => event.kind === "stock" && event.payload.eventType === "adjustment"));
+        if (adjustsInventory && !hasRecentStepUp(trusted, clock())) {
+          return problem(403, "step_up_required", "Recent MFA authentication required", requestId, undefined, {
+            stepUpUrl: "/api/bff/login?step_up=1&return_to=%2Finventory",
+          });
+        }
         const results = [];
         // Each dependency bundle is its own atomic unit. One rejected bundle must not roll back an independent bundle.
         for (const bundle of input.bundles) {

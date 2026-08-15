@@ -11,14 +11,22 @@ function fixture(capabilities = ["journal:write"], options = {}) {
     csrfToken: "csrf-1",
     membershipVersion: "membership-1",
     authorizationSnapshotId: "snapshot-1",
+    authenticationLevel: "mfa",
+    authenticatedAt: "2026-08-14T00:00:00.000Z",
     authContext: { tenantId: "tenant-1", scopeFieldGroups: ["field-group-1"], capabilities },
+    ...options.trusted,
   };
   const memory = createMemoryMvpRepository({
     tasks: [{ id: "task-1", tenantId: "tenant-1", time: "08:30", field: "北圃場", crop: "米", work: "水位確認", status: "今日" }],
     fields: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", tenantId: "tenant-1", geometry: { type: "MultiPolygon", coordinates: [[[[140.3, 38.2], [140.31, 38.2], [140.31, 38.21], [140.3, 38.2]]]] }, properties: { name: "北圃場", cropName: "つや姫", areaSqm: 1000 } }],
     ...options,
   });
-  const handle = createMvpApiHandler({ origin: ORIGIN, resolveContext: async (request) => request.headers.get("Cookie") ? trusted : null, ...memory });
+  const handle = createMvpApiHandler({
+    origin: ORIGIN,
+    resolveContext: async (request) => request.headers.get("Cookie") ? trusted : null,
+    clock: () => Date.parse("2026-08-14T00:05:00.000Z"),
+    ...memory,
+  });
   const request = (path, init = {}) => new Request(`${ORIGIN}${path}`, { ...init, headers: { Cookie: "session=1", ...init.headers } });
   return { ...memory, handle, request };
 }
@@ -50,6 +58,15 @@ describe("MVP REST and synchronization API", () => {
     const response = await fx.handle(fx.request("/api/v1/today"));
     assert.equal(response.status, 200);
     assert.equal((await response.json()).tasks[0].id, "task-1");
+  });
+
+  test("requires a recent MFA authentication for exports and adjudication", async () => {
+    const fx = fixture(["export:read"], { trusted: { authenticatedAt: "2026-08-13T23:00:00.000Z" } });
+    const response = await fx.handle(fx.request("/api/v1/exports/fields.csv"));
+    const body = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(body.type, "step_up_required");
+    assert.match(body.stepUpUrl, /^\/api\/bff\/login\?step_up=1/);
   });
 
   test("atomically accepts a bundle and deduplicates a retry by tenant and event UUID", async () => {

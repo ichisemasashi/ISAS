@@ -63,7 +63,7 @@ export async function startProductionRuntime({
     await pools.startupCheck();
     const module = await adapterLoader(config.adapterModule);
     if (typeof module.createRuntimeAdapters !== "function") throw new Error("Adapter module must export createRuntimeAdapters");
-    adapters = validateAdapters(await module.createRuntimeAdapters({ config, pools, logger }));
+    adapters = validateAdapters(await module.createRuntimeAdapters({ config, pools, logger, env }));
     if (typeof adapters.startupCheck === "function") await adapters.startupCheck();
     const handler = createIsasApplication({
       origin: config.origin,

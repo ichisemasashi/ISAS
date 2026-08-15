@@ -14,9 +14,14 @@
     "service:restart": "sh bin/runtime-control.sh restart",
     "service:status": "sh bin/runtime-control.sh status",
     "test": "node --test",
-    "check": "node --check bin/server.mjs && node --check src/*.mjs && node --check test/*.test.mjs && sh -n bin/runtime-control.sh"
+    "check": "node --check bin/server.mjs && node --check runtime-adapters/*.mjs && node --check src/*.mjs && node --check test/*.test.mjs && sh -n bin/runtime-control.sh"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "3.1100.0",
+    "@aws-sdk/client-dynamodb": "3.1100.0",
+    "@aws-sdk/client-kms": "3.1100.0",
+    "@aws-sdk/client-sqs": "3.1100.0",
+    "jose": "6.2.3",
     "pg": "8.22.0"
   }
 }

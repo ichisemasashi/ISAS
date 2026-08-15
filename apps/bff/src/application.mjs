@@ -27,6 +27,6 @@ export function createIsasApplication({ origin, redirectUri, stores, identityPro
   const resolveContext = createContextResolver({ stores, authorization, ...(clock ? { clock } : {}) });
   const database = createPostgresAuthContextAdapter(pool);
   const repository = createPostgresMvpRepository();
-  const apiHandler = createMvpApiHandler({ origin, resolveContext, database, repository });
+  const apiHandler = createMvpApiHandler({ origin, resolveContext, database, repository, ...(clock ? { clock } : {}) });
   return createApplicationRouter({ bffHandler, apiHandler });
 }

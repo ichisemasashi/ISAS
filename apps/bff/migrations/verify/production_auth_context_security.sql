@@ -12,6 +12,7 @@ DECLARE
   missing_force_rls integer;
   missing_audit integer;
   unsafe_owner integer;
+  missing_runtime_function integer;
 BEGIN
   SELECT count(*) INTO missing_owner
   FROM pg_class class
@@ -60,6 +61,20 @@ BEGIN
     AND (rolsuper OR rolbypassrls OR rolcanlogin);
   IF unsafe_owner <> 0 THEN
     RAISE EXCEPTION 'AuthContext production check: owner role is privileged, BYPASSRLS, or LOGIN';
+  END IF;
+
+  SELECT count(*) INTO missing_runtime_function
+  FROM unnest(ARRAY[
+    'resolve_oidc_user(text,text)',
+    'list_authorized_tenants(uuid)',
+    'derive_authorization_context(uuid,uuid)',
+    'claim_auth_revocation(uuid,integer)',
+    'complete_auth_revocation(bigint,uuid)',
+    'release_auth_revocation(bigint,uuid)'
+  ]) expected(signature)
+  WHERE to_regprocedure('app_private.' || expected.signature) IS NULL;
+  IF missing_runtime_function <> 0 THEN
+    RAISE EXCEPTION 'AuthContext production check: % identity runtime function(s) missing', missing_runtime_function;
   END IF;
 
   IF NOT EXISTS (

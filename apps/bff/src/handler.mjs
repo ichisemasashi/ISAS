@@ -2,8 +2,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const SESSION_COOKIE = "__Host-isas_session";
 const LOGIN_TTL_MS = 10 * 60 * 1000;
-const SESSION_IDLE_MS = 12 * 60 * 60 * 1000;
-const SESSION_ABSOLUTE_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+const SESSION_ABSOLUTE_MS = 12 * 60 * 60 * 1000;
 const CONTEXT_TTL_MS = 5 * 60 * 1000;
 const MAX_JSON_BYTES = 8 * 1024;
 
@@ -119,6 +119,8 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
 
     try {
       if (request.method === "GET" && url.pathname === "/api/bff/login") {
+        const stepUp = url.searchParams.get("step_up") === "1";
+        const current = stepUp ? await authenticatedSession(request) : null;
         const state = opaque();
         const nonce = opaque();
         const verifier = opaque(48);
@@ -127,9 +129,17 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
           nonce,
           verifier,
           returnTo: safeReturnTo(url.searchParams.get("return_to"), origin),
+          expectedUserId: current?.session.user.id,
+          previousSessionHash: current?.sessionHash,
           expiresAt: clock() + LOGIN_TTL_MS,
         });
-        const location = await identityProvider.authorizationUrl({ state, nonce, codeChallenge: challenge, redirectUri });
+        const location = await identityProvider.authorizationUrl({
+          state,
+          nonce,
+          codeChallenge: challenge,
+          redirectUri,
+          ...(stepUp ? { prompt: "login", maxAge: 0 } : {}),
+        });
         return redirect(location, correlationId);
       }
 
@@ -141,21 +151,33 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
 
         const identity = await identityProvider.exchangeCode({ code, verifier: attempt.verifier, nonce: attempt.nonce, redirectUri });
         const user = await users.resolve(identity.issuer, identity.subject);
-        if (!user) return json(403, { error: "authentication_failed" }, correlationId);
+        if (!user || (attempt.expectedUserId && attempt.expectedUserId !== user.id)) {
+          await identityProvider.revoke?.(identity.tokenSetCiphertext);
+          return json(403, { error: user ? "step_up_subject_mismatch" : "authentication_failed" }, correlationId);
+        }
 
         const rawSessionId = opaque();
         const sessionHash = digest(rawSessionId);
         const now = clock();
-        await stores.sessions.put(sessionHash, {
-          user,
-          authenticationLevel: authenticationLevel(identity.authenticationLevel),
-          authenticatedAt: identity.authenticatedAt,
-          csrfToken: opaque(),
-          tokenSetCiphertext: identity.tokenSetCiphertext,
-          createdAt: now,
-          lastSeenAt: now,
-          expiresAt: now + SESSION_ABSOLUTE_MS,
-        });
+        try {
+          await stores.sessions.put(sessionHash, {
+            user,
+            authenticationLevel: authenticationLevel(identity.authenticationLevel),
+            authenticatedAt: identity.authenticatedAt,
+            csrfToken: opaque(),
+            tokenSetCiphertext: identity.tokenSetCiphertext,
+            createdAt: now,
+            lastSeenAt: now,
+            expiresAt: now + SESSION_ABSOLUTE_MS,
+          });
+        } catch (error) {
+          await identityProvider.revoke?.(identity.tokenSetCiphertext);
+          throw error;
+        }
+        if (attempt.previousSessionHash) {
+          await stores.sessions.delete(attempt.previousSessionHash);
+          await stores.contexts.deleteForSession(attempt.previousSessionHash);
+        }
         return redirect(attempt.returnTo, correlationId, { "Set-Cookie": sessionCookie(rawSessionId) });
       }
 
@@ -196,6 +218,7 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
           shardId: derived.shardId,
           purpose: "tenant",
           membershipVersion: derived.membershipVersion,
+          authorizationVersion: derived.authorizationVersion,
           expiresAt,
         });
         return json(201, {
@@ -213,17 +236,27 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
       if (request.method === "POST" && url.pathname === "/api/bff/logout") {
         if (!validUnsafeRequest(request, origin)) return json(403, { error: "request_rejected" }, correlationId);
         const authenticated = await authenticatedSession(request);
-        if (!authenticated) return new Response(null, { status: 204, headers: noStoreHeaders({ "Set-Cookie": clearSessionCookie(), "X-Correlation-ID": correlationId }) });
+        if (!authenticated) {
+          const logoutUrl = identityProvider.logoutUrl?.(`${origin}/`);
+          return new Response(null, { status: 204, headers: noStoreHeaders({
+            "Set-Cookie": clearSessionCookie(),
+            "X-Correlation-ID": correlationId,
+            ...(logoutUrl ? { "X-ISAS-Logout-Location": logoutUrl } : {}),
+          }) });
+        }
         if (!equalSecret(request.headers.get("X-CSRF-Token"), authenticated.session.csrfToken)) return json(403, { error: "request_rejected" }, correlationId);
         await readSmallJson(request);
         await stores.sessions.delete(authenticated.sessionHash);
-        await stores.contexts.deleteForSession(authenticated.sessionHash);
-        try {
-          await identityProvider.revoke?.(authenticated.session.tokenSetCiphertext);
-        } catch {
-          // The local session remains revoked even when the upstream IdP is unavailable.
-        }
-        return new Response(null, { status: 204, headers: noStoreHeaders({ "Set-Cookie": clearSessionCookie(), "X-Correlation-ID": correlationId }) });
+        await Promise.allSettled([
+          stores.contexts.deleteForSession(authenticated.sessionHash),
+          identityProvider.revoke?.(authenticated.session.tokenSetCiphertext),
+        ]);
+        const logoutUrl = identityProvider.logoutUrl?.(`${origin}/`);
+        return new Response(null, { status: 204, headers: noStoreHeaders({
+          "Set-Cookie": clearSessionCookie(),
+          "X-Correlation-ID": correlationId,
+          ...(logoutUrl ? { "X-ISAS-Logout-Location": logoutUrl } : {}),
+        }) });
       }
 
       return json(404, { error: "not_found" }, correlationId);
@@ -259,7 +292,9 @@ export function createContextResolver({ stores, authorization, clock = () => Dat
     }
 
     const current = await authorization.deriveContext(session.user.id, context.tenantId);
-    if (!current || current.jurisdictionId !== context.jurisdictionId || current.shardId !== context.shardId) return null;
+    if (!current || current.jurisdictionId !== context.jurisdictionId || current.shardId !== context.shardId
+      || current.membershipVersion !== context.membershipVersion
+      || current.authorizationVersion !== context.authorizationVersion) return null;
     await stores.sessions.touch(sessionHash, now);
 
     return {

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.isas_schema_migration (
 REVOKE ALL ON public.isas_schema_migration FROM PUBLIC, app_user, auth_role;
 SQL
 
-for migration in /isas/migrations/000[0-9]_*.sql; do
+for migration in /isas/migrations/[0-9][0-9][0-9][0-9]_*.sql; do
   version="$(basename "${migration}" .sql)"
   checksum="$(sha256sum "${migration}" | awk '{print $1}')"
   applied_checksum="$(psql -X -Atq -v ON_ERROR_STOP=1 \
@@ -51,7 +51,8 @@ if [[ "${RUN_DESTRUCTIVE_FIXTURE_VERIFICATION:-false}" == "true" ]]; then
     echo "Full fixture verification requires ALLOW_DISPOSABLE_DATABASE=true" >&2
     exit 64
   fi
-  for verification in /isas/migrations/verify/000[1-9]_*.sql; do
+  for verification in /isas/migrations/verify/[0-9][0-9][0-9][0-9]_*.sql; do
+    [[ "$(basename "${verification}")" == 0000_* ]] && continue
     echo "Disposable DB verification: $(basename "${verification}")"
     psql -X -v ON_ERROR_STOP=1 -f "${verification}"
   done

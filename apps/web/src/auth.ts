@@ -150,6 +150,8 @@ export function createBffAuthGateway(fetcher: FetchLike = fetch, navigation: Pic
         body: "{}",
       });
       if (!response.ok) throw new Error(`Logout failed (${response.status})`);
+      const logoutLocation = response.headers.get("X-ISAS-Logout-Location");
+      if (logoutLocation) navigation.assign(logoutLocation);
     },
   };
 }
