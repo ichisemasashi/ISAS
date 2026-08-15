@@ -6,6 +6,7 @@ import { createCognitoOidc } from "../src/cognito-oidc.mjs";
 import { createDynamoStores } from "../src/dynamodb-stores.mjs";
 import { createKmsEnvelopeCrypto } from "../src/envelope-crypto.mjs";
 import { createPostgresIdentityAdapters } from "../src/postgres-identity.mjs";
+import { createPostgresSecurityAdministration } from "../src/security-administration.mjs";
 import { createRevocationService } from "../src/revocation-service.mjs";
 
 function required(env, name) {
@@ -42,6 +43,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
     shardId: config.deploymentId,
     pseudonymKey,
   });
+  const securityAdministration = createPostgresSecurityAdministration({ pool: pools.authP1 });
   let revocations;
   const identityProvider = createCognitoOidc({
     issuer,
@@ -81,6 +83,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
     identityProvider,
     users: postgres.users,
     authorization: postgres.authorization,
+    securityAdministration,
     revocations,
     async startupCheck() {
       await dependenciesCheck();

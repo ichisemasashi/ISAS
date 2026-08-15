@@ -99,7 +99,7 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 
-SELECT pg_temp.ck(count(*) = 9, '(12a) 全権限基表・失効・監査表がFORCE RLS')
+SELECT pg_temp.ck(count(*) = 11, '(12a) 全権限基表・失効・監査表がFORCE RLS')
 FROM pg_class class JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
 WHERE namespace.nspname = 'priv' AND class.relname LIKE 'auth_%'
   AND class.relkind = 'r' AND class.relrowsecurity AND class.relforcerowsecurity;

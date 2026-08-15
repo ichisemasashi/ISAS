@@ -21,12 +21,12 @@ export function createApplicationRouter({ bffHandler, apiHandler }) {
   };
 }
 
-export function createIsasApplication({ origin, redirectUri, stores, identityProvider, users, authorization, pool, clock }) {
+export function createIsasApplication({ origin, redirectUri, stores, identityProvider, users, authorization, securityAdministration, pool, clock }) {
   const bffOptions = { origin, redirectUri, stores, identityProvider, users, authorization, ...(clock ? { clock } : {}) };
   const bffHandler = createBffHandler(bffOptions);
   const resolveContext = createContextResolver({ stores, authorization, ...(clock ? { clock } : {}) });
   const database = createPostgresAuthContextAdapter(pool);
   const repository = createPostgresMvpRepository();
-  const apiHandler = createMvpApiHandler({ origin, resolveContext, database, repository, ...(clock ? { clock } : {}) });
+  const apiHandler = createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, ...(clock ? { clock } : {}) });
   return createApplicationRouter({ bffHandler, apiHandler });
 }

@@ -24,6 +24,7 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   const inventoryEvents = clone(stockEvents);
   const pesticideUsages = [];
   const pesticideAlerts = [];
+  const pesticideReviews = [];
   const stockAlerts = [];
   const migrationJobs = [];
 
@@ -113,6 +114,29 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       currentPesticideRelease = { id: `release-${Date.now()}`, version: input.version, validUntil: input.validUntil, publishedAt: new Date().toISOString(), syncedAt: new Date().toISOString() };
       chemicals.splice(0, chemicals.length, ...input.chemicals.map((item, index) => ({ ...clone(item), id: item.id || `chemical-${index + 1}`, tenantId: trusted.authContext.tenantId })));
       return { ...clone(currentPesticideRelease), chemicalCount: chemicals.length };
+    },
+
+    async requestPesticideMasterReview(_client, trusted, input) {
+      if (!trusted.authContext.capabilities.includes("pesticide:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      if (!input?.release || typeof input.reason !== "string" || input.reason.trim().length < 10 || !input.ticketRef) throw new TypeError("invalid pesticide review");
+      const item = { id: `review-${pesticideReviews.length + 1}`, tenantId: trusted.authContext.tenantId, proposedRelease: clone(input.release), beforeRelease: clone(currentPesticideRelease), status: "pending", reason: input.reason.trim(), ticketRef: input.ticketRef, requestedBy: trusted.userId, requestedAt: new Date().toISOString(), decidedBy: null, decisionNote: null };
+      pesticideReviews.push(item); return clone(item);
+    },
+
+    async listPesticideMasterReviews(_client, trusted) {
+      if (!trusted.authContext.capabilities.includes("pesticide:manage")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
+      return { reviews: clone(pesticideReviews.filter((item) => item.tenantId === trusted.authContext.tenantId)) };
+    },
+
+    async decidePesticideMasterReview(client, trusted, reviewId, input) {
+      if (!trusted.authContext.capabilities.includes("pesticide:manage") || !["approve", "reject"].includes(input.decision) || !input.note?.trim()) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const item = pesticideReviews.find((row) => row.id === reviewId && row.tenantId === trusted.authContext.tenantId && row.status === "pending");
+      if (!item) throw new TypeError("unknown review");
+      if (item.requestedBy === trusted.userId) throw Object.assign(new Error("four eyes required"), { code: "forbidden" });
+      item.decidedBy = trusted.userId; item.decisionNote = input.note.trim(); item.decidedAt = new Date().toISOString();
+      if (input.decision === "reject") { item.status = "rejected"; return clone(item); }
+      const release = await repository.publishPesticideMaster(client, trusted, item.proposedRelease);
+      item.status = "published"; item.releaseId = release.id; return { ...clone(item), release };
     },
 
     async listInventory(_client, trusted) {
@@ -273,5 +297,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments, journals, revisions, chemicals, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs } };
+  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs } };
 }

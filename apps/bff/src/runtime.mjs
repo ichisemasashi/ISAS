@@ -20,6 +20,9 @@ function validateAdapters(adapters) {
   assertMethod(adapters.users, "resolve", "users");
   assertMethod(adapters.authorization, "listTenants", "authorization");
   assertMethod(adapters.authorization, "deriveContext", "authorization");
+  for (const method of ["snapshot", "requestChange", "decideChange", "createPrivacyRequest", "transitionPrivacyRequest"]) {
+    assertMethod(adapters.securityAdministration, method, "securityAdministration");
+  }
   return adapters;
 }
 
@@ -72,6 +75,7 @@ export async function startProductionRuntime({
       identityProvider: adapters.identityProvider,
       users: adapters.users,
       authorization: adapters.authorization,
+      securityAdministration: adapters.securityAdministration,
       pool: pools.p1,
     });
     runtime = createHttpRuntime({

@@ -21,10 +21,18 @@ function fixture(capabilities = ["journal:write"], options = {}) {
     fields: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", tenantId: "tenant-1", geometry: { type: "MultiPolygon", coordinates: [[[[140.3, 38.2], [140.31, 38.2], [140.31, 38.21], [140.3, 38.2]]]] }, properties: { name: "北圃場", cropName: "つや姫", areaSqm: 1000 } }],
     ...options,
   });
+  const securityAdministration = options.securityAdministration || {
+    async snapshot() { return { users: [], roles: [], changeRequests: [], breakGlassGrants: [], privacyRequests: [] }; },
+    async requestChange(_trusted, input) { return { requestId: "security-request-1", status: "pending", input }; },
+    async decideChange(_trusted, id) { return { requestId: id, status: "executed" }; },
+    async createPrivacyRequest() { return { requestId: "privacy-request-1", status: "submitted" }; },
+    async transitionPrivacyRequest(_trusted, id, input) { return { requestId: id, status: input.action }; },
+  };
   const handle = createMvpApiHandler({
     origin: ORIGIN,
     resolveContext: async (request) => request.headers.get("Cookie") ? trusted : null,
     clock: () => Date.parse("2026-08-14T00:05:00.000Z"),
+    securityAdministration,
     ...memory,
   });
   const request = (path, init = {}) => new Request(`${ORIGIN}${path}`, { ...init, headers: { Cookie: "session=1", ...init.headers } });
@@ -52,6 +60,34 @@ function pushRequest(fx, bundles) {
 }
 
 describe("MVP REST and synchronization API", () => {
+  test("protects security administration with recent MFA, CSRF, and the dedicated adapter", async () => {
+    const fx = fixture(["security:manage"]);
+    const snapshot = await fx.handle(fx.request("/api/v1/security-admin"));
+    assert.equal(snapshot.status, 200);
+    const rejected = await fx.handle(fx.request("/api/v1/security-admin/change-requests", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json" }, body: "{}",
+    }));
+    assert.equal(rejected.status, 403);
+    const created = await fx.handle(fx.request("/api/v1/security-admin/change-requests", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ changeType: "user_revoke", targetUserId: "33333333-3333-7333-8333-333333333333", reason: "退職に伴う利用停止です", ticketRef: "SEC-1", proposedState: {} }),
+    }));
+    assert.equal(created.status, 201);
+    assert.equal((await created.json()).status, "pending");
+  });
+
+  test("requires a different pesticide master reviewer before publication", async () => {
+    const release = { version: "2026-08", validUntil: "2027-08-01T00:00:00Z", chemicals: [{ registrationNumber: "農林1", name: "試験剤", applicableCrops: ["米"], dilutionMin: 1000, dilutionMax: 2000, maxUses: 2, preharvestDays: 7 }] };
+    const requester = fixture(["pesticide:manage"]);
+    const created = await requester.handle(requester.request("/api/v1/pesticide-master/reviews", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ release, reason: "月次改訂内容の公開申請です", ticketRef: "PEST-1" }),
+    })).then((response) => response.json());
+    const own = await requester.handle(requester.request(`/api/v1/pesticide-master/reviews/${created.id}/decision`, {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" }, body: JSON.stringify({ decision: "approve", note: "確認済み" }),
+    }));
+    assert.equal(own.status, 403);
+  });
   test("requires the server-resolved context and returns REST task data", async () => {
     const fx = fixture();
     assert.equal((await fx.handle(new Request(`${ORIGIN}/api/v1/today`))).status, 401);
@@ -225,19 +261,19 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(fx.state.revisions[0].reason, "終了時刻を訂正");
   });
 
-  test("publishes and reads a freshness-bounded pesticide master for an assigned field", async () => {
+  test("submits and lists a freshness-bounded pesticide master for independent review", async () => {
     const fx = fixture(["pesticide:write", "pesticide:manage"]);
-    const response = await fx.handle(fx.request("/api/v1/pesticide-master/releases", {
+    const response = await fx.handle(fx.request("/api/v1/pesticide-master/reviews", {
       method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
-      body: JSON.stringify({ version: "jp-2026-08-14", validUntil: "2026-08-21T00:00:00Z", chemicals: [{
+      body: JSON.stringify({ reason: "農薬マスター月次更新の申請です", ticketRef: "PEST-2026-08", release: { version: "jp-2026-08-14", validUntil: "2026-08-21T00:00:00Z", chemicals: [{
         id: "0198a6c0-0000-7000-8000-000000000401", registrationNumber: "農林水産省登録第1号", name: "テスト水和剤",
         activeIngredient: "成分A", applicableCrops: ["つや姫"], dilutionMin: 500, dilutionMax: 1000, maxUses: 3, preharvestDays: 7,
-      }] }),
+      }] } }),
     }));
     assert.equal(response.status, 201);
-    const bootstrap = await fx.handle(fx.request("/api/v1/pesticide-bootstrap?fieldId=0198a6c0-0000-7000-8000-000000000101")).then((item) => item.json());
-    assert.equal(bootstrap.release.version, "jp-2026-08-14");
-    assert.equal(bootstrap.chemicals[0].maxUses, 3);
+    const listed = await fx.handle(fx.request("/api/v1/pesticide-master/reviews")).then((item) => item.json());
+    assert.equal(listed.reviews[0].status, "pending");
+    assert.equal(listed.reviews[0].proposedRelease.version, "jp-2026-08-14");
   });
 
   test("derives inventory from append-only events and queues a negative balance for adjudication", async () => {

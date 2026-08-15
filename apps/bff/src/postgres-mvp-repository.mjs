@@ -581,6 +581,58 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return { id: published.rows[0].id, version: published.rows[0].version, validUntil: iso(published.rows[0].valid_until), publishedAt: iso(published.rows[0].published_at), chemicalCount: input.chemicals.length };
     },
 
+    async requestPesticideMasterReview(client, trusted, input) {
+      await requireCapability(client, "pesticide:manage");
+      if (!input?.release || typeof input.reason !== "string" || input.reason.trim().length < 10
+        || typeof input.ticketRef !== "string" || !input.ticketRef.trim()) throw new TypeError("invalid pesticide review");
+      validateMasterRelease(input.release);
+      const tenantId = trusted.authContext.tenantId;
+      const current = await client.query(`SELECT jsonb_build_object('id', release_id, 'version', version,
+          'validUntil', valid_until, 'publishedAt', published_at) AS value
+        FROM app.pesticide_master_release WHERE tenant_id = $1::uuid ORDER BY published_at DESC LIMIT 1`, [tenantId]);
+      const requestId = uuid();
+      const saved = await client.query(`INSERT INTO app.pesticide_master_review_request
+        (tenant_id, request_id, proposed_release, before_release, reason, ticket_ref, requested_by)
+        VALUES ($1::uuid,$2::uuid,$3::jsonb,$4::jsonb,$5,$6,app.current_user_id())
+        RETURNING request_id::text AS id, proposed_release, before_release, status, reason, ticket_ref,
+          requested_by::text, requested_at`,
+      [tenantId, requestId, input.release, current.rows[0]?.value || null, input.reason.trim(), input.ticketRef.trim()]);
+      const row = saved.rows[0];
+      return { id: row.id, proposedRelease: row.proposed_release, beforeRelease: row.before_release, status: row.status,
+        reason: row.reason, ticketRef: row.ticket_ref, requestedBy: row.requested_by, requestedAt: iso(row.requested_at) };
+    },
+
+    async listPesticideMasterReviews(client) {
+      await requireCapability(client, "pesticide:manage");
+      const result = await client.query(`SELECT request_id::text AS id, proposed_release, before_release, status,
+          reason, ticket_ref, requested_by::text, requested_at, decided_by::text, decided_at, decision_note,
+          release_id::text FROM app.pesticide_master_review_request
+        WHERE tenant_id = app.current_tenant_id() ORDER BY requested_at DESC LIMIT 200`);
+      return { reviews: result.rows.map((row) => ({ id: row.id, proposedRelease: row.proposed_release,
+        beforeRelease: row.before_release, status: row.status, reason: row.reason, ticketRef: row.ticket_ref,
+        requestedBy: row.requested_by, requestedAt: iso(row.requested_at), decidedBy: row.decided_by || null,
+        decidedAt: iso(row.decided_at) || null, decisionNote: row.decision_note || null, releaseId: row.release_id || null })) };
+    },
+
+    async decidePesticideMasterReview(client, trusted, reviewId, input) {
+      await requireCapability(client, "pesticide:manage");
+      if (!isUuid(reviewId) || !["approve", "reject"].includes(input?.decision) || !input.note?.trim()) throw new TypeError("invalid pesticide review decision");
+      const locked = await client.query(`SELECT proposed_release, requested_by::text FROM app.pesticide_master_review_request
+        WHERE tenant_id = app.current_tenant_id() AND request_id = $1::uuid AND status = 'pending' FOR UPDATE`, [reviewId]);
+      if (!locked.rows[0]) throw new TypeError("unknown pesticide review");
+      if (locked.rows[0].requested_by === trusted.userId) throw Object.assign(new Error("requester cannot approve"), { code: "forbidden" });
+      if (input.decision === "reject") {
+        await client.query(`UPDATE app.pesticide_master_review_request SET status='rejected', decided_by=app.current_user_id(),
+          decided_at=clock_timestamp(), decision_note=$2 WHERE tenant_id=app.current_tenant_id() AND request_id=$1::uuid`, [reviewId, input.note.trim()]);
+        return { id: reviewId, status: "rejected" };
+      }
+      const release = await repository.publishPesticideMaster(client, trusted, locked.rows[0].proposed_release);
+      await client.query(`UPDATE app.pesticide_master_review_request SET status='published', decided_by=app.current_user_id(),
+        decided_at=clock_timestamp(), decision_note=$2, release_id=$3::uuid
+        WHERE tenant_id=app.current_tenant_id() AND request_id=$1::uuid`, [reviewId, input.note.trim(), release.id]);
+      return { id: reviewId, status: "published", release };
+    },
+
     async listInventory(client) {
       const [balances, alerts] = await Promise.all([
         client.query(`SELECT chemical.chemical_id::text AS chemical_id, chemical.name, chemical.registration_number,

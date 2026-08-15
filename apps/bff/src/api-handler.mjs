@@ -62,8 +62,9 @@ function hasRecentStepUp(trusted, now) {
 
 function privilegedPath(method, path) {
   return path.startsWith("/api/v1/migration-jobs")
+    || path.startsWith("/api/v1/security-admin")
     || path.startsWith("/api/v1/exports/")
-    || (method === "POST" && path === "/api/v1/pesticide-master/releases")
+    || path.startsWith("/api/v1/pesticide-master/reviews")
     || (method === "POST" && /^\/api\/v1\/journals\/[^/]+\/review$/.test(path))
     || (method === "PATCH" && /^\/api\/v1\/work-instructions\/[^/]+\/assignment$/.test(path))
     || (method === "POST" && /^\/api\/v1\/sync\/conflicts\/[^/]+\/resolve$/.test(path));
@@ -185,7 +186,7 @@ async function readAttachment(request) {
   };
 }
 
-export function createMvpApiHandler({ origin, resolveContext, database, repository, clock = () => Date.now() }) {
+export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, clock = () => Date.now() }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
 
   return async function handle(request) {
@@ -202,6 +203,38 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
     }
 
     try {
+      if (request.method === "GET" && url.pathname === "/api/v1/security-admin") {
+        if (!securityAdministration) return problem(503, "service_unavailable", "Security administration unavailable", requestId);
+        return json(200, await securityAdministration.snapshot(trusted), requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/security-admin/change-requests") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(201, await securityAdministration.requestChange(trusted, body), requestId);
+      }
+
+      const securityDecision = url.pathname.match(/^\/api\/v1\/security-admin\/change-requests\/([^/]+)\/decision$/);
+      if (request.method === "POST" && securityDecision) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        if (!['approve', 'reject'].includes(body.decision)) throw new TypeError("decision");
+        return json(200, await securityAdministration.decideChange(trusted, decodeURIComponent(securityDecision[1]), body), requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/security-admin/privacy-requests") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(201, await securityAdministration.createPrivacyRequest(trusted, body), requestId);
+      }
+
+      const privacyTransition = url.pathname.match(/^\/api\/v1\/security-admin\/privacy-requests\/([^/]+)\/transitions$/);
+      if (request.method === "POST" && privacyTransition) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(200, await securityAdministration.transitionPrivacyRequest(trusted, decodeURIComponent(privacyTransition[1]), body), requestId);
+      }
+
       if (request.method === "GET" && url.pathname === "/api/v1/today") {
         const result = await database.transaction(trusted, (client, canonical) => repository.getToday(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
         return json(200, result, requestId);
@@ -271,11 +304,24 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         return csvResponse(result, requestId);
       }
 
-      if (request.method === "POST" && url.pathname === "/api/v1/pesticide-master/releases") {
+      if (request.method === "POST" && url.pathname === "/api/v1/pesticide-master/reviews") {
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
         const body = await readJsonObject(request);
-        const result = await database.transaction(trusted, (client, canonical) => repository.publishPesticideMaster(client, canonical ? { ...trusted, authContext: canonical } : trusted, body));
+        const result = await database.transaction(trusted, (client, canonical) => repository.requestPesticideMasterReview(client, canonical ? { ...trusted, authContext: canonical } : trusted, body));
         return json(201, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/pesticide-master/reviews") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.listPesticideMasterReviews(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      const pesticideReviewDecision = url.pathname.match(/^\/api\/v1\/pesticide-master\/reviews\/([^/]+)\/decision$/);
+      if (request.method === "POST" && pesticideReviewDecision) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.decidePesticideMasterReview(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(pesticideReviewDecision[1]), body));
+        return json(200, result, requestId);
       }
 
       const reviewMatch = url.pathname.match(/^\/api\/v1\/journals\/([^/]+)\/review$/);
@@ -354,6 +400,8 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (error instanceof RangeError) return problem(413, "request_too_large", "Request too large", requestId);
       if (error?.code === "scope_revoked") return problem(409, "scope_revoked", "Scope was revoked", requestId, undefined, { purgeScope: error.scope });
       if (error?.code === "forbidden") return problem(403, "forbidden", "Forbidden", requestId);
+      if (error?.code === "42501") return problem(403, "forbidden", "Forbidden", requestId);
+      if (["22023", "23505", "23514", "22P02"].includes(error?.code)) return problem(400, "invalid_request", "Invalid request", requestId);
       if (error?.code === "version_conflict") return problem(409, "version_conflict", "Version conflict", requestId, undefined, { currentVersion: error.currentVersion });
       if (error?.code === "idempotency_conflict") return problem(409, "idempotency_conflict", "Idempotency conflict", requestId);
       return problem(500, "request_failed", "Request failed", requestId);
