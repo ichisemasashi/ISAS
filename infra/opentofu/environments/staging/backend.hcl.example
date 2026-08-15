@@ -1,0 +1,6 @@
+bucket         = "REPLACE_WITH_STAGING_STATE_BUCKET"
+dynamodb_table = "isas-jp-staging-opentofu-lock"
+kms_key_id     = "REPLACE_WITH_STAGING_STATE_KMS_KEY_ARN"
+region         = "ap-northeast-1"
+encrypt        = true
+use_lockfile   = true

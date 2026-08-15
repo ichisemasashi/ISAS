@@ -428,7 +428,8 @@ DECLARE table_name text;
 BEGIN
   FOREACH table_name IN ARRAY ARRAY[
     'auth_user', 'auth_role', 'auth_role_capability', 'auth_membership',
-    'auth_membership_field_group', 'auth_tenant_relation', 'auth_employer_delegate'
+    'auth_membership_field_group', 'auth_tenant_relation', 'auth_employer_delegate',
+    'auth_revocation_event'
   ] LOOP
     EXECUTE format(
       'CREATE TRIGGER z_auth_change_audit AFTER INSERT OR UPDATE OR DELETE ON priv.%I FOR EACH ROW EXECUTE FUNCTION app_private.audit_auth_change()',

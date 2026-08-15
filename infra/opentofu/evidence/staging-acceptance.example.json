@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "deploymentId": "isas-jp-stg-01",
+  "environment": "staging",
+  "accountId": "000000000000",
+  "region": "ap-northeast-1",
+  "commitSha": "0000000000000000000000000000000000000000",
+  "tofuPlanSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "collectedAt": "1970-01-01T00:00:00.000Z",
+  "checks": [
+    { "id": "account-region", "status": "BLOCKED", "evidence": "AWS credentials have not been supplied" },
+    { "id": "three-availability-zones", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "regional-kms-keys", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "rds-multi-az", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "postgres-postgis", "status": "BLOCKED", "evidence": "Migration task has not run" },
+    { "id": "auth-migration", "status": "BLOCKED", "evidence": "Migration task has not run" },
+    { "id": "auth-production-security", "status": "BLOCKED", "evidence": "Production security SQL has not run" },
+    { "id": "ecs-services", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "digest-images", "status": "BLOCKED", "evidence": "Release digests have not been supplied" },
+    { "id": "cognito-mfa", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "dynamodb-session", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "s3-private-storage", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "sqs-dead-letter", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "backup-recovery-point", "status": "BLOCKED", "evidence": "Restore test has not been completed" },
+    { "id": "monitoring-alert-route", "status": "BLOCKED", "evidence": "SNS subscription has not been confirmed" },
+    { "id": "https-health", "status": "BLOCKED", "evidence": "Application endpoint does not exist" },
+    { "id": "waf-association", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "github-oidc", "status": "BLOCKED", "evidence": "GitHub Environment trust has not been exercised" }
+  ]
+}

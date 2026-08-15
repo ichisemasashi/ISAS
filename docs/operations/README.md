@@ -9,6 +9,7 @@
 | [デプロイ・ロールバック手順](デプロイ・ロールバック手順.md) | release candidateの事前確認、migration、5%→25%→100%、停止／rollback |
 | [バックアップ・復旧手順](バックアップ・復旧手順.md) | backup取得、月次restore、四半期DR、実障害からの復旧 |
 | [障害対応手順](障害対応手順.md) | Sev判定、役割、write freeze、法域内連絡、事後処置 |
+| [AWS staging受入手順](AWS-staging受入手順.md) | OpenTofu apply、AuthContext migration、18項目の実AWS受入と現在のBLOCKED理由 |
 
 ## 共通原則
 

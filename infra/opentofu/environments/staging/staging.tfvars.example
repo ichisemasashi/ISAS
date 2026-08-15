@@ -1,0 +1,29 @@
+deployment_id          = "isas-jp-stg-01"
+environment            = "staging"
+region                 = "ap-northeast-1"
+expected_aws_account_id = "123456789012"
+
+domain_name          = "staging.isas.example.jp"
+route53_zone_id      = "Z0000000000000000000"
+certificate_arn      = "arn:aws:acm:ap-northeast-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+cognito_custom_domain              = "auth.staging.isas.example.jp"
+cognito_certificate_arn_us_east_1 = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+github_repository                  = "example/isas"
+
+container_images = {
+  web       = "123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/isas-jp-stg/web@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  bff       = "123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/isas-jp-stg/bff@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  worker    = "123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/isas-jp-stg/worker@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  pgbouncer = "123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/isas-jp-stg/pgbouncer@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  adot      = "public.ecr.aws/aws-observability/aws-otel-collector@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  migration = "123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/isas-jp-stg/migration@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+}
+
+rds_engine_version             = "16.14"
+rds_instance_class             = "db.m6gd.large"
+rds_allocated_storage_gib      = 100
+rds_iops                       = 1000
+minimum_bff_tasks              = 3
+deletion_protection            = false
+force_destroy_nonproduction    = false
+alert_email                    = null

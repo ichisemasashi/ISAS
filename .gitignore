@@ -7,3 +7,15 @@ coverage/
 playwright-report/
 test-results/
 ops/release-manifest.json
+infra/opentofu/.terraform/
+infra/opentofu/**/.terraform/
+infra/opentofu/*.tfstate
+infra/opentofu/*.tfstate.*
+infra/opentofu/**/*.tfstate
+infra/opentofu/**/*.tfstate.*
+infra/opentofu/*.tfplan
+infra/opentofu/**/*.tfplan
+infra/opentofu/environments/*/backend.hcl
+infra/opentofu/environments/*/*.tfvars
+infra/opentofu/evidence/*
+!infra/opentofu/evidence/staging-acceptance.example.json

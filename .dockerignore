@@ -1,0 +1,15 @@
+._*
+**/._*
+.git
+**/.git
+node_modules
+**/node_modules
+dist
+**/dist
+coverage
+**/coverage
+infra/opentofu/.terraform
+infra/opentofu/**/*.tfstate*
+infra/opentofu/**/*.tfplan
+infra/opentofu/evidence/*.json
+!infra/opentofu/evidence/staging-acceptance.example.json
