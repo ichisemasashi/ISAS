@@ -76,6 +76,15 @@ resource "aws_backup_vault" "main" {
   kms_key_arn = aws_kms_key.backup.arn
 }
 
+resource "aws_backup_vault_lock_configuration" "production" {
+  count = var.environment == "production" ? 1 : 0
+
+  backup_vault_name   = aws_backup_vault.main.name
+  changeable_for_days = 7
+  min_retention_days  = 30
+  max_retention_days  = 2557
+}
+
 resource "aws_backup_plan" "main" {
   name = "${local.name}-backup"
 
@@ -121,9 +130,20 @@ resource "aws_iam_role_policy_attachment" "backup" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
 }
 
+resource "aws_iam_role_policy_attachment" "backup_s3" {
+  role       = aws_iam_role.backup.name
+  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AWSBackupServiceRolePolicyForS3Backup"
+}
+
 resource "aws_backup_selection" "rds" {
-  name         = "${local.name}-rds"
+  name         = "${local.name}-recovery-set"
   iam_role_arn = aws_iam_role.backup.arn
   plan_id      = aws_backup_plan.main.id
-  resources    = [aws_rds_cluster.core.arn]
+  resources = [
+    aws_rds_cluster.core.arn,
+    aws_dynamodb_table.session_context.arn,
+    aws_s3_bucket.private_objects.arn,
+    aws_s3_bucket.quarantine_archive.arn,
+    aws_s3_bucket.shard_config.arn,
+  ]
 }

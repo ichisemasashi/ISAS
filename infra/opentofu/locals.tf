@@ -31,6 +31,31 @@ locals {
     { name = "NODE_ENV", value = "production" },
     { name = "DEPLOYMENT_ID", value = var.deployment_id },
   ]
+
+  shard_manifest = {
+    schemaVersion = 1
+    version       = var.shard_manifest_version
+    deploymentId  = var.deployment_id
+    jurisdiction  = "JP"
+    generatedBy   = "OpenTofu"
+    shards = [{
+      shardId           = var.shard_id
+      status            = "active"
+      region            = var.region
+      availabilityZones = local.azs
+      writerEndpoint    = aws_rds_cluster.core.endpoint
+      readerEndpoint    = aws_rds_cluster.core.reader_endpoint
+      databaseName      = aws_rds_cluster.core.database_name
+      port              = aws_rds_cluster.core.port
+    }]
+  }
+}
+
+check "tls_certificate_account_and_region" {
+  assert {
+    condition     = split(":", var.certificate_arn)[4] == data.aws_caller_identity.current.account_id
+    error_message = "ALB certificate must belong to the deployment AWS account."
+  }
 }
 
 check "correct_account" {

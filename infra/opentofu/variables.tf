@@ -61,6 +61,33 @@ variable "route53_zone_id" {
 variable "certificate_arn" {
   description = "ACM certificate in ap-northeast-1 for domain_name."
   type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws:acm:ap-northeast-1:[0-9]{12}:certificate/[0-9a-f-]+$", var.certificate_arn))
+    error_message = "certificate_arn must be an ACM certificate ARN in ap-northeast-1."
+  }
+}
+
+variable "shard_id" {
+  description = "Stable logical database shard identifier embedded in the signed static manifest."
+  type        = string
+  default     = "jp-primary-01"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{2,62}$", var.shard_id))
+    error_message = "shard_id must be a stable lowercase identifier."
+  }
+}
+
+variable "shard_manifest_version" {
+  description = "Monotonically increasing reviewed shard manifest version."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.shard_manifest_version >= 1 && floor(var.shard_manifest_version) == var.shard_manifest_version
+    error_message = "shard_manifest_version must be a positive integer."
+  }
 }
 
 variable "cognito_custom_domain" {
@@ -162,6 +189,28 @@ variable "minimum_bff_tasks" {
   validation {
     condition     = var.minimum_bff_tasks >= 3
     error_message = "BFF must run at least three tasks."
+  }
+}
+
+variable "minimum_web_tasks" {
+  description = "Web task count; two is the minimum failure-domain candidate."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.minimum_web_tasks >= 2
+    error_message = "Web must run at least two tasks."
+  }
+}
+
+variable "attachment_noncurrent_retention_days" {
+  description = "Days to retain superseded private attachment versions before lifecycle expiry."
+  type        = number
+  default     = 365
+
+  validation {
+    condition     = var.attachment_noncurrent_retention_days >= 30
+    error_message = "Private attachment noncurrent versions must be retained for at least 30 days."
   }
 }
 

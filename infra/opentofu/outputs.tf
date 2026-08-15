@@ -16,9 +16,16 @@ output "deployment_manifest" {
     ingress = {
       load_balancer_arn = aws_lb.main.arn
       waf_acl_arn       = aws_wafv2_web_acl.main.arn
+      tls_policy        = aws_lb_listener.https.ssl_policy
+      certificate_arn   = var.certificate_arn
     }
     ecs = {
       cluster = aws_ecs_cluster.main.name
+      desired_tasks = {
+        web    = var.minimum_web_tasks
+        bff    = var.minimum_bff_tasks
+        worker = 3
+      }
       services = {
         web     = aws_ecs_service.web.name
         bff     = aws_ecs_service.bff.name
@@ -33,11 +40,16 @@ output "deployment_manifest" {
       image_digests = var.container_images
     }
     database = {
-      cluster_identifier = aws_rds_cluster.core.cluster_identifier
-      arn                = aws_rds_cluster.core.arn
-      engine_version     = aws_rds_cluster.core.engine_version_actual
-      endpoint           = aws_rds_cluster.core.endpoint
-      port               = aws_rds_cluster.core.port
+      cluster_identifier    = aws_rds_cluster.core.cluster_identifier
+      arn                   = aws_rds_cluster.core.arn
+      engine_version        = aws_rds_cluster.core.engine_version_actual
+      endpoint              = aws_rds_cluster.core.endpoint
+      reader_endpoint       = aws_rds_cluster.core.reader_endpoint
+      port                  = aws_rds_cluster.core.port
+      topology              = "multi-az-db-cluster-writer-1-reader-2"
+      backup_retention_days = aws_rds_cluster.core.backup_retention_period
+      pitr                  = true
+      poolers               = sort(tolist(local.db_roles))
     }
     cognito = {
       user_pool_id         = aws_cognito_user_pool.main.id
@@ -46,10 +58,13 @@ output "deployment_manifest" {
       managed_login_domain = var.cognito_custom_domain
     }
     storage = {
-      session_table         = aws_dynamodb_table.session_context.name
-      private_object_bucket = aws_s3_bucket.private_objects.id
-      ops_evidence_bucket   = aws_s3_bucket.ops_evidence.id
-      backup_vault          = aws_backup_vault.main.name
+      session_table                       = aws_dynamodb_table.session_context.name
+      private_object_bucket               = aws_s3_bucket.private_objects.id
+      private_attachment_access_point_arn = aws_s3_access_point.private_attachments.arn
+      quarantine_archive_bucket           = aws_s3_bucket.quarantine_archive.id
+      shard_config_bucket                 = aws_s3_bucket.shard_config.id
+      ops_evidence_bucket                 = aws_s3_bucket.ops_evidence.id
+      backup_vault                        = aws_backup_vault.main.name
     }
     secrets = {
       actor_pseudonym_secret_arn = aws_secretsmanager_secret.actor_pseudonym.arn
@@ -57,6 +72,7 @@ output "deployment_manifest" {
     queues = { for key, queue in aws_sqs_queue.main : key => {
       url     = queue.url
       dlq_arn = aws_sqs_queue.dead_letter[key].arn
+      dlq_url = aws_sqs_queue.dead_letter[key].url
     } }
     kms_key_arns = {
       data          = aws_kms_key.data.arn
@@ -65,6 +81,19 @@ output "deployment_manifest" {
       queue         = aws_kms_key.queue.arn
       backup        = aws_kms_key.backup.arn
       signing       = aws_kms_key.signing.arn
+    }
+    kms = {
+      backing          = "AWS KMS FIPS validated HSM"
+      custom_key_store = false
+      multi_region     = false
+    }
+    shard_manifest = {
+      version         = var.shard_manifest_version
+      shard_id        = var.shard_id
+      object_uri      = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}"
+      signature_uri   = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}.sig"
+      sha256          = sha256(jsonencode(local.shard_manifest))
+      signing_key_arn = aws_kms_key.signing.arn
     }
     operations = {
       dashboard_name = aws_cloudwatch_dashboard.overview.dashboard_name

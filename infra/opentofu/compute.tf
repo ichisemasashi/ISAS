@@ -61,8 +61,22 @@ data "aws_iam_policy_document" "application" {
   }
 
   statement {
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-    resources = ["${aws_s3_bucket.private_objects.arn}/*"]
+    actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = [
+      "${aws_s3_bucket.private_objects.arn}/*",
+      "${aws_s3_access_point.private_attachments.arn}/object/attachments/*",
+      "${aws_s3_bucket.quarantine_archive.arn}/*",
+    ]
+  }
+
+  statement {
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.shard_config.arn}/shards/*"]
+  }
+
+  statement {
+    actions   = ["kms:DescribeKey", "kms:Verify"]
+    resources = [aws_kms_key.signing.arn]
   }
 
   statement {
@@ -223,6 +237,12 @@ resource "aws_ecs_task_definition" "bff" {
         { name = "ISAS_BODY_LIMIT_BYTES", value = "11534336" },
         { name = "SESSION_TABLE", value = aws_dynamodb_table.session_context.name },
         { name = "OBJECT_BUCKET", value = aws_s3_bucket.private_objects.id },
+        { name = "ATTACHMENT_ACCESS_POINT_ARN", value = aws_s3_access_point.private_attachments.arn },
+        { name = "QUARANTINE_ARCHIVE_BUCKET", value = aws_s3_bucket.quarantine_archive.id },
+        { name = "SHARD_MANIFEST_URI", value = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}" },
+        { name = "SHARD_MANIFEST_SIGNATURE_URI", value = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}.sig" },
+        { name = "SHARD_MANIFEST_VERSION", value = tostring(var.shard_manifest_version) },
+        { name = "SHARD_MANIFEST_SIGNING_KEY_ARN", value = aws_kms_key.signing.arn },
         { name = "COGNITO_USER_POOL_ID", value = aws_cognito_user_pool.main.id },
         { name = "COGNITO_CLIENT_ID", value = aws_cognito_user_pool_client.web.id },
         { name = "COGNITO_ISSUER", value = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main.id}" },
@@ -299,6 +319,8 @@ resource "aws_ecs_task_definition" "worker" {
       { name = "DATABASE_HOST", value = "pgbouncer-p2.${local.name}.internal" },
       { name = "DATABASE_PORT", value = "6432" },
       { name = "SYNC_QUEUE_URL", value = aws_sqs_queue.main["offline-sync"].url },
+      { name = "QUARANTINE_QUEUE_URL", value = aws_sqs_queue.main["quarantine"].url },
+      { name = "QUARANTINE_ARCHIVE_BUCKET", value = aws_s3_bucket.quarantine_archive.id },
     ])
     readonlyRootFilesystem = true
     logConfiguration = {
@@ -388,7 +410,7 @@ resource "aws_ecs_service" "web" {
   name                               = "web"
   cluster                            = aws_ecs_cluster.main.id
   task_definition                    = aws_ecs_task_definition.web.arn
-  desired_count                      = 3
+  desired_count                      = var.minimum_web_tasks
   launch_type                        = "FARGATE"
   availability_zone_rebalancing      = "ENABLED"
   deployment_minimum_healthy_percent = 100

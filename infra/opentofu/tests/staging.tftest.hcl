@@ -75,10 +75,17 @@ mock_provider "aws" {
     }
   }
 
+  mock_resource "aws_s3_access_point" {
+    defaults = {
+      arn = "arn:aws:s3:ap-northeast-1:123456789012:accesspoint/isas-test-attachments"
+    }
+  }
+
   mock_resource "aws_rds_cluster" {
     defaults = {
       arn                   = "arn:aws:rds:ap-northeast-1:123456789012:cluster:isas-test"
       endpoint              = "isas-test.cluster.example.ap-northeast-1.rds.amazonaws.com"
+      reader_endpoint       = "isas-test.cluster-ro.example.ap-northeast-1.rds.amazonaws.com"
       engine_version_actual = "16.14"
       master_user_secret = [{
         kms_key_id    = "arn:aws:kms:ap-northeast-1:123456789012:key/00000000-0000-0000-0000-000000000000"
@@ -144,6 +151,41 @@ run "staging_plan" {
   assert {
     condition     = length(output.deployment_manifest.ecs.services.poolers) == 5
     error_message = "All five PgBouncer isolation classes must be planned."
+  }
+
+  assert {
+    condition     = output.deployment_manifest.ingress.tls_policy == "ELBSecurityPolicy-TLS13-1-2-2021-06"
+    error_message = "The public ingress must enforce the selected TLS 1.2/1.3 policy."
+  }
+
+  assert {
+    condition     = output.deployment_manifest.ecs.desired_tasks.web >= 2 && output.deployment_manifest.ecs.desired_tasks.bff >= 2
+    error_message = "Web and BFF must each have at least two tasks for failure-domain tolerance."
+  }
+
+  assert {
+    condition     = output.deployment_manifest.database.pitr && output.deployment_manifest.database.backup_retention_days == 30 && output.deployment_manifest.database.reader_endpoint != ""
+    error_message = "RDS must expose a reader endpoint with 30-day PITR retention."
+  }
+
+  assert {
+    condition     = length(output.deployment_manifest.queues) == 4 && contains(keys(output.deployment_manifest.queues), "quarantine")
+    error_message = "The four encrypted queues must include the quarantine path."
+  }
+
+  assert {
+    condition     = output.deployment_manifest.storage.private_attachment_access_point_arn != "" && output.deployment_manifest.storage.quarantine_archive_bucket != ""
+    error_message = "Private attachment delivery and quarantine archive resources must be in the manifest."
+  }
+
+  assert {
+    condition     = output.deployment_manifest.kms.backing == "AWS KMS FIPS validated HSM" && !output.deployment_manifest.kms.multi_region
+    error_message = "The deployment must use regional AWS KMS HSM-backed keys."
+  }
+
+  assert {
+    condition     = output.deployment_manifest.shard_manifest.shard_id == "jp-primary-01" && can(regex("^[0-9a-f]{64}$", output.deployment_manifest.shard_manifest.sha256))
+    error_message = "The immutable shard manifest must include its shard ID and SHA-256 digest."
   }
 
   assert {

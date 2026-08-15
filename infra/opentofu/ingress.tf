@@ -9,11 +9,12 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "web" {
-  name        = "${local.name}-web"
-  port        = 8080
-  protocol    = "HTTP"
-  target_type = "ip"
-  vpc_id      = aws_vpc.main.id
+  name                 = "${local.name}-web"
+  port                 = 8080
+  protocol             = "HTTP"
+  target_type          = "ip"
+  vpc_id               = aws_vpc.main.id
+  deregistration_delay = 30
 
   health_check {
     enabled             = true
@@ -25,11 +26,12 @@ resource "aws_lb_target_group" "web" {
 }
 
 resource "aws_lb_target_group" "bff" {
-  name        = "${local.name}-bff"
-  port        = 3000
-  protocol    = "HTTP"
-  target_type = "ip"
-  vpc_id      = aws_vpc.main.id
+  name                 = "${local.name}-bff"
+  port                 = 3000
+  protocol             = "HTTP"
+  target_type          = "ip"
+  vpc_id               = aws_vpc.main.id
+  deregistration_delay = 30
 
   health_check {
     enabled             = true
