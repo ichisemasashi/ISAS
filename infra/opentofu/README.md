@@ -90,7 +90,7 @@ BFF imageには`bff_runtime_adapter_module`（既定`/app/runtime-adapters/aws.m
 
 ## 4. AuthContext migration
 
-`infra/images/migration/Dockerfile`はmigration専用imageである。最初にNOLOGIN／NOBYPASSRLS owner roleを用意し、`0000_auth_context_v1.sql`から`0011_security_administration.sql`までchecksum ledger付きで順番に適用する。その後、fixtureをtransaction rollbackするAuthContext／security administration verifyと`production_auth_context_security.sql`を実行する。`0001`以降の既存verifyはfixtureを永続化するためstaging／productionでは実行せず、使い捨てDBで`RUN_DESTRUCTIVE_FIXTURE_VERIFICATION=true`かつ`ALLOW_DISPOSABLE_DATABASE=true`を明示したCIだけで実行する。
+`infra/images/migration/Dockerfile`はmigration専用imageである。最初にNOLOGIN／NOBYPASSRLS owner roleを用意し、`0000_auth_context_v1.sql`から`0012_attachment_object_storage.sql`までchecksum ledger付きで順番に適用する。その後、fixtureをtransaction rollbackするAuthContext／security administration verifyと`production_auth_context_security.sql`を実行する。`0001`以降の既存verifyはfixtureを永続化するためstaging／productionでは実行せず、使い捨てDBで`RUN_DESTRUCTIVE_FIXTURE_VERIFICATION=true`かつ`ALLOW_DISPOSABLE_DATABASE=true`を明示したCIだけで実行する。
 
 最後の検査は次をDB catalogから判定し、1件でも不一致ならECS taskを非0終了させる。
 

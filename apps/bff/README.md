@@ -45,6 +45,8 @@ npm run service:stop
 | Cognito | `COGNITO_USER_POOL_ID`、`COGNITO_CLIENT_ID`、`COGNITO_ISSUER`、`COGNITO_MANAGED_LOGIN_ORIGIN` | 東京pool、public code-flow client、allowlist済みHTTPS issuer／managed-login origin |
 | 永続store | `SESSION_TABLE`、`AUTHORIZATION_REVOCATION_QUEUE_URL`、`TOKEN_SESSION_KMS_KEY_ARN` | DynamoDBの`user-index`、SQS DLQ、single-region KMS keyが起動時read-backで有効 |
 | 認証DB secret | `ACTOR_PSEUDONYM_KEY` | 32 byte以上のランダム値。Secrets Managerから注入し、log／planへ出さない |
+| 写真 | `ATTACHMENT_ACCESS_POINT_ARN`、`ATTACHMENT_DOWNLOAD_TTL_SECONDS` | VPC-only S3 access point。参照URLは30〜300秒（配備値60秒） |
+| オフライン地図 | `OFFLINE_MAP_BUCKET`、`OFFLINE_MAP_ARCHIVE_KEY`、`OFFLINE_MAP_TILESET_VERSION`、`OFFLINE_MAP_ARCHIVE_SHA256` | private PMTilesのMIME、version、ODbL、SHA-256 metadataを起動時に照合。容量／保持は`OFFLINE_MAP_INSTALLATION_LIMIT_BYTES`、`OFFLINE_MAP_PACK_RETENTION_DAYS` |
 
 DBは各classについて上記componentの代わりに`ISAS_DB_<CLASS>_URL`も指定できる。ただしURLをlogや手順書へ貼らない。既定pool上限はP0=8、Auth-P1=12、P1=16、P2=8、Ops=4、statement timeoutは順に3/5/15/30/60秒である。共通調整値は`ISAS_DB_CONNECTION_TIMEOUT_MS`、`ISAS_DB_IDLE_TIMEOUT_MS`、HTTP調整値は`ISAS_REQUEST_TIMEOUT_MS`、`ISAS_HEADERS_TIMEOUT_MS`、`ISAS_KEEP_ALIVE_TIMEOUT_MS`、`ISAS_DRAIN_TIMEOUT_MS`、`ISAS_BODY_LIMIT_BYTES`、`ISAS_READINESS_CACHE_MS`を使う。body上限は最大16MiBで、既定11MiB（10MiB写真とmultipart等の余裕）である。
 
@@ -64,10 +66,12 @@ DBは各classについて上記componentの代わりに`ISAS_DB_<CLASS>_URL`も�
 
 - `GET /api/v1/today`：RLS適用後の当日作業を返す。Webは成功時にIndexedDB cacheを更新する。
 - `GET /api/v1/fields`：担当圃場をGeoJSONで返す。`bbox`はPostGIS `&& ST_MakeEnvelope`、`q`は圃場名前方検索、`cursor`はUUIDv7ページングに使う。S2の結論に従いSQLへtenant等値を明示する。
+- `GET /api/v1/offline-map-pack`：RLSで担当field-groupを検査し、PostGISで担当圃場bbox＋2km、zoom 8〜16、assignment／tileset version、250MiB上限、期限を返す。`GET /api/v1/offline-map-archive`は単一4MiB以下のPMTiles Rangeだけを受け、各Rangeでsession、AuthContext、RLS割当を再検証する。S3 URLを端末へ公開しない。
 - `GET/POST /api/v1/work-instructions`：担当者は割当済み指示を参照し、`instruction:manage`を持つ管理者は指示を発行する。Webの今日画面、14日ガント、モバイル作業リストはこの同じ応答を使い、予定開始・終了と選択状態を連動する。
 - `PATCH /api/v1/work-instructions/:id/assignment`：再割当はオフライン同期へ載せず、オンライン専用の`expectedVersion`＋行ロックで競合を409にする。
 - `GET /api/v1/journal-bootstrap`：指示、当日打刻からの開始／終了候補、欠落警告、テンプレート、前回値または訂正対象を返す。Webはテンプレート／前回値をIndexedDBへ保存する。
 - `POST /api/v1/journal-attachments`：日誌受理後に、端末保存済みのJPEG/PNG/WebP/HEIC（10MB以下）を冪等アップロードする。同じattachment IDへ異なる内容を送った場合は409とする。
+- `GET /api/v1/journal-attachments/:id/access`：RLSで添付参照権限を検査し、MIMEと安全なdownload名を固定した最大5分のS3署名URLを返す。object keyは返さない。`POST /api/v1/security-admin/attachment-storage/reconcile`はrecent MFA＋`security:manage`でDB／S3を照合し、未完uploadを確定／隔離して孤立objectへ回収tagを付ける。
 - `GET /api/v1/journals`／`POST /api/v1/journals/:id/review`：本人の日誌または管理者のレビュー対象を返し、理由必須の差し戻し／承認を楽観ロック付きで行う。差し戻し・訂正・承認は`journal_revision`へ追記し、承認済み日誌の通常更新は拒否する。
 - `GET /api/v1/pesticide-bootstrap`：担当圃場の農薬マスタrelease（version／有効期限／最終同期）、失効日、適用作物、希釈範囲、使用上限、収穫前日数、当年使用履歴、在庫を返す。端末は圃場単位で保存し、オンライン時に強制更新する。
 - `POST /api/v1/pesticide-master/releases`：`pesticide:manage`を持つ管理者だけが、楽観版確認付きで鮮度期限のあるマスタreleaseを公開する。
@@ -99,6 +103,7 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0008_data_migration.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0009_field_bbox_prefilter.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0010_identity_runtime.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0011_security_administration.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0012_attachment_object_storage.sql
 ```
 
 旧データを移す場合は、法域内の隔離環境で`backfill/0000_auth_context_v1_stage.sql`を適用し、review済みCSVを`migration_stage`へ`\copy`してから`backfill/0000_auth_context_v1_backfill.sql`を実行する。backfillは全対象userのversionを進めて失効eventを作り、完了時にstaging schemaを削除する。`rollback/0000_auth_context_v1_rollback.sql`は業務表も永続userもない場合だけ成功し、それ以外はdropせず停止する。
