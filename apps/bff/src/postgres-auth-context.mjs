@@ -14,7 +14,9 @@ SELECT
   allowed_tenants::text[] AS allowed_tenants,
   scope_field_groups::text[] AS scope_field_groups,
   caps::text[] AS capabilities,
-  employer_subject_users::text[] AS employer_subject_users
+  employer_subject_users::text[] AS employer_subject_users,
+  membership_version::text,
+  authorization_version::text
 FROM app_private.validate_auth_context(
   $1::uuid, $2::uuid, $3::uuid[], $4::uuid[], $5::text[], $6::uuid[]
 )`;
@@ -27,7 +29,9 @@ SELECT
   set_config('app.scope_field_groups', $4::uuid[]::text, true),
   set_config('app.caps', $5::text[]::text, true),
   set_config('app.employer_subject_users', $6::uuid[]::text, true),
-  set_config('app.actor_pseudonym', $7::text, true)`;
+  set_config('app.membership_version', $7::bigint::text, true),
+  set_config('app.authorization_version', $8::bigint::text, true),
+  set_config('app.actor_pseudonym', $9::text, true)`;
 
 function requireUuid(value, field) {
   if (typeof value !== "string" || !UUID.test(value)) throw new Error(`Invalid AuthContext: ${field}`);
@@ -62,7 +66,7 @@ function normalizeInput(trusted) {
 
 function normalizeValidated(row) {
   if (!row) throw new Error("AuthContext was rejected by PostgreSQL");
-  return normalizeInput({
+  const normalized = normalizeInput({
     actorPseudonym: "validated-separately",
     authContext: {
       userId: row.user_id,
@@ -73,6 +77,9 @@ function normalizeValidated(row) {
       employerSubjectUsers: row.employer_subject_users,
     },
   });
+  if (!/^[1-9][0-9]*$/.test(row.membership_version || "")) throw new Error("Invalid AuthContext: membershipVersion");
+  if (!/^[1-9][0-9]*$/.test(row.authorization_version || "")) throw new Error("Invalid AuthContext: authorizationVersion");
+  return { ...normalized, membershipVersion: row.membership_version, authorizationVersion: row.authorization_version };
 }
 
 function assertNoWidening(requested, canonical) {
@@ -134,6 +141,8 @@ export function createPostgresAuthContextAdapter(pool, { expectedRole = "app_use
           canonical.scopeFieldGroups,
           canonical.capabilities,
           canonical.employerSubjectUsers,
+          canonical.membershipVersion,
+          canonical.authorizationVersion,
           requested.actorPseudonym,
         ]);
 

@@ -38,10 +38,10 @@ Webのoutboxは受理または重複応答を得るまで削除しない。差�
 
 ## PostgreSQL migration
 
-MVP業務表は次の順で適用する。`0001`は現時点ではS8 AuthContext参照DDLが先に存在することを前提とする。
+MVP業務表は次の順で適用する。`0000_auth_context_v1.sql`がuser、membership、role、scope、単調`authorization_version`、永続失効event、監査triggerと`validate_auth_context`の正式な起点である。`spikes/S8_auth_context.sql`はこのmigrationと検証SQLを呼ぶだけで、別DDLを持たない。
 
 ```bash
-psql "$DATABASE_URL" -f spikes/S8_auth_context.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0000_auth_context_v1.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0001_mvp_sync.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0002_conflict_fields.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0003_field_gis.sql
@@ -53,6 +53,8 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0008_data_migration.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0009_field_bbox_prefilter.sql
 ```
 
+旧データを移す場合は、法域内の隔離環境で`backfill/0000_auth_context_v1_stage.sql`を適用し、review済みCSVを`migration_stage`へ`\copy`してから`backfill/0000_auth_context_v1_backfill.sql`を実行する。backfillは全対象userのversionを進めて失効eventを作り、完了時にstaging schemaを削除する。`rollback/0000_auth_context_v1_rollback.sql`は業務表も永続userもない場合だけ成功し、それ以外はdropせず停止する。
+
 業務表はすべて`ENABLE/FORCE ROW LEVEL SECURITY`である。tenant policyをpermissive基底、field scopeと競合裁定capabilityをrestrictive条件にしてAND合成する。アプリ接続は必ず`app_user`を使う。
 
 ローカル検証は次の順で再現できる。`00_common.sql`は検証DBのschema/roleを再作成するため、本番DBでは実行しない。
@@ -60,7 +62,9 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0009_field_bbox_prefilter.sql
 ```bash
 cd spikes && docker compose up -d && cd ..
 PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
-  -f spikes/00_common.sql -f spikes/S8_auth_context.sql \
+  -f spikes/00_common.sql \
+  -f apps/bff/migrations/0000_auth_context_v1.sql \
+  -f apps/bff/migrations/verify/0000_auth_context_v1_verify.sql \
   -f apps/bff/migrations/0001_mvp_sync.sql \
   -f apps/bff/migrations/0002_conflict_fields.sql \
   -f apps/bff/migrations/0003_field_gis.sql \
@@ -95,4 +99,4 @@ npm test
 npm run check
 ```
 
-2026-08-15時点でBFF 50テスト、Web 32テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群がPASSしている。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。
+2026-08-15時点でBFF 50テスト、Web 36テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群がPASSしている。backfillと安全条件付きrollbackも実DBで確認済みである。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、失効consumer、pool driverを生成するHTTP runtimeである。

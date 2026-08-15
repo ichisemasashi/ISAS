@@ -40,6 +40,8 @@ function fakePool({ role = { role_name: "app_user", rolsuper: false, rolbypassrl
           scope_field_groups: [F1],
           capabilities: ["journal:write"],
           employer_subject_users: [],
+          membership_version: "1",
+          authorization_version: "7",
         }] };
       }
       return { rows: [{ ok: true }] };
@@ -58,6 +60,8 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
       scope_field_groups: [],
       capabilities: ["journal:write"],
       employer_subject_users: [],
+      membership_version: "3",
+      authorization_version: "9",
     } });
     const adapter = createPostgresAuthContextAdapter(db.pool);
 
@@ -71,7 +75,7 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
     assert.match(db.calls[1].sql, /FROM pg_roles/);
     assert.match(db.calls[2].sql, /validate_auth_context/);
     assert.match(db.calls[3].sql, /set_config\('app\.allowed_tenants'/);
-    assert.deepEqual(db.calls[3].values, [U1, T1, [T1], [], ["journal:write"], [], "actor-u1"]);
+    assert.deepEqual(db.calls[3].values, [U1, T1, [T1], [], ["journal:write"], [], "3", "9", "actor-u1"]);
     assert.equal(db.calls[4].sql, "SELECT count(*) FROM field_record");
     assert.equal(db.calls[5].sql, "COMMIT");
     assert.equal(db.released(), true);
@@ -100,6 +104,8 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
         scope_field_groups: [],
         capabilities: [],
         employer_subject_users: [],
+        membership_version: "1",
+        authorization_version: "2",
       } });
       const adapter = createPostgresAuthContextAdapter(db.pool);
       await assert.rejects(() => adapter.transaction(trusted(), async () => undefined), /changed the AuthContext subject or write tenant/);
@@ -116,6 +122,8 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
       scope_field_groups: [],
       capabilities: [],
       employer_subject_users: [],
+      membership_version: "1",
+      authorization_version: "2",
     } });
     const narrowedAdapter = createPostgresAuthContextAdapter(narrowed.pool);
     await narrowedAdapter.transaction(trusted(), async (_client, canonical) => {
@@ -136,6 +144,8 @@ describe("PostgreSQL AuthContext transaction adapter", () => {
         scope_field_groups: [F1],
         capabilities: ["journal:write"],
         employer_subject_users: [],
+        membership_version: "1",
+        authorization_version: "2",
         [field]: value,
       };
       const db = fakePool({ validation: row });

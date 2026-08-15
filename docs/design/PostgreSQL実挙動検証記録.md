@@ -195,6 +195,16 @@ ADR-0009が要求する「候補集合をDB側で現在権限へ再照合して�
 
 - **PG-H4**：`security_invoker` ビューが呼出元RLSで評価され、テナントAにはAの上書き、Bには共有マスタが見えることを確認。S1 (14) はPASS。
 - **PG-H3**：S1 (15) で、`app_owner` 所有の版履歴トリガが FORCE RLS 下で更新前スナップショットを追記すること、注入無しの所有者が本体・履歴・監査を迂回できないことを確認。監査は `audit_writer`（NOLOGIN・BYPASSRLS・INSERT-only）所有の固定search_path関数から対象行由来tenantへ2件追記し、通常ロールからの直接参照・関数実行を拒否した。チェーン直列化と並行性能はS5に残る。
+
+### 9.1 AuthContext正式migration化（2026-08-15）
+
+`spikes/S8_auth_context.sql`の参照DDLを[`0000_auth_context_v1.sql`](../../apps/bff/migrations/0000_auth_context_v1.sql)へ移し、S8を正式migration＋検証SQLの実行ラッパーへ変更した。PostgreSQL 16.4＋PostGIS 3.4.3で次を確認した。
+
+- user、membership、role、field-group scope、tenant relation、雇用委任を永続表化し、全9表が`auth_context_owner`所有、`ENABLE/FORCE ROW LEVEL SECURITY`である。
+- DB sequence由来の利用者単位`authorization_version`を、membership／scope／role capability／tenant relation／雇用委任の変更ごとに単調増加させ、同一transactionで`auth_revocation_event`へ追記する。
+- `membership_version`もUPDATE triggerが旧値＋1へ強制し、callerによる巻戻しを許さない。
+- 権限変更7表の監査trigger、失効未配送・user version・tenant別索引、通常roleからの`priv`直接参照拒否、SECURITY DEFINER固定`search_path`を12群で検査した。
+- 正式migration→既存0001〜0009→既存verify 34群を通しでPASSした。合成backfillはversion／失効eventを生成し、安全rollbackは業務表・永続userがない場合だけ成功した。
 - **PG-M2**：`&&`／`<->` の実体関数はともに `proleakproof = false`。bboxはRLSのみで7.502ms、明示的な `tenant_id` 等値付きで3.335msだったが、どちらも空間 `&&` は `Filter` に残り、1テナント5,000行のうち1,546行を除外した。**性能値はSLO内でも、意図した複合索引の構造的合格基準には未達**。
 - **PG-M8**：RLSのみのKNNは `geom` 単独GiSTを使い、20行を得るまで他テナント276行を除外（1.233ms）。明示的な `tenant_id` 等値付きでは複合GiSTを使い0.137msとなり、読み捨ては発生しなかった。
 - **判定の限界**：10万行・単一接続の合成データでは全ケースが地図2秒SLO内だが、本番規模・並行負荷への外挿はしない。bboxの緩和策、KNNのクエリ規約、再測条件を設計で確定する必要がある。
