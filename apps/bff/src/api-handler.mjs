@@ -7,6 +7,7 @@ const MAX_BUNDLES = 100;
 const MAX_EVENTS_PER_BUNDLE = 100;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+const MAX_JSON_BYTES = 256 * 1024;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
 
 function json(status, body, correlationId, contentType = "application/json; charset=utf-8") {
@@ -103,9 +104,21 @@ function exportSearch(url) {
 
 async function readJsonObject(request) {
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("Content-Type") || "")) throw new TypeError("content_type");
-  const body = await request.json();
+  const declared = Number(request.headers.get("Content-Length") || 0);
+  if (Number.isFinite(declared) && declared > MAX_JSON_BYTES) throw new RangeError("json_too_large");
+  const text = await request.text();
+  if (Buffer.byteLength(text) > MAX_JSON_BYTES) throw new RangeError("json_too_large");
+  const body = JSON.parse(text || "{}");
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new TypeError("body");
   return body;
+}
+
+function hasImageSignature(contentType, bytes) {
+  if (contentType === "image/jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (contentType === "image/png") return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (contentType === "image/webp") return bytes.length >= 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+  if (contentType === "image/heic") return bytes.length >= 12 && bytes.subarray(4, 8).toString("ascii") === "ftyp" && /^hei[cf]|^mif1$/.test(bytes.subarray(8, 12).toString("ascii"));
+  return false;
 }
 
 async function readMigrationJob(request) {
@@ -134,11 +147,20 @@ async function readAttachment(request) {
   if (declared > MAX_ATTACHMENT_BYTES) throw new RangeError("attachment_too_large");
   const bytes = Buffer.from(await request.arrayBuffer());
   if (!bytes.length || bytes.length > MAX_ATTACHMENT_BYTES) throw new RangeError("attachment_size");
+  if (!hasImageSignature(contentType, bytes)) throw new TypeError("image_signature");
+  const attachmentId = request.headers.get("X-Attachment-ID") || "";
+  const journalId = request.headers.get("X-Journal-ID") || "";
+  const fileName = decodeURIComponent(request.headers.get("X-File-Name") || "photo");
+  const capturedAt = request.headers.get("X-Captured-At") || "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attachmentId)
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(journalId)
+    || !fileName || fileName.length > 255 || /[\\/\u0000-\u001f\u007f]/.test(fileName)
+    || !Number.isFinite(Date.parse(capturedAt))) throw new TypeError("attachment_metadata");
   return {
-    attachmentId: request.headers.get("X-Attachment-ID"),
-    journalId: request.headers.get("X-Journal-ID"),
-    fileName: decodeURIComponent(request.headers.get("X-File-Name") || "photo"),
-    capturedAt: request.headers.get("X-Captured-At"),
+    attachmentId,
+    journalId,
+    fileName,
+    capturedAt,
     contentType,
     bytes,
     sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -291,7 +313,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       const conflictMatch = url.pathname.match(/^\/api\/v1\/sync\/conflicts\/([^/]+)\/resolve$/);
       if (request.method === "POST" && conflictMatch) {
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
-        const body = await request.json();
+        const body = await readJsonObject(request);
         if (!body || typeof body.resolution !== "object" || Array.isArray(body.resolution)) return problem(400, "invalid_request", "Invalid conflict resolution", requestId);
         const result = await database.transaction(trusted, (client, canonical) => repository.resolveConflict(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(conflictMatch[1]), body.resolution));
         return json(200, result, requestId);

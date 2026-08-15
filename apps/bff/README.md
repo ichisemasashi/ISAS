@@ -12,6 +12,7 @@ ADR-0009の同一オリジンBFF境界と、ADR-0007/0008のMVP REST・同期面
 - `createContextResolver`：Cookieと`X-ISAS-Context`の束縛、期限、用途、現在権限を再検証し、業務API／DBアダプタだけが使う信頼済みAuthContextを返す。外部HTTPのuser／role／capabilityヘッダは入力に使わない。
 - `createPostgresAuthContextAdapter`：`app_user`が非所有者・非superuser・非BYPASSRLSであることを確認し、`app_private.validate_auth_context(...)`が返した正規値だけを同一トランザクション内のGUCへ注入する。DBはBFFが提示したtenant／scope／capability集合を拒否または縮小できるが、主体・書込tenantの置換や集合の拡張はできない。業務コールバックには`SET`、`set_config`、transaction制御を許さない制限付きclientを渡し、ROLLBACK失敗時は接続を破棄する。
 - `createIsasApplication`：上記BFFと実pool向けPostgreSQL repositoryを同一オリジンへ組み込み、認証で再導出した正規AuthContextだけをRESTへ渡す。
+- アプリケーションrouterは全API応答へ`nosniff`、frame拒否、API用CSP、same-origin resource policy、referrer／権限制限を付与する。JSONは用途別の上限内で読み込み、写真は宣言MIMEだけでなく先頭signature、UUID、撮影日時、安全なファイル名を検証する。
 
 ## MVP REST・同期API
 
@@ -91,4 +92,4 @@ npm test
 npm run check
 ```
 
-2026-08-14時点でBFF 49テスト、Web 27テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群がPASSしている。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。
+2026-08-15時点でBFF 50テスト、Web 32テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のS8 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群がPASSしている。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、pool driverを生成するHTTP runtime、S8参照DDLの本番migration化である。

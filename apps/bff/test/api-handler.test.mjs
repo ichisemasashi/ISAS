@@ -162,6 +162,28 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(fx.state.attachments.length, 1);
   });
 
+  test("rejects spoofed image content and oversized JSON before repository processing", async () => {
+    const fx = fixture(["journal:write", "instruction:manage"]);
+    const invalidImage = await fx.handle(fx.request("/api/v1/journal-attachments", {
+      method: "POST",
+      headers: {
+        Origin: ORIGIN, "Content-Type": "image/jpeg", "X-CSRF-Token": "csrf-1",
+        "X-Attachment-ID": "0198a6c0-0000-7000-8000-000000000201",
+        "X-Journal-ID": "0198a6c0-0000-7000-8000-000000000202",
+        "X-File-Name": "field.jpg", "X-Captured-At": "2026-08-14T00:00:00Z",
+      },
+      body: new TextEncoder().encode("not an image"),
+    }));
+    assert.equal(invalidImage.status, 400);
+
+    const oversized = await fx.handle(fx.request("/api/v1/work-instructions", {
+      method: "POST",
+      headers: { Origin: ORIGIN, "Content-Type": "application/json", "Content-Length": String(256 * 1024 + 1), "X-CSRF-Token": "csrf-1" },
+      body: "{}",
+    }));
+    assert.equal(oversized.status, 413);
+  });
+
   test("requires a reason for return and keeps correction history", async () => {
     const journalId = "0198a6c0-0000-7000-8000-000000000301";
     const journal = { id: journalId, tenantId: "tenant-1", workerUserId: "22222222-2222-7222-8222-222222222222", fieldName: "北圃場", body: { memo: "旧値" }, status: "submitted", version: 1 };
