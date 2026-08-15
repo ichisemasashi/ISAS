@@ -80,6 +80,11 @@ data "aws_iam_policy_document" "application" {
   }
 
   statement {
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.offline_maps.arn}/tilesets/*"]
+  }
+
+  statement {
     actions   = ["kms:DescribeKey", "kms:Verify"]
     resources = [aws_kms_key.signing.arn]
   }
@@ -244,6 +249,12 @@ resource "aws_ecs_task_definition" "bff" {
         { name = "OBJECT_BUCKET", value = aws_s3_bucket.private_objects.id },
         { name = "ATTACHMENT_ACCESS_POINT_ARN", value = aws_s3_access_point.private_attachments.arn },
         { name = "ATTACHMENT_DOWNLOAD_TTL_SECONDS", value = "60" },
+        { name = "OFFLINE_MAP_BUCKET", value = aws_s3_bucket.offline_maps.id },
+        { name = "OFFLINE_MAP_ARCHIVE_KEY", value = "tilesets/${var.offline_tileset_version}/japan.pmtiles" },
+        { name = "OFFLINE_MAP_TILESET_VERSION", value = var.offline_tileset_version },
+        { name = "OFFLINE_MAP_ARCHIVE_SHA256", value = var.offline_tileset_archive_sha256 },
+        { name = "OFFLINE_MAP_INSTALLATION_LIMIT_BYTES", value = tostring(var.offline_map_installation_limit_bytes) },
+        { name = "OFFLINE_MAP_PACK_RETENTION_DAYS", value = tostring(var.offline_map_pack_retention_days) },
         { name = "QUARANTINE_ARCHIVE_BUCKET", value = aws_s3_bucket.quarantine_archive.id },
         { name = "SHARD_MANIFEST_URI", value = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}" },
         { name = "SHARD_MANIFEST_SIGNATURE_URI", value = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}.sig" },

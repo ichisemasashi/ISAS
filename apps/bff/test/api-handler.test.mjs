@@ -18,7 +18,7 @@ function fixture(capabilities = ["journal:write"], options = {}) {
   };
   const memory = createMemoryMvpRepository({
     tasks: [{ id: "task-1", tenantId: "tenant-1", time: "08:30", field: "北圃場", crop: "米", work: "水位確認", status: "今日" }],
-    fields: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", tenantId: "tenant-1", geometry: { type: "MultiPolygon", coordinates: [[[[140.3, 38.2], [140.31, 38.2], [140.31, 38.21], [140.3, 38.2]]]] }, properties: { name: "北圃場", cropName: "つや姫", areaSqm: 1000 } }],
+    fields: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", tenantId: "tenant-1", geometry: { type: "MultiPolygon", coordinates: [[[[140.3, 38.2], [140.31, 38.2], [140.31, 38.21], [140.3, 38.2]]]] }, properties: { fieldGroupId: "field-group-1", name: "北圃場", cropName: "つや姫", areaSqm: 1000 } }],
     ...options,
   });
   const securityAdministration = options.securityAdministration || {
@@ -160,6 +160,33 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(body.type, "FeatureCollection");
     assert.equal(body.features[0].properties.name, "北圃場");
     assert.equal((await fx.handle(fx.request("/api/v1/fields?bbox=140,38,139,39"))).status, 400);
+  });
+
+  test("authorizes an offline PMTiles pack only for an assigned field group", async () => {
+    const fx = fixture();
+    const response = await fx.handle(fx.request("/api/v1/offline-map-pack?fieldGroupId=field-group-1"));
+    assert.equal(response.status, 200);
+    const manifest = await response.json();
+    assert.equal(manifest.fieldGroupId, "field-group-1");
+    assert.equal(manifest.minZoom, 8);
+    assert.equal(manifest.maxZoom, 16);
+    assert.equal(manifest.maxBytes, 250 * 1024 * 1024);
+    assert.match(manifest.attribution, /OpenStreetMap/);
+
+    const denied = await fx.handle(fx.request("/api/v1/offline-map-pack?fieldGroupId=other-group"));
+    assert.equal(denied.status, 403);
+  });
+
+  test("revalidates field-group authorization for every offline PMTiles range", async () => {
+    const fx = fixture();
+    const response = await fx.handle(fx.request("/api/v1/offline-map-archive?fieldGroupId=field-group-1&tilesetVersion=test-v1", {
+      headers: { Range: "bytes=0-2" },
+    }));
+    assert.equal(response.status, 206);
+    assert.equal(response.headers.get("Content-Range"), "bytes 0-2/3");
+    assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [1, 2, 3]);
+    assert.equal((await fx.handle(fx.request("/api/v1/offline-map-archive?fieldGroupId=other-group&tilesetVersion=test-v1", { headers: { Range: "bytes=0-2" } }))).status, 403);
+    assert.equal((await fx.handle(fx.request("/api/v1/offline-map-archive?fieldGroupId=field-group-1&tilesetVersion=test-v1"))).status, 416);
   });
 
   test("lets a manager issue and optimistically reassign work instructions online", async () => {

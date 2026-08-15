@@ -17,6 +17,7 @@ export const REQUIRED_CHECKS = Object.freeze([
   "cognito-mfa",
   "dynamodb-session",
   "s3-private-storage",
+  "offline-map-artifact",
   "private-attachment-delivery",
   "sqs-dead-letter",
   "queue-quarantine",

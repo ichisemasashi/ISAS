@@ -144,7 +144,7 @@ dynamodb_ok="$(jq -rn --slurpfile table "${work_dir}/dynamodb.json" --slurpfile 
 record "dynamodb-session" "${dynamodb_ok}" "DynamoDB ${session_table}: ACTIVE, SSE-KMS and PITR enabled"
 
 s3_ok=true
-for bucket_key in private_object_bucket quarantine_archive_bucket shard_config_bucket ops_evidence_bucket; do
+for bucket_key in private_object_bucket quarantine_archive_bucket shard_config_bucket offline_map_bucket ops_evidence_bucket; do
   bucket="$(jq -r ".storage.${bucket_key}" "${manifest}")"
   aws s3api get-public-access-block --bucket "${bucket}" >"${work_dir}/${bucket_key}-public.json"
   aws s3api get-bucket-versioning --bucket "${bucket}" >"${work_dir}/${bucket_key}-version.json"
@@ -153,7 +153,16 @@ for bucket_key in private_object_bucket quarantine_archive_bucket shard_config_b
   jq -e '.Status == "Enabled"' "${work_dir}/${bucket_key}-version.json" >/dev/null || s3_ok=false
   jq -e '.ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm == "aws:kms"' "${work_dir}/${bucket_key}-encryption.json" >/dev/null || s3_ok=false
 done
-record "s3-private-storage" "${s3_ok}" "Private object, quarantine, shard configuration and ops evidence buckets block public access, use versioning and SSE-KMS"
+record "s3-private-storage" "${s3_ok}" "Private object, quarantine, shard configuration, offline map and ops evidence buckets block public access, use versioning and SSE-KMS"
+
+offline_bucket="$(jq -r '.storage.offline_map_bucket' "${manifest}")"
+offline_version="$(jq -r '.offline_map.tileset_version' "${manifest}")"
+offline_expected_sha="$(jq -r '.offline_map.archive_sha256' "${manifest}")"
+aws s3api head-object --bucket "${offline_bucket}" --key "tilesets/${offline_version}/japan.pmtiles" >"${work_dir}/offline-map.json"
+aws s3api head-object --bucket "${offline_bucket}" --key "tilesets/${offline_version}/OSM-NOTICE.txt" >"${work_dir}/offline-map-notice.json"
+aws s3api head-object --bucket "${offline_bucket}" --key "tilesets/${offline_version}/sbom.json" >"${work_dir}/offline-map-sbom.json"
+offline_map_ok="$(jq -r --arg sha "${offline_expected_sha}" --arg version "${offline_version}" '.ContentLength > 0 and .ContentType == "application/vnd.pmtiles" and .Metadata.sha256 == $sha and .Metadata["tileset-version"] == $version and .Metadata["source-license"] == "ODbL-1.0" and .ServerSideEncryption == "aws:kms"' "${work_dir}/offline-map.json")"
+record "offline-map-artifact" "${offline_map_ok}" "PMTiles ${offline_version} exists with the declared SHA-256, ODbL metadata, NOTICE, SBOM and SSE-KMS"
 
 attachment_access_point_arn="$(jq -r '.storage.private_attachment_access_point_arn' "${manifest}")"
 attachment_access_point_name="${attachment_access_point_arn##*/}"

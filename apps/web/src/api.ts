@@ -3,6 +3,7 @@ import type { OutboxRecord } from "./storage";
 export type TodayTask = { id: string; time: string; field: string; crop: string; work: string; status: "next" | "today" | "safety_check" | "completed" | "cancelled" };
 export type FieldFeature = { type: "Feature"; id: string; geometry: { type: "MultiPolygon"; coordinates: number[][][][] }; properties: { id: string; fieldGroupId: string; name: string; cropName: string | null; status: "active" | "fallow" | "archived"; areaSqm: number; version: number } };
 export type FieldCollection = { type: "FeatureCollection"; features: FieldFeature[]; nextCursor: string | null };
+export type OfflineMapPackManifest = { packId: string; fieldGroupId: string; assignmentVersion: string; tilesetVersion: string; archiveSha256: string; archiveUrl: string; archiveUrlExpiresAt: string; bbox: [number, number, number, number]; minZoom: number; maxZoom: number; maxBytes: number; expiresAt: string; attribution: string; licenseUrl: string };
 export type PushBundle = { bundleId: string; events: OutboxRecord[] };
 export type PushResult = { bundleId: string; status: "accepted" | "duplicate" | "rejected" | "conflict"; events?: Array<{ eventUuid: string; eventTs: string }>; rejection?: { reason: string; recoveryAction: string } };
 export type PullChange = { serverSeq: string; type: string; operation: "upsert" | "delete" | "revoke"; entityId?: string | null; eventUuid?: string | null; data: Record<string, unknown> };
@@ -32,6 +33,7 @@ export class ApiProblem extends Error { constructor(public status: number, publi
 export interface MvpGateway {
   getToday(contextId: string, signal?: AbortSignal): Promise<{ tasks: TodayTask[]; serverTime: string }>;
   getFields(contextId: string, search?: { bbox?: [number, number, number, number]; query?: string; limit?: number; cursor?: string | null }, signal?: AbortSignal): Promise<FieldCollection>;
+  getOfflineMapPack(contextId: string, fieldGroupId: string, signal?: AbortSignal): Promise<OfflineMapPackManifest>;
   getWorkInstructions(contextId: string, signal?: AbortSignal): Promise<{ instructions: WorkInstruction[] }>;
   createWorkInstruction(contextId: string, csrfToken: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<WorkInstruction>;
   reassignWorkInstruction(contextId: string, csrfToken: string, instructionId: string, input: { assigneeUserId: string; expectedVersion: number }, signal?: AbortSignal): Promise<{ id: string; assignmentId: string; assigneeUserId: string; version: number }>;
@@ -74,6 +76,7 @@ export function createMvpGateway(fetcher: FetchLike = fetch): MvpGateway {
       const suffix = query.size ? `?${query}` : "";
       return fetcher(`/api/v1/fields${suffix}`, { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<FieldCollection>(response));
     },
+    getOfflineMapPack: (contextId, fieldGroupId, signal) => fetcher(`/api/v1/offline-map-pack?fieldGroupId=${encodeURIComponent(fieldGroupId)}`, { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<OfflineMapPackManifest>(response)),
     getWorkInstructions: (contextId, signal) => fetcher("/api/v1/work-instructions", { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<{ instructions: WorkInstruction[] }>(response)),
     createWorkInstruction: (contextId, csrfToken, input, signal) => fetcher("/api/v1/work-instructions", { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<WorkInstruction>(response)),
     reassignWorkInstruction: (contextId, csrfToken, instructionId, input, signal) => fetcher(`/api/v1/work-instructions/${encodeURIComponent(instructionId)}/assignment`, { method: "PATCH", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<{ id: string; assignmentId: string; assigneeUserId: string; version: number }>(response)),

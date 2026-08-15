@@ -39,6 +39,13 @@ function memoryStorage() {
     async getInventory() { return inventoryCache; },
     async saveServerQueues() {},
     async queueCounts() { return { rejections: 0, conflicts: 0 }; },
+    async beginOfflineMapPack() {},
+    async saveOfflineMapTiles() {},
+    async completeOfflineMapPack() { throw new Error("not used"); },
+    async getLatestOfflineMapPack() { return null; },
+    async getOfflineMapTile() { return null; },
+    async removeOfflineMapPack() {},
+    async reserveOfflineMapCapacity() {},
   };
   return { gateway, drafts, outbox, attachments };
 }
@@ -51,6 +58,7 @@ const tasks = [
 const api: MvpGateway = {
   async getToday() { return { tasks, serverTime: new Date().toISOString() }; },
   async getFields() { return { type: "FeatureCollection", features: [{ type: "Feature", id: "0198a6c0-0000-7000-8000-000000000101", geometry: { type: "MultiPolygon", coordinates: [] }, properties: { id: "0198a6c0-0000-7000-8000-000000000101", fieldGroupId: "f1111111-1111-7111-8111-111111111111", name: "南の3号圃場", cropName: "雪若丸", status: "active", areaSqm: 1000, version: 1 } }], nextCursor: null }; },
+  async getOfflineMapPack() { throw new Error("not used"); },
   async getWorkInstructions() { return { instructions: [] }; },
   async createWorkInstruction() { throw new Error("not used"); },
   async reassignWorkInstruction() { throw new Error("not used"); },

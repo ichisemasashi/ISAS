@@ -46,6 +46,17 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       return { type: "FeatureCollection", features: clone(page), nextCursor: visible.length > limit ? page.at(-1).id : null };
     },
 
+    async authorizeOfflineMapPack(_client, trusted, fieldGroupId) {
+      if (!trusted.authContext.scopeFieldGroups.includes(fieldGroupId)) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const scoped = fields.filter((field) => (!field.tenantId || field.tenantId === trusted.authContext.tenantId) && field.properties.fieldGroupId === fieldGroupId);
+      const points = scoped.flatMap((field) => field.geometry.coordinates.flatMap((polygon) => polygon.flatMap((ring) => ring)));
+      if (!points.length) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const west = Math.min(...points.map(([lng]) => lng)); const east = Math.max(...points.map(([lng]) => lng));
+      const south = Math.min(...points.map(([, lat]) => lat)); const north = Math.max(...points.map(([, lat]) => lat));
+      return { tenantId: trusted.authContext.tenantId, userId: trusted.userId, fieldGroupId,
+        assignmentVersion: trusted.membershipVersion, bbox: [west - 0.025, south - 0.018, east + 0.025, north + 0.018] };
+    },
+
     async listWorkInstructions(_client, trusted) {
       const manager = trusted.authContext.capabilities.includes("instruction:manage");
       return { instructions: clone(instructions.filter((item) => item.tenantId === trusted.authContext.tenantId && (manager || item.assignment?.assigneeUserId === trusted.userId))) };
@@ -341,5 +352,20 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     async reconcile() { return { scanned: attachmentObjects.size, taggedOrphans: 0, readyAttachmentIds: [], missingAttachmentIds: [] }; },
   };
 
-  return { database, repository, attachmentStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs } };
+  const mapStorage = {
+    async packManifest(authorization) {
+      return { packId: `${authorization.tenantId}:${authorization.fieldGroupId}:test`, fieldGroupId: authorization.fieldGroupId,
+        assignmentVersion: authorization.assignmentVersion, tilesetVersion: "test-v1", archiveSha256: "a".repeat(64),
+        archiveUrl: `/api/v1/offline-map-archive?fieldGroupId=${encodeURIComponent(authorization.fieldGroupId)}&tilesetVersion=test-v1`, archiveUrlExpiresAt: new Date(Date.now() + 300000).toISOString(),
+        bbox: authorization.bbox, minZoom: 8, maxZoom: 16, maxBytes: 250 * 1024 * 1024,
+        expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(), attribution: "© OpenStreetMap contributors", licenseUrl: "https://www.openstreetmap.org/copyright" };
+    },
+    async readRange(range, version) {
+      if (version !== "test-v1") throw Object.assign(new Error("changed"), { code: "offline_tileset_changed" });
+      if (!/^bytes=\d+-\d+$/.test(range || "")) throw Object.assign(new Error("range"), { code: "invalid_range" });
+      return { bytes: new Uint8Array([1, 2, 3]), contentRange: "bytes 0-2/3", etag: '"test"' };
+    },
+  };
+
+  return { database, repository, attachmentStorage, mapStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs } };
 }

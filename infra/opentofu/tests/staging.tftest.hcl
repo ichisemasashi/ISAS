@@ -119,6 +119,8 @@ variables {
   cognito_custom_domain             = "auth.staging.isas.example.jp"
   cognito_certificate_arn_us_east_1 = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
   github_repository                 = "example/isas"
+  offline_tileset_version           = "jp-test-v1"
+  offline_tileset_archive_sha256    = "abababababababababababababababababababababababababababababababab"
 
   container_images = {
     web       = "example.invalid/web@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -136,6 +138,11 @@ run "staging_plan" {
   assert {
     condition     = output.deployment_manifest.account_id == "123456789012"
     error_message = "The account guard must reach the deployment manifest."
+  }
+
+  assert {
+    condition     = output.deployment_manifest.offline_map.installation_limit_bytes == 262144000 && output.deployment_manifest.offline_map.pack_retention_days == 30
+    error_message = "ADR-0011 default capacity and retention controls must be in the deployment manifest."
   }
 
   assert {

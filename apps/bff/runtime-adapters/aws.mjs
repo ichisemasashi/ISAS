@@ -10,6 +10,7 @@ import { createPostgresIdentityAdapters } from "../src/postgres-identity.mjs";
 import { createPostgresSecurityAdministration } from "../src/security-administration.mjs";
 import { createRevocationService } from "../src/revocation-service.mjs";
 import { createS3ObjectStorage } from "../src/s3-object-storage.mjs";
+import { createS3MapStorage } from "../src/s3-map-storage.mjs";
 
 function required(env, name) {
   const value = env[name];
@@ -28,6 +29,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
   const keyId = required(env, "TOKEN_SESSION_KMS_KEY_ARN");
   const pseudonymKey = required(env, "ACTOR_PSEUDONYM_KEY");
   const attachmentAccessPoint = required(env, "ATTACHMENT_ACCESS_POINT_ARN");
+  const offlineMapBucket = required(env, "OFFLINE_MAP_BUCKET");
 
   const dynamodb = clients.dynamodb || new DynamoDBClient({ region });
   const kms = clients.kms || new KMSClient({ region });
@@ -52,6 +54,15 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
     s3,
     bucket: attachmentAccessPoint,
     downloadTtlSeconds: Number(env.ATTACHMENT_DOWNLOAD_TTL_SECONDS || 60),
+  });
+  const mapStorage = createS3MapStorage({
+    s3,
+    bucket: offlineMapBucket,
+    archiveKey: required(env, "OFFLINE_MAP_ARCHIVE_KEY"),
+    tilesetVersion: required(env, "OFFLINE_MAP_TILESET_VERSION"),
+    archiveSha256: required(env, "OFFLINE_MAP_ARCHIVE_SHA256"),
+    installationLimitBytes: Number(env.OFFLINE_MAP_INSTALLATION_LIMIT_BYTES || 250 * 1024 * 1024),
+    packRetentionDays: Number(env.OFFLINE_MAP_PACK_RETENTION_DAYS || 30),
   });
   let revocations;
   const identityProvider = createCognitoOidc({
@@ -79,6 +90,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
       revocations.startupCheck(),
       identityProvider.startupCheck({ redirectUri: config.redirectUri, logoutUri: `${config.origin}/` }),
       attachmentStorage.startupCheck(),
+      mapStorage.startupCheck(),
     ]);
     lastReadinessAt = Date.now();
   }
@@ -95,6 +107,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
     authorization: postgres.authorization,
     securityAdministration,
     attachmentStorage,
+    mapStorage,
     revocations,
     async startupCheck() {
       await dependenciesCheck();

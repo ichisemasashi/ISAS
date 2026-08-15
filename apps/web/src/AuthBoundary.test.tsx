@@ -18,6 +18,7 @@ function gateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
 const api: MvpGateway = {
   async getToday() { return { tasks: [], serverTime: new Date().toISOString() }; },
   async getFields() { return { type: "FeatureCollection", features: [], nextCursor: null }; },
+  async getOfflineMapPack() { throw new Error("not used"); },
   async getWorkInstructions() { return { instructions: [] }; },
   async createWorkInstruction() { throw new Error("not used"); },
   async reassignWorkInstruction() { throw new Error("not used"); },

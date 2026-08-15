@@ -38,6 +38,7 @@ export const utGateway: MvpGateway = {
     return { tasks: [{ id: "task-safety", time: "14:00", field: field.properties.name, crop: "つや姫", work: "除草剤散布（練習）", status: "safety_check" }], serverTime: new Date().toISOString() };
   },
   async getFields() { return { type: "FeatureCollection", features: [field], nextCursor: null }; },
+  async getOfflineMapPack() { throw new Error("UT fixtureではオフライン地図を取得しません"); },
   async getWorkInstructions() { return { instructions: [instruction] }; },
   async createWorkInstruction() { throw new Error("UT fixtureでは管理者操作を行いません"); },
   async reassignWorkInstruction() { throw new Error("UT fixtureでは管理者操作を行いません"); },

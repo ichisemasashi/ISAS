@@ -9,7 +9,7 @@ OpenTofu `1.12.5`とAWS provider `6.51.0`を固定している。upgradeはstagi
 - staging専用AWS account、Route 53 hosted zone、ALB用東京region ACM証明書、Cognito custom domain用`us-east-1` ACM証明書を用意する。後者はCognito APIの必須条件で、業務dataの法域外複製には使わない。
 - AWS CLI profileは短期credential／IAM Identity Centerを使い、long-lived access keyを作らない。
 - Web、BFF、worker、PgBouncer、ADOT、migrationのimageをbuild／scan／署名し、ECR digestを確定する。
-- `tofu`、AWS CLI v2（`SetUserPoolMfaConfig`の`FactorConfiguration`対応版）、`jq`、`node`、`curl`、`shasum`を実行端末へ導入する。
+- `tofu`、AWS CLI v2（`SetUserPoolMfaConfig`の`FactorConfiguration`対応版）、`jq`、`node`、`curl`、`shasum`を実行端末へ導入する。ADR-0011準拠の日本PMTiles、OSM NOTICE、生成SBOMも成果物として用意する。
 - AWS利用料が発生する。特に3 NAT Gateway、RDS Multi-AZ DB cluster、Fargate、WAF、Backupを含むため、承認済みbudget／quotaを確認する。
 
 次の確認で別account／別regionへの誤適用を止める。
@@ -72,7 +72,15 @@ tofu apply staging.tfplan
 tofu output -json deployment_manifest > /tmp/isas-staging-deployment-manifest.json
 chmod 0555 scripts/sign-shard-manifest.sh
 scripts/sign-shard-manifest.sh 123456789012
+chmod 0555 scripts/publish-offline-map.sh
+scripts/publish-offline-map.sh \
+  123456789012 \
+  /secure/release/japan.pmtiles \
+  /secure/release/OSM-NOTICE.txt \
+  /secure/release/sbom.json
 ```
+
+`offline_tileset_archive_sha256`は上記PMTilesのSHA-256をplan前に設定する。公開scriptはAWS account／東京region／OpenTofu出力を照合し、digest不一致ならupload前に停止する。PMTilesはprivate S3へ`application/vnd.pmtiles`、ODbL、version、SHA-256 metadata付きで保存し、NOTICEとSBOMを同じversion prefixへ置く。BFFは起動時にobject metadataをread-backし、不一致ならreadyにならない。GSIタイルはオンライン表示専用で、このarchiveへ混ぜない。
 
 `apply`後、Secrets Managerの5個のPgBouncer用secretへmigration担当が生成した個別DB role credentialをJSON `{"username":"<role>","password":"<random>"}` として投入する。P1の`username`は必ず`app_user`とし、5 secretを同じcredentialにしない。BFF taskはECS secret selectorで各JSON keyだけを対応する`ISAS_DB_<CLASS>_{USER,PASSWORD}`へ注入する。RDS master secretをapplicationへ渡さず、値をterminal、plan、ticketへ表示しない。
 
@@ -107,7 +115,7 @@ scripts/collect-staging-evidence.sh \
   evidence/staging-acceptance.json
 ```
 
-collectorはmigration ECS taskも起動する。24検査がすべて`PASS`の場合だけ0終了する。TLS listener、Web／BFFの実taskが2 AZ以上へ分散、RDS PITR window、VPC-only attachment access point、queue／DLQ／quarantine、shard manifest署名もAWS APIでread-backする。AWS Backupのrecovery point、SNS購読確認、HTTPS healthがまだない場合は正常に`BLOCKED`となるので、backup／通知／DNSを実動確認して再実行する。
+collectorはmigration ECS taskも起動する。25検査がすべて`PASS`の場合だけ0終了する。TLS listener、Web／BFFの実taskが2 AZ以上へ分散、RDS PITR window、VPC-only attachment access point、queue／DLQ／quarantine、shard manifest署名、PMTiles／NOTICE／SBOMもAWS APIでread-backする。AWS Backupのrecovery point、SNS購読確認、HTTPS healthまたは地図成果物がまだない場合は正常に`BLOCKED`となるので、backup／通知／DNS／地図公開を実動確認して再実行する。
 
 ```bash
 node ../../ops/check-staging-acceptance.mjs evidence/staging-acceptance.json
@@ -117,7 +125,7 @@ node ../../ops/check-staging-acceptance.mjs evidence/staging-acceptance.json
 
 ## 6. production候補plan
 
-staging 24/24、復旧演習、性能・security gateの合格後だけ、別production accountでexampleをコピーする。production profileはRDS deletion protectionとAWS Backup Vault Lockを必須にし、S3 bucketは強制削除しない。
+staging 25/25、復旧演習、性能・security gateの合格後だけ、別production accountでexampleをコピーする。production profileはRDS deletion protectionとAWS Backup Vault Lockを必須にし、S3 bucketは強制削除しない。
 
 ```bash
 cp environments/production/backend.hcl.example environments/production/backend.hcl

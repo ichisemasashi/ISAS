@@ -186,9 +186,10 @@ async function readAttachment(request) {
   };
 }
 
-export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, attachmentStorage, clock = () => Date.now() }) {
+export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, attachmentStorage, mapStorage, clock = () => Date.now() }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
   if (!attachmentStorage) throw new Error("attachmentStorage is required");
+  if (!mapStorage) throw new Error("mapStorage is required");
 
   return async function handle(request) {
     const requestId = correlationId(request);
@@ -253,6 +254,22 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         const search = fieldSearch(url);
         const result = await database.transaction(trusted, (client, canonical) => repository.searchFields(client, canonical ? { ...trusted, authContext: canonical } : trusted, search), { readOnly: true });
         return json(200, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/offline-map-pack") {
+        const fieldGroupId = url.searchParams.get("fieldGroupId");
+        const authorization = await database.transaction(trusted, (client, canonical) => repository.authorizeOfflineMapPack(client, canonical ? { ...trusted, authContext: canonical } : trusted, fieldGroupId), { readOnly: true });
+        return json(200, await mapStorage.packManifest(authorization), requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/offline-map-archive") {
+        const fieldGroupId = url.searchParams.get("fieldGroupId");
+        await database.transaction(trusted, (client, canonical) => repository.authorizeOfflineMapPack(client, canonical ? { ...trusted, authContext: canonical } : trusted, fieldGroupId), { readOnly: true });
+        const result = await mapStorage.readRange(request.headers.get("Range"), url.searchParams.get("tilesetVersion"));
+        return new Response(result.bytes, { status: 206, headers: {
+          "Accept-Ranges": "bytes", "Cache-Control": "private, no-store", "Content-Range": result.contentRange,
+          "Content-Type": "application/vnd.pmtiles", ...(result.etag ? { ETag: result.etag } : {}), "X-Correlation-ID": requestId,
+        } });
       }
 
       if (request.method === "GET" && url.pathname === "/api/v1/work-instructions") {
@@ -418,6 +435,8 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (error instanceof SyntaxError || error instanceof TypeError) return problem(400, "invalid_request", "Invalid request", requestId);
       if (error instanceof RangeError) return problem(413, "request_too_large", "Request too large", requestId);
       if (error?.code === "scope_revoked") return problem(409, "scope_revoked", "Scope was revoked", requestId, undefined, { purgeScope: error.scope });
+      if (error?.code === "invalid_range") return problem(416, "invalid_range", "A valid byte range is required", requestId);
+      if (error?.code === "offline_tileset_changed") return problem(409, "offline_tileset_changed", "Offline tileset changed", requestId);
       if (error?.code === "forbidden") return problem(403, "forbidden", "Forbidden", requestId);
       if (error?.code === "42501") return problem(403, "forbidden", "Forbidden", requestId);
       if (["22023", "23505", "23514", "22P02"].includes(error?.code)) return problem(400, "invalid_request", "Invalid request", requestId);

@@ -23,6 +23,7 @@
     { "id": "cognito-mfa", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
     { "id": "dynamodb-session", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
     { "id": "s3-private-storage", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
+    { "id": "offline-map-artifact", "status": "BLOCKED", "evidence": "PMTiles, NOTICE and SBOM have not been published" },
     { "id": "private-attachment-delivery", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
     { "id": "sqs-dead-letter", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },
     { "id": "queue-quarantine", "status": "BLOCKED", "evidence": "OpenTofu has not been applied" },

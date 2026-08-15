@@ -24,6 +24,7 @@ function validateAdapters(adapters) {
     assertMethod(adapters.securityAdministration, method, "securityAdministration");
   }
   for (const method of ["objectKey", "stage", "markReady", "signedDownload", "reconcile"]) assertMethod(adapters.attachmentStorage, method, "attachmentStorage");
+  for (const method of ["packManifest", "readRange"]) assertMethod(adapters.mapStorage, method, "mapStorage");
   return adapters;
 }
 
@@ -78,6 +79,7 @@ export async function startProductionRuntime({
       authorization: adapters.authorization,
       securityAdministration: adapters.securityAdministration,
       attachmentStorage: adapters.attachmentStorage,
+      mapStorage: adapters.mapStorage,
       pool: pools.p1,
     });
     runtime = createHttpRuntime({

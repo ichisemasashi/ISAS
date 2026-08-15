@@ -281,6 +281,26 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       };
     },
 
+    async authorizeOfflineMapPack(client, trusted, fieldGroupId) {
+      if (!isUuid(fieldGroupId)) throw new TypeError("invalid field group");
+      const result = await client.query(`WITH metric_bounds AS (
+          SELECT ST_Extent(ST_Transform(geom, 3857))::box2d AS box
+          FROM app.field
+          WHERE tenant_id = app.current_tenant_id() AND field_group_id = $1::uuid
+            AND deleted_at IS NULL AND app.can_read_scope(field_group_id)
+        ), expanded AS (
+          SELECT ST_Transform(ST_SetSRID(ST_Envelope(ST_Expand(box, 2000)), 3857), 4326) AS geometry
+          FROM metric_bounds WHERE box IS NOT NULL
+        )
+        SELECT ST_XMin(geometry) AS west, ST_YMin(geometry) AS south,
+               ST_XMax(geometry) AS east, ST_YMax(geometry) AS north
+        FROM expanded`, [fieldGroupId]);
+      if (!result.rows[0]) throw Object.assign(new Error("offline map scope is unavailable"), { code: "forbidden" });
+      const row = result.rows[0];
+      return { tenantId: trusted.authContext.tenantId, userId: trusted.userId, fieldGroupId,
+        assignmentVersion: trusted.membershipVersion, bbox: [Number(row.west), Number(row.south), Number(row.east), Number(row.north)] };
+    },
+
     async listWorkInstructions(client) {
       const result = await client.query(`
         SELECT instruction.instruction_id::text AS id, instruction.field_id::text AS field_id,

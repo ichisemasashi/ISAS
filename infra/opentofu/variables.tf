@@ -214,6 +214,48 @@ variable "attachment_noncurrent_retention_days" {
   }
 }
 
+variable "offline_tileset_version" {
+  description = "Immutable JP PMTiles build version recorded in the offline map manifest."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]{1,100}$", var.offline_tileset_version))
+    error_message = "offline_tileset_version must be an immutable filesystem-safe identifier."
+  }
+}
+
+variable "offline_tileset_archive_sha256" {
+  description = "SHA-256 of the reviewed Japan PMTiles artifact uploaded before BFF acceptance."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.offline_tileset_archive_sha256))
+    error_message = "offline_tileset_archive_sha256 must be 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "offline_map_installation_limit_bytes" {
+  description = "ADR-0011 background tile ceiling per browser installation."
+  type        = number
+  default     = 262144000
+
+  validation {
+    condition     = var.offline_map_installation_limit_bytes >= 52428800 && var.offline_map_installation_limit_bytes <= 524288000
+    error_message = "Offline map installation limit must be between 50 MiB and 500 MiB."
+  }
+}
+
+variable "offline_map_pack_retention_days" {
+  description = "Local pack expiry communicated to clients; authorization revocation overrides it."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.offline_map_pack_retention_days >= 1 && var.offline_map_pack_retention_days <= 90
+    error_message = "Offline map pack retention must be between 1 and 90 days."
+  }
+}
+
 variable "alert_email" {
   description = "Optional operational email; confirmation is required before acceptance."
   type        = string

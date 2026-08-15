@@ -280,6 +280,9 @@ textarea { padding-top: 12px; resize: vertical; }
 .field-list small { margin-top: 4px; color: var(--muted); }
 .map-panel { position: relative; min-width: 0; min-height: 620px; border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; background: #e8eee7; }
 .field-map { position: absolute; inset: 0; }
+.map-cache-controls { position: relative; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; background: color-mix(in srgb, var(--surface) 94%, transparent); }
+.map-cache-controls span { flex-basis: 100%; color: var(--muted); font-size: .85rem; }
+.map-attribution { position: absolute; z-index: 2; right: 0; bottom: 0; padding: 3px 7px; background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--muted); }
 .field-detail { position: absolute; z-index: 2; left: 16px; bottom: 16px; max-width: calc(100% - 32px); padding: 12px 16px; border-radius: 12px; display: flex; gap: 12px; background: var(--forest-900); color: #fff; box-shadow: var(--shadow); }
 .field-detail span { color: #d6e0da; }
 .bottom-nav { display: none; }

@@ -145,5 +145,6 @@ resource "aws_backup_selection" "rds" {
     aws_s3_bucket.private_objects.arn,
     aws_s3_bucket.quarantine_archive.arn,
     aws_s3_bucket.shard_config.arn,
+    aws_s3_bucket.offline_maps.arn,
   ]
 }

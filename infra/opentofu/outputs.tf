@@ -63,6 +63,7 @@ output "deployment_manifest" {
       private_attachment_access_point_arn = aws_s3_access_point.private_attachments.arn
       quarantine_archive_bucket           = aws_s3_bucket.quarantine_archive.id
       shard_config_bucket                 = aws_s3_bucket.shard_config.id
+      offline_map_bucket                  = aws_s3_bucket.offline_maps.id
       ops_evidence_bucket                 = aws_s3_bucket.ops_evidence.id
       backup_vault                        = aws_backup_vault.main.name
     }
@@ -94,6 +95,13 @@ output "deployment_manifest" {
       signature_uri   = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}.sig"
       sha256          = sha256(jsonencode(local.shard_manifest))
       signing_key_arn = aws_kms_key.signing.arn
+    }
+    offline_map = {
+      tileset_version          = var.offline_tileset_version
+      archive_uri              = "s3://${aws_s3_bucket.offline_maps.id}/tilesets/${var.offline_tileset_version}/japan.pmtiles"
+      archive_sha256           = var.offline_tileset_archive_sha256
+      installation_limit_bytes = var.offline_map_installation_limit_bytes
+      pack_retention_days      = var.offline_map_pack_retention_days
     }
     operations = {
       dashboard_name = aws_cloudwatch_dashboard.overview.dashboard_name

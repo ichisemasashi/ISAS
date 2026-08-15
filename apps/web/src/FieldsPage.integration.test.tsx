@@ -17,7 +17,7 @@ vi.mock("maplibre-gl", () => {
     on(event: string, layerOrHandler: unknown, handler?: () => void) { if (event === "load") queueMicrotask(layerOrHandler as () => void); return handler; }
     remove() {}
   }
-  return { Map: MockMap, NavigationControl: class {}, LngLatBounds: class {} };
+  return { Map: MockMap, NavigationControl: class {}, LngLatBounds: class {}, addProtocol: vi.fn() };
 });
 
 import { FieldsPage } from "./FieldsPage";
@@ -29,7 +29,7 @@ const field = { type: "Feature" as const, id: "field-1", geometry: { type: "Mult
 
 test("renders the assigned-field list from IndexedDB cache while offline", async () => {
   const api = { getFields: vi.fn() } as unknown as MvpGateway;
-  const storage = { getFields: vi.fn(async () => [field]) } as unknown as StorageGateway;
+  const storage = { getFields: vi.fn(async () => [field]), getLatestOfflineMapPack: vi.fn(async () => null) } as unknown as StorageGateway;
   render(<FieldsPage api={api} storage={storage} authorization={demoAuthorization} online={false} />);
   expect(await screen.findByRole("button", { name: /北圃場/ })).toBeInTheDocument();
   expect(screen.getByText(/端末保存済み/)).toBeInTheDocument();

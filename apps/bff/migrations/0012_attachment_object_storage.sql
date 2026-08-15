@@ -1,7 +1,7 @@
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
-SET LOCAL ROLE auth_context_owner;
+SET LOCAL ROLE app_owner;
 
 ALTER TABLE app.journal_attachment
   ALTER COLUMN content DROP NOT NULL,
