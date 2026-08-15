@@ -20,8 +20,8 @@
 | [docs/design/PostgreSQL実挙動検証記録.md](docs/design/PostgreSQL実挙動検証記録.md) | 設計文書の PostgreSQL に関する主張を実測で検証した記録（スパイクSQLと文書の差異を含む） |
 | [docs/design/UXデザインシステム.md](docs/design/UXデザインシステム.md) | Phase 1のUXデザインシステム、IA、主要導線、UT計画 |
 | [docs/operations/](docs/operations/README.md) | デプロイ、ロールバック、バックアップ、復旧、障害対応runbook |
-| [docs/manual/システム管理者運用ガイド.md](docs/manual/システム管理者運用ガイド.md) | 導入、権限、日常点検、監視、保全、変更、障害、廃止を扱う管理者向け運用文書 |
-| [docs/manual/システム利用者ガイド.md](docs/manual/システム利用者ガイド.md) | 現場操作、管理者業務、オフライン同期、安全確認、問い合わせを扱う利用者向け文書 |
+| [docs/manual/](docs/manual/README.md) | システム管理者向け／利用者向けの運用マニュアルと配布手順 |
+| [docs/release/RELEASE-1.0.0.md](docs/release/RELEASE-1.0.0.md) | version 1.0 baselineの内容、品質証跡、本番release blocker |
 | [spikes/](spikes/README.md) | 技術検証（PostgreSQL＋PostGIS の PoC ハーネス） |
 | [apps/web/](apps/web/) | React＋TypeScript＋PWAによるPhase 1 MVPフロントエンド |
 | [apps/bff/](apps/bff/) | ADR-0009のOIDC／Cookie session／context／AuthContext境界を担うBFFコア |
