@@ -76,6 +76,10 @@ export const utGateway: MvpGateway = {
   async getMigrationJobs() { return { jobs: [] }; },
   async commitMigrationJob() { throw new Error("UT fixtureではデータ移行を行いません"); },
   async exportCsv() { throw new Error("UT fixtureではCSV出力を行いません"); },
+  async getSecurityAdministration() { return { users: [], roles: [], changeRequests: [], breakGlassGrants: [], privacyRequests: [] }; },
+  async requestSecurityChange() { throw new Error("UT fixtureでは管理者操作を行いません"); }, async decideSecurityChange() { return {}; },
+  async createPrivacyRequest() { throw new Error("UT fixtureでは管理者操作を行いません"); }, async transitionPrivacyRequest() { return {}; },
+  async getPesticideMasterReviews() { return { reviews: [] }; }, async requestPesticideMasterReview() { throw new Error("UT fixtureでは管理者操作を行いません"); }, async decidePesticideMasterReview() { return {}; },
 };
 
 export async function resetUtBrowserStorage(): Promise<void> {

@@ -80,15 +80,15 @@ BFF imageには`bff_runtime_adapter_module`（既定`/app/runtime-adapters/aws.m
 
 ## 4. AuthContext migration
 
-`infra/images/migration/Dockerfile`はmigration専用imageである。最初にNOLOGIN／NOBYPASSRLS owner roleを用意し、`0000_auth_context_v1.sql`から`0010_identity_runtime.sql`までchecksum ledger付きで順番に適用する。その後、fixtureをtransaction rollbackするAuthContext／identity runtime verifyと`production_auth_context_security.sql`を実行する。`0001`以降の既存verifyはfixtureを永続化するためstaging／productionでは実行せず、使い捨てDBで`RUN_DESTRUCTIVE_FIXTURE_VERIFICATION=true`かつ`ALLOW_DISPOSABLE_DATABASE=true`を明示したCIだけで実行する。
+`infra/images/migration/Dockerfile`はmigration専用imageである。最初にNOLOGIN／NOBYPASSRLS owner roleを用意し、`0000_auth_context_v1.sql`から`0011_security_administration.sql`までchecksum ledger付きで順番に適用する。その後、fixtureをtransaction rollbackするAuthContext／security administration verifyと`production_auth_context_security.sql`を実行する。`0001`以降の既存verifyはfixtureを永続化するためstaging／productionでは実行せず、使い捨てDBで`RUN_DESTRUCTIVE_FIXTURE_VERIFICATION=true`かつ`ALLOW_DISPOSABLE_DATABASE=true`を明示したCIだけで実行する。
 
 最後の検査は次をDB catalogから判定し、1件でも不一致ならECS taskを非0終了させる。
 
-- AuthContext 9表のownerが`auth_context_owner`
-- 全9表がRLS有効かつ`FORCE ROW LEVEL SECURITY`
+- AuthContext 11表とPrivacy 2表のownerが`auth_context_owner`
+- 全13表がRLS有効かつ`FORCE ROW LEVEL SECURITY`
 - append-only監査表以外の全AuthContext表に有効な`z_auth_change_audit` trigger
 - owner roleがNOLOGIN、非superuser、NOBYPASSRLS
-- OIDC主体解決、所属／scope導出、失効outboxの6 runtime関数が存在
+- OIDC主体解決、所属／scope導出、失効outbox、管理workflowの11 runtime関数が存在
 - PostGISが正確に`3.4.6`
 
 backfillは[migration backfill](../../apps/bff/migrations/backfill/0000_auth_context_v1_backfill.sql)をreview済みCSV staging後に別taskで実行する。rollbackは[安全rollback](../../apps/bff/migrations/rollback/0000_auth_context_v1_rollback.sql)が業務表／永続userを検出して停止するため、productionの通常rollbackはapplicationのroll-forwardを優先する。

@@ -403,6 +403,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (error?.code === "42501") return problem(403, "forbidden", "Forbidden", requestId);
       if (["22023", "23505", "23514", "22P02"].includes(error?.code)) return problem(400, "invalid_request", "Invalid request", requestId);
       if (error?.code === "version_conflict") return problem(409, "version_conflict", "Version conflict", requestId, undefined, { currentVersion: error.currentVersion });
+      if (error?.code === "40001") return problem(409, "version_conflict", "Version conflict", requestId);
       if (error?.code === "idempotency_conflict") return problem(409, "idempotency_conflict", "Idempotency conflict", requestId);
       return problem(500, "request_failed", "Request failed", requestId);
     }

@@ -5,6 +5,7 @@ import { browserStorage, type JournalDraft, type StorageGateway } from "./storag
 import { synchronize } from "./sync";
 import { evaluatePesticideUse, safetyReasonLabel } from "./pesticide-safety";
 import { DataMigrationPanel } from "./DataMigrationPanel";
+import { SecurityAdministrationPanel } from "./SecurityAdministrationPanel";
 import { SchedulePage } from "./SchedulePage";
 
 const FieldsPage = lazy(() => import("./FieldsPage").then((module) => ({ default: module.FieldsPage })));
@@ -505,5 +506,6 @@ function MorePage({ api, csrfToken, authorization, online, instructions, setInst
     {queues.rejections.length > 0 && <section className="queue-panel"><h2>差し戻し</h2>{queues.rejections.map((item) => <article key={item.id}><strong>{item.reason}</strong><p>束: {item.bundleId}</p><p>回復操作: {item.recoveryAction}</p></article>)}</section>}
     {queues.conflicts.length > 0 && <section className="queue-panel"><h2>競合の裁定</h2>{queues.conflicts.map((item) => <article key={item.id}><strong>{item.conflictingFields.join("、")} が競合しています</strong><p>サーバ値: {JSON.stringify(item.currentValue)}</p><p>端末値: {JSON.stringify(item.proposedValue)}</p><div className="queue-actions"><button className="secondary-action" onClick={() => void resolveConflict(item.id, "server")}>サーバ値を採用</button><button className="primary-action" onClick={() => void resolveConflict(item.id, "device")}>端末値を採用</button></div></article>)}</section>}
     {(migrationManager || exportReader) && <DataMigrationPanel api={api} contextId={authorization.context.contextId} csrfToken={csrfToken} online={online} canImport={migrationManager} canExport={exportReader} setNotice={setNotice}/>}
+    {authorization.context.capabilities.some((capability) => ["security:manage", "privacy:manage", "break_glass:approve", "pesticide:manage"].includes(capability)) && <SecurityAdministrationPanel api={api} contextId={authorization.context.contextId} csrfToken={csrfToken} actorUserId={authorization.user.id} capabilities={authorization.context.capabilities} online={online} setNotice={setNotice}/>}
   </div>;
 }

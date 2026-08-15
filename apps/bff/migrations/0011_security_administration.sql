@@ -267,6 +267,11 @@ BEGIN
     RETURN jsonb_build_object('requestId', p_request_id, 'status', 'rejected');
   END IF;
 
+  IF app_private.auth_subject_snapshot(request_row.target_user_id, request_row.tenant_id)
+       IS DISTINCT FROM request_row.before_state THEN
+    RAISE EXCEPTION 'security subject changed after request creation' USING ERRCODE = '40001';
+  END IF;
+
   IF request_row.change_type = 'user_register' THEN
     INSERT INTO priv.auth_user (user_id, issuer, subject, display_name)
     VALUES (
@@ -479,33 +484,107 @@ SET search_path = pg_catalog, priv AS $$
      AND (m.valid_until IS NULL OR m.valid_until > statement_timestamp())
 $$;
 
+CREATE OR REPLACE FUNCTION app_private.validate_auth_context(
+  p_user_id uuid,
+  p_tenant_id uuid,
+  p_allowed_tenants uuid[],
+  p_scope_field_groups uuid[],
+  p_caps text[],
+  p_employer_subject_users uuid[]
+) RETURNS TABLE (
+  user_id uuid, tenant_id uuid, allowed_tenants uuid[], scope_field_groups uuid[],
+  caps text[], employer_subject_users uuid[], membership_version bigint, authorization_version bigint
+) LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, priv AS $$
+DECLARE
+  v_role_key text; v_can_cross boolean; v_entitled_caps text[];
+  v_membership_version bigint; v_authorization_version bigint;
+BEGIN
+  IF p_user_id IS NULL OR p_tenant_id IS NULL
+     OR p_allowed_tenants IS NULL OR cardinality(p_allowed_tenants) < 1 OR cardinality(p_allowed_tenants) > 100
+     OR p_scope_field_groups IS NULL OR cardinality(p_scope_field_groups) > 1000
+     OR p_caps IS NULL OR cardinality(p_caps) > 128
+     OR p_employer_subject_users IS NULL OR cardinality(p_employer_subject_users) > 1000
+     OR array_position(p_allowed_tenants, NULL) IS NOT NULL
+     OR array_position(p_scope_field_groups, NULL) IS NOT NULL
+     OR array_position(p_caps, NULL) IS NOT NULL
+     OR array_position(p_employer_subject_users, NULL) IS NOT NULL
+     OR NOT (p_tenant_id = ANY(p_allowed_tenants)) THEN RETURN;
+  END IF;
+  IF EXISTS (SELECT 1 FROM unnest(p_allowed_tenants) value GROUP BY value HAVING count(*) > 1)
+     OR EXISTS (SELECT 1 FROM unnest(p_scope_field_groups) value GROUP BY value HAVING count(*) > 1)
+     OR EXISTS (SELECT 1 FROM unnest(p_caps) value GROUP BY value HAVING count(*) > 1)
+     OR EXISTS (SELECT 1 FROM unnest(p_employer_subject_users) value GROUP BY value HAVING count(*) > 1) THEN RETURN;
+  END IF;
+
+  SELECT membership.role_key, role.can_cross_tenant, membership.membership_version, auth_user.authorization_version
+    INTO v_role_key, v_can_cross, v_membership_version, v_authorization_version
+    FROM priv.auth_membership membership
+    JOIN priv.auth_role role USING (role_key)
+    JOIN priv.auth_user auth_user USING (user_id)
+   WHERE membership.tenant_id = p_tenant_id AND membership.user_id = p_user_id
+     AND membership.status = 'active' AND auth_user.status = 'active'
+     AND membership.valid_from <= statement_timestamp()
+     AND (membership.valid_until IS NULL OR membership.valid_until > statement_timestamp());
+  IF NOT FOUND THEN RETURN; END IF;
+
+  SELECT COALESCE(array_agg(DISTINCT entitled.capability ORDER BY entitled.capability), '{}'::text[])
+    INTO v_entitled_caps
+    FROM (
+      SELECT capability.capability FROM priv.auth_role_capability capability WHERE capability.role_key = v_role_key
+      UNION ALL
+      SELECT unnest(grant_row.capabilities) FROM priv.auth_break_glass_grant grant_row
+       WHERE grant_row.tenant_id = p_tenant_id AND grant_row.user_id = p_user_id
+         AND grant_row.revoked_at IS NULL AND grant_row.valid_from <= statement_timestamp()
+         AND grant_row.valid_until > statement_timestamp()
+    ) entitled;
+  IF NOT (p_caps <@ v_entitled_caps) THEN RETURN; END IF;
+
+  IF EXISTS (SELECT 1 FROM unnest(p_allowed_tenants) requested(tenant_id)
+    WHERE requested.tenant_id <> p_tenant_id AND NOT (v_can_cross AND EXISTS (
+      SELECT 1 FROM priv.auth_tenant_relation relation WHERE relation.parent_tenant_id = p_tenant_id
+        AND relation.child_tenant_id = requested.tenant_id AND relation.status = 'active'))) THEN RETURN; END IF;
+  IF NOT ('scope_all' = ANY(v_entitled_caps)) AND EXISTS (
+    SELECT 1 FROM unnest(p_scope_field_groups) requested(field_group_id) WHERE NOT EXISTS (
+      SELECT 1 FROM priv.auth_membership_field_group granted WHERE granted.tenant_id = p_tenant_id
+        AND granted.user_id = p_user_id AND granted.field_group_id = requested.field_group_id)) THEN RETURN; END IF;
+  IF EXISTS (SELECT 1 FROM unnest(p_employer_subject_users) requested(employee_user_id) WHERE NOT EXISTS (
+    SELECT 1 FROM priv.auth_employer_delegate delegated WHERE delegated.employer_tenant_id = p_tenant_id
+      AND delegated.manager_user_id = p_user_id AND delegated.employee_user_id = requested.employee_user_id
+      AND delegated.employer_confirmed_at IS NOT NULL AND delegated.employee_confirmed_at IS NOT NULL
+      AND delegated.revoked_at IS NULL)) THEN RETURN; END IF;
+  RETURN QUERY SELECT p_user_id, p_tenant_id, p_allowed_tenants, p_scope_field_groups,
+    p_caps, p_employer_subject_users, v_membership_version, v_authorization_version;
+END $$;
+
 CREATE FUNCTION app_private.security_admin_snapshot(p_actor_user_id uuid, p_tenant_id uuid)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, priv AS $$
 DECLARE result jsonb;
+DECLARE can_security boolean;
+DECLARE can_privacy boolean;
 BEGIN
-  IF NOT (
-    app_private.permanent_capability(p_actor_user_id, p_tenant_id, 'security:manage')
-    OR app_private.permanent_capability(p_actor_user_id, p_tenant_id, 'privacy:manage')
-    OR app_private.permanent_capability(p_actor_user_id, p_tenant_id, 'break_glass:approve')
-  ) THEN RAISE EXCEPTION 'security snapshot denied' USING ERRCODE = '42501'; END IF;
+  can_security := app_private.permanent_capability(p_actor_user_id, p_tenant_id, 'security:manage')
+    OR app_private.permanent_capability(p_actor_user_id, p_tenant_id, 'break_glass:approve');
+  can_privacy := app_private.permanent_capability(p_actor_user_id, p_tenant_id, 'privacy:manage');
+  IF NOT (can_security OR can_privacy) THEN RAISE EXCEPTION 'security snapshot denied' USING ERRCODE = '42501'; END IF;
   SELECT jsonb_build_object(
-    'users', COALESCE((SELECT jsonb_agg(app_private.auth_subject_snapshot(m.user_id, p_tenant_id) ORDER BY u.display_name)
+    'users', CASE WHEN can_security THEN COALESCE((SELECT jsonb_agg(app_private.auth_subject_snapshot(m.user_id, p_tenant_id) ORDER BY u.display_name)
       FROM priv.auth_membership m JOIN priv.auth_user u USING (user_id)
-      WHERE m.tenant_id = p_tenant_id), '[]'::jsonb),
-    'roles', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+      WHERE m.tenant_id = p_tenant_id), '[]'::jsonb) ELSE '[]'::jsonb END,
+    'roles', CASE WHEN can_security THEN COALESCE((SELECT jsonb_agg(jsonb_build_object(
       'roleKey', r.role_key, 'roleLabel', r.role_label,
       'capabilities', COALESCE((SELECT jsonb_agg(c.capability ORDER BY c.capability)
         FROM priv.auth_role_capability c WHERE c.role_key = r.role_key), '[]'::jsonb)
-    ) ORDER BY r.role_key) FROM priv.auth_role r), '[]'::jsonb),
-    'changeRequests', COALESCE((SELECT jsonb_agg(to_jsonb(q) ORDER BY q.requested_at DESC)
-      FROM priv.auth_admin_change_request q WHERE q.tenant_id = p_tenant_id), '[]'::jsonb),
-    'breakGlassGrants', COALESCE((SELECT jsonb_agg(to_jsonb(g) ORDER BY g.created_at DESC)
-      FROM priv.auth_break_glass_grant g WHERE g.tenant_id = p_tenant_id), '[]'::jsonb),
-    'privacyRequests', COALESCE((SELECT jsonb_agg(to_jsonb(p) || jsonb_build_object(
+    ) ORDER BY r.role_key) FROM priv.auth_role r), '[]'::jsonb) ELSE '[]'::jsonb END,
+    'changeRequests', CASE WHEN can_security THEN COALESCE((SELECT jsonb_agg(to_jsonb(q) ORDER BY q.requested_at DESC)
+      FROM priv.auth_admin_change_request q WHERE q.tenant_id = p_tenant_id), '[]'::jsonb) ELSE '[]'::jsonb END,
+    'breakGlassGrants', CASE WHEN can_security THEN COALESCE((SELECT jsonb_agg(to_jsonb(g) ORDER BY g.created_at DESC)
+      FROM priv.auth_break_glass_grant g WHERE g.tenant_id = p_tenant_id), '[]'::jsonb) ELSE '[]'::jsonb END,
+    'privacyRequests', CASE WHEN can_privacy THEN COALESCE((SELECT jsonb_agg(to_jsonb(p) || jsonb_build_object(
       'events', COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e.event_id)
         FROM priv.privacy_request_event e WHERE e.request_id = p.request_id), '[]'::jsonb)
-    ) ORDER BY p.requested_at DESC) FROM priv.privacy_request p WHERE p.tenant_id = p_tenant_id), '[]'::jsonb)
+    ) ORDER BY p.requested_at DESC) FROM priv.privacy_request p WHERE p.tenant_id = p_tenant_id), '[]'::jsonb) ELSE '[]'::jsonb END
   ) INTO result;
   RETURN result;
 END $$;

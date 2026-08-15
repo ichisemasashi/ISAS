@@ -31,6 +31,10 @@ const api: MvpGateway = {
   async getQueues() { return { rejections: [], conflicts: [] }; }, async resolveConflict() { return {}; },
   async createMigrationJob() { throw new Error("not used"); }, async getMigrationJobs() { return { jobs: [] }; },
   async commitMigrationJob() { throw new Error("not used"); }, async exportCsv() { throw new Error("not used"); },
+  async getSecurityAdministration() { return { users: [], roles: [], changeRequests: [], breakGlassGrants: [], privacyRequests: [] }; },
+  async requestSecurityChange() { return { requestId: "request-1", status: "pending" }; }, async decideSecurityChange() { return {}; },
+  async createPrivacyRequest() { return { requestId: "privacy-1", status: "submitted" }; }, async transitionPrivacyRequest() { return {}; },
+  async getPesticideMasterReviews() { return { reviews: [] }; }, async requestPesticideMasterReview() { throw new Error("not used"); }, async decidePesticideMasterReview() { return {}; },
 };
 
 describe("AuthBoundary", () => {

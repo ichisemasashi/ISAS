@@ -98,6 +98,7 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0007_pesticide_inventory.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0008_data_migration.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0009_field_bbox_prefilter.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0010_identity_runtime.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0011_security_administration.sql
 ```
 
 旧データを移す場合は、法域内の隔離環境で`backfill/0000_auth_context_v1_stage.sql`を適用し、review済みCSVを`migration_stage`へ`\copy`してから`backfill/0000_auth_context_v1_backfill.sql`を実行する。backfillは全対象userのversionを進めて失効eventを作り、完了時にstaging schemaを削除する。`rollback/0000_auth_context_v1_rollback.sql`は業務表も永続userもない場合だけ成功し、それ以外はdropせず停止する。
@@ -111,7 +112,6 @@ cd spikes && docker compose up -d && cd ..
 PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
   -f spikes/00_common.sql \
   -f apps/bff/migrations/0000_auth_context_v1.sql \
-  -f apps/bff/migrations/verify/0000_auth_context_v1_verify.sql \
   -f apps/bff/migrations/0001_mvp_sync.sql \
   -f apps/bff/migrations/0002_conflict_fields.sql \
   -f apps/bff/migrations/0003_field_gis.sql \
@@ -122,13 +122,16 @@ PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
   -f apps/bff/migrations/0008_data_migration.sql \
   -f apps/bff/migrations/0009_field_bbox_prefilter.sql \
   -f apps/bff/migrations/0010_identity_runtime.sql \
+  -f apps/bff/migrations/0011_security_administration.sql \
+  -f apps/bff/migrations/verify/0000_auth_context_v1_verify.sql \
   -f apps/bff/migrations/verify/0001_mvp_sync_verify.sql \
   -f apps/bff/migrations/verify/0003_field_gis_verify.sql \
   -f apps/bff/migrations/verify/0006_work_journal_verify.sql \
   -f apps/bff/migrations/verify/0007_pesticide_inventory_verify.sql \
   -f apps/bff/migrations/verify/0008_data_migration_verify.sql \
   -f apps/bff/migrations/verify/0009_field_bbox_prefilter_verify.sql \
-  -f apps/bff/migrations/verify/0010_identity_runtime_verify.sql
+  -f apps/bff/migrations/verify/0010_identity_runtime_verify.sql \
+  -f apps/bff/migrations/verify/0011_security_administration_verify.sql
 ```
 
 ## AWS production adapterの保証条件
@@ -141,6 +144,7 @@ PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
 - `authorization.listTenants`と`deriveContext`は認証専用DB経路から現在の所属・role・scope・capabilityを導出する。context IDや過去のsnapshotを権限の真実源にしない。
 - session ID、state、context IDはハッシュだけをDynamoDB keyへ使う。単調`authorization_version`のmarkerと`user-index`により、session、context、server offline snapshotを再送安全に削除し、旧versionでの再作成をtransaction guardで拒否する。
 - `0010_identity_runtime.sql`は`auth_role`専用のOIDC主体解決、所属・scope導出、失効outbox lease関数を追加する。関数はNOLOGIN／NOBYPASSRLS owner、固定`search_path`、PUBLIC実行権限なしであり、Auth-P1 poolだけが呼ぶ。
+- `0011_security_administration.sql`は利用者／membership、期限付きbreak-glass、Privacy requestの二人承認関数と農薬master review表を追加する。Auth-P1関数は自己承認をDBで拒否し、業務側review表はtenant RLSと`pesticide:manage`を強制する。
 
 失効queueが受けるmessageは次の3種類である。成功したmessageだけを削除し、重複は単調versionで冪等処理する。`cognito_backchannel_logout`のproducerは管理者の失効transactionと同じ`authorizationVersion`／`eventId`を渡し、Cognito usernameだけを信頼源にしない。
 

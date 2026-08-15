@@ -71,6 +71,10 @@ const api: MvpGateway = {
   async getMigrationJobs() { return { jobs: [] }; },
   async commitMigrationJob() { throw new Error("not used"); },
   async exportCsv() { throw new Error("not used"); },
+  async getSecurityAdministration() { return { users: [], roles: [], changeRequests: [], breakGlassGrants: [], privacyRequests: [] }; },
+  async requestSecurityChange() { return { requestId: "request-1", status: "pending" }; }, async decideSecurityChange() { return {}; },
+  async createPrivacyRequest() { return { requestId: "privacy-1", status: "submitted" }; }, async transitionPrivacyRequest() { return {}; },
+  async getPesticideMasterReviews() { return { reviews: [] }; }, async requestPesticideMasterReview() { throw new Error("not used"); }, async decidePesticideMasterReview() { return {}; },
 };
 const renderApp = (storage: StorageGateway, authorization = demoAuthorization, gateway = api) => render(<App api={gateway} csrfToken="csrf-1" storage={storage} authorization={authorization} />);
 

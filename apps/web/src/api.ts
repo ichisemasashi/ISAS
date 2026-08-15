@@ -22,6 +22,11 @@ export type MigrationDataset = "fields" | "journals" | "pesticide_history";
 export type MigrationRow = { lineNumber: number; status: "valid" | "duplicate" | "invalid" | "committed"; duplicateKey: string | null; errors: string[]; normalized: Record<string, unknown>; entityId?: string | null };
 export type MigrationJob = { id: string; dataset: MigrationDataset; sourceName: string; sourceSha256: string; mapping: Record<string, string>; status: "needs_review" | "validated" | "committing" | "committed"; rowCount: number; validCount: number; duplicateCount: number; errorCount: number; version: number; createdAt: string; committedAt: string | null; rows?: MigrationRow[] };
 export type ExportDataset = "fields" | "journals" | "pesticide-records";
+export type SecurityUser = { userId: string; displayName: string; issuer: string; subject: string; userStatus: string; tenantId: string; roleKey: string; membershipStatus: string; validFrom: string; validUntil: string | null; fieldGroupIds: string[]; authorizationVersion: number };
+export type SecurityChangeRequest = { requestId: string; changeType: "user_register" | "user_change" | "user_revoke" | "break_glass"; targetUserId: string; requestedBy: string; requestedAt: string; requestExpiresAt: string; reason: string; ticketRef: string; beforeState: Record<string, unknown> | null; proposedState: Record<string, unknown>; status: string; decidedBy?: string | null; decisionNote?: string | null };
+export type PrivacyRequest = { requestId: string; subjectUserId: string | null; requestType: "disclosure" | "correction" | "deletion"; status: string; details: Record<string, unknown>; legalHold: boolean; dueAt: string; requestedBy: string; requestedAt: string; evidenceRef?: string | null; events: Array<{ eventId: number; fromStatus: string | null; toStatus: string; note: string; actorUserId: string; occurredAt: string }> };
+export type SecuritySnapshot = { users: SecurityUser[]; roles: Array<{ roleKey: string; roleLabel: string; capabilities: string[] }>; changeRequests: SecurityChangeRequest[]; breakGlassGrants: Array<Record<string, unknown>>; privacyRequests: PrivacyRequest[] };
+export type PesticideMasterReview = { id: string; proposedRelease: Record<string, unknown>; beforeRelease: Record<string, unknown> | null; status: string; reason: string; ticketRef: string; requestedBy: string; requestedAt: string; decidedBy?: string | null; decisionNote?: string | null; releaseId?: string | null };
 
 export class ApiProblem extends Error { constructor(public status: number, public type: string, public body: Record<string, unknown>) { super(`${type} (${status})`); } }
 export interface MvpGateway {
@@ -44,6 +49,14 @@ export interface MvpGateway {
   getMigrationJobs(contextId: string, signal?: AbortSignal): Promise<{ jobs: MigrationJob[] }>;
   commitMigrationJob(contextId: string, csrfToken: string, jobId: string, expectedVersion: number, signal?: AbortSignal): Promise<MigrationJob>;
   exportCsv(contextId: string, dataset: ExportDataset, search?: { from?: string; to?: string }, signal?: AbortSignal): Promise<{ blob: Blob; fileName: string }>;
+  getSecurityAdministration(contextId: string, signal?: AbortSignal): Promise<SecuritySnapshot>;
+  requestSecurityChange(contextId: string, csrfToken: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ requestId: string; status: string }>;
+  decideSecurityChange(contextId: string, csrfToken: string, requestId: string, input: { decision: "approve" | "reject"; note: string }, signal?: AbortSignal): Promise<Record<string, unknown>>;
+  createPrivacyRequest(contextId: string, csrfToken: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ requestId: string; status: string }>;
+  transitionPrivacyRequest(contextId: string, csrfToken: string, requestId: string, input: { action: string; note: string; evidenceRef?: string }, signal?: AbortSignal): Promise<Record<string, unknown>>;
+  getPesticideMasterReviews(contextId: string, signal?: AbortSignal): Promise<{ reviews: PesticideMasterReview[] }>;
+  requestPesticideMasterReview(contextId: string, csrfToken: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<PesticideMasterReview>;
+  decidePesticideMasterReview(contextId: string, csrfToken: string, reviewId: string, input: { decision: "approve" | "reject"; note: string }, signal?: AbortSignal): Promise<Record<string, unknown>>;
 }
 type FetchLike = typeof fetch;
 async function result<T>(response: Response): Promise<T> { const body = await response.json() as Record<string, unknown>; if (!response.ok) throw new ApiProblem(response.status, typeof body.type === "string" ? body.type : "request_failed", body); return body as T; }
@@ -87,5 +100,13 @@ export function createMvpGateway(fetcher: FetchLike = fetch): MvpGateway {
       const matched = disposition.match(/filename="([^"]+)"/i);
       return { blob: await response.blob(), fileName: matched?.[1] || `${dataset}.csv` };
     },
+    getSecurityAdministration: (contextId, signal) => fetcher("/api/v1/security-admin", { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<SecuritySnapshot>(response)),
+    requestSecurityChange: (contextId, csrfToken, input, signal) => fetcher("/api/v1/security-admin/change-requests", { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<{ requestId: string; status: string }>(response)),
+    decideSecurityChange: (contextId, csrfToken, requestId, input, signal) => fetcher(`/api/v1/security-admin/change-requests/${encodeURIComponent(requestId)}/decision`, { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<Record<string, unknown>>(response)),
+    createPrivacyRequest: (contextId, csrfToken, input, signal) => fetcher("/api/v1/security-admin/privacy-requests", { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<{ requestId: string; status: string }>(response)),
+    transitionPrivacyRequest: (contextId, csrfToken, requestId, input, signal) => fetcher(`/api/v1/security-admin/privacy-requests/${encodeURIComponent(requestId)}/transitions`, { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<Record<string, unknown>>(response)),
+    getPesticideMasterReviews: (contextId, signal) => fetcher("/api/v1/pesticide-master/reviews", { credentials: "include", cache: "no-store", headers: headers(contextId), signal }).then((response) => result<{ reviews: PesticideMasterReview[] }>(response)),
+    requestPesticideMasterReview: (contextId, csrfToken, input, signal) => fetcher("/api/v1/pesticide-master/reviews", { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<PesticideMasterReview>(response)),
+    decidePesticideMasterReview: (contextId, csrfToken, reviewId, input, signal) => fetcher(`/api/v1/pesticide-master/reviews/${encodeURIComponent(reviewId)}/decision`, { method: "POST", credentials: "include", cache: "no-store", headers: headers(contextId, { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }), body: JSON.stringify(input), signal }).then((response) => result<Record<string, unknown>>(response)),
   };
 }

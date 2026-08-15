@@ -3,8 +3,10 @@
 \set ADMIN1 'aaaaaaaa-0000-7000-8000-000000000001'
 \set ADMIN2 'aaaaaaaa-0000-7000-8000-000000000002'
 \set WORKER 'aaaaaaaa-0000-7000-8000-000000000003'
+\set PADMIN 'aaaaaaaa-0000-7000-8000-000000000004'
 \set CHANGE 'bbbbbbbb-0000-7000-8000-000000000001'
 \set BREAK_REQUEST 'bbbbbbbb-0000-7000-8000-000000000002'
+\set STALE_REQUEST 'bbbbbbbb-0000-7000-8000-000000000003'
 \set GRANT_ID 'cccccccc-0000-7000-8000-000000000001'
 \set PRIVACY 'dddddddd-0000-7000-8000-000000000001'
 
@@ -25,15 +27,26 @@ BEGIN
     RAISE EXCEPTION 'FAIL Privacy自己承認を許可';
   EXCEPTION WHEN insufficient_privilege THEN RAISE NOTICE 'PASS Privacy自己承認をDBで拒否'; END;
 END $$;
+CREATE OR REPLACE FUNCTION pg_temp.expect_stale(request_id uuid, actor_id uuid) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  BEGIN
+    PERFORM app_private.decide_security_change_request(request_id,actor_id,true,'古い申請を承認');
+    RAISE EXCEPTION 'FAIL stale申請を実行';
+  EXCEPTION WHEN serialization_failure THEN RAISE NOTICE 'PASS stale申請をDBで拒否'; END;
+END $$;
 
 SET LOCAL app.actor_pseudonym = 'security-admin-verifier';
 SET ROLE auth_context_owner;
 INSERT INTO priv.auth_user(user_id,issuer,subject,display_name) VALUES
   (:'ADMIN1','https://idp.example','admin-1','管理者1'),
   (:'ADMIN2','https://idp.example','admin-2','管理者2'),
-  (:'WORKER','https://idp.example','worker','作業者');
+  (:'WORKER','https://idp.example','worker','作業者'),
+  (:'PADMIN','https://idp.example','privacy','Privacy担当');
+INSERT INTO priv.auth_role(role_key,role_label,can_cross_tenant) VALUES ('privacy_test','Privacy検証',false);
+INSERT INTO priv.auth_role_capability(role_key,capability) VALUES ('privacy_test','privacy:manage');
 INSERT INTO priv.auth_membership(tenant_id,user_id,role_key) VALUES
-  (:'TENANT',:'ADMIN1','group_admin'),(:'TENANT',:'ADMIN2','group_admin'),(:'TENANT',:'WORKER','worker');
+  (:'TENANT',:'ADMIN1','group_admin'),(:'TENANT',:'ADMIN2','group_admin'),(:'TENANT',:'WORKER','worker'),
+  (:'TENANT',:'PADMIN','privacy_test');
 RESET ROLE;
 
 SET ROLE auth_role;
@@ -52,6 +65,13 @@ SELECT app_private.decide_security_change_request(:'BREAK_REQUEST',:'ADMIN2',tru
 SELECT pg_temp.ck((SELECT 'conflict:resolve' = ANY(capabilities)
   FROM app_private.derive_authorization_context(:'WORKER',:'TENANT')),
   '期限付きbreak-glass権限をAuthContextへ反映');
+RESET ROLE;
+SET ROLE app_user;
+SELECT pg_temp.ck(count(*) = 1, 'break-glass権限を業務transactionでも再検証')
+FROM app_private.validate_auth_context(:'WORKER',:'TENANT',ARRAY[:'TENANT']::uuid[],'{}'::uuid[],
+  ARRAY['conflict:resolve'],'{}'::uuid[]);
+RESET ROLE;
+SET ROLE auth_role;
 
 SELECT app_private.create_privacy_request(:'PRIVACY',:'ADMIN1',:'TENANT',:'WORKER','disclosure',
   jsonb_build_object('channels',jsonb_build_array('journal')), clock_timestamp() + interval '14 days','本人確認済みで受付');
@@ -59,9 +79,20 @@ SELECT pg_temp.expect_own_privacy(:'PRIVACY',:'ADMIN1');
 SELECT app_private.transition_privacy_request(:'PRIVACY',:'ADMIN2','approve','法的要件と対象を確認',NULL);
 SELECT pg_temp.ck((app_private.security_admin_snapshot(:'ADMIN2',:'TENANT')->'privacyRequests'->0->>'status') = 'approved',
   'Privacy requestを二人承認し履歴を保持');
+SELECT pg_temp.ck(jsonb_array_length(app_private.security_admin_snapshot(:'PADMIN',:'TENANT')->'users') = 0
+  AND jsonb_array_length(app_private.security_admin_snapshot(:'PADMIN',:'TENANT')->'privacyRequests') = 1,
+  'Privacy専任者へsecurity主体情報を開示しない');
+SELECT app_private.create_security_change_request(:'STALE_REQUEST',:'ADMIN1',:'TENANT','user_change',:'WORKER',
+  '競合検証のため表示名を更新する申請', 'SEC-STALE', jsonb_build_object('displayName','申請上の表示名'));
+RESET ROLE;
+SET ROLE auth_context_owner;
+UPDATE priv.auth_user SET display_name = '先行変更済み' WHERE user_id = :'WORKER';
+RESET ROLE;
+SET ROLE auth_role;
+SELECT pg_temp.expect_stale(:'STALE_REQUEST',:'ADMIN2');
 RESET ROLE;
 
 SELECT pg_temp.ck(count(*) >= 4, '管理操作をappend-only監査へ記録')
 FROM priv.auth_change_audit WHERE actor_pseudonym = 'security-admin-verifier';
 ROLLBACK;
-\echo 'Security administration migration: 5 groups PASS'
+\echo 'Security administration migration: 8 groups PASS'

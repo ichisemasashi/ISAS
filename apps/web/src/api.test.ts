@@ -29,4 +29,9 @@ describe("MVP REST gateway", () => {
     expect(exported.fileName).toBe("fields-20260814.csv");
     expect(await exported.blob.text()).toContain("北圃場");
   });
+  test("uses the step-up protected security administration routes", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ requestId: "request-1", status: "pending" }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    await createMvpGateway(fetcher).requestSecurityChange("context-1", "csrf-1", { changeType: "user_revoke" });
+    expect(fetcher).toHaveBeenCalledWith("/api/v1/security-admin/change-requests", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-1", "X-ISAS-Context": "context-1" }) }));
+  });
 });
