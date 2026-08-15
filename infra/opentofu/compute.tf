@@ -61,12 +61,17 @@ data "aws_iam_policy_document" "application" {
   }
 
   statement {
-    actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    actions = ["s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectTagging", "s3:DeleteObject"]
     resources = [
       "${aws_s3_bucket.private_objects.arn}/*",
       "${aws_s3_access_point.private_attachments.arn}/object/attachments/*",
       "${aws_s3_bucket.quarantine_archive.arn}/*",
     ]
+  }
+
+  statement {
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_access_point.private_attachments.arn]
   }
 
   statement {
@@ -238,6 +243,7 @@ resource "aws_ecs_task_definition" "bff" {
         { name = "SESSION_TABLE", value = aws_dynamodb_table.session_context.name },
         { name = "OBJECT_BUCKET", value = aws_s3_bucket.private_objects.id },
         { name = "ATTACHMENT_ACCESS_POINT_ARN", value = aws_s3_access_point.private_attachments.arn },
+        { name = "ATTACHMENT_DOWNLOAD_TTL_SECONDS", value = "60" },
         { name = "QUARANTINE_ARCHIVE_BUCKET", value = aws_s3_bucket.quarantine_archive.id },
         { name = "SHARD_MANIFEST_URI", value = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}" },
         { name = "SHARD_MANIFEST_SIGNATURE_URI", value = "s3://${aws_s3_bucket.shard_config.id}/${aws_s3_object.shard_manifest.key}.sig" },

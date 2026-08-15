@@ -23,6 +23,7 @@ function validateAdapters(adapters) {
   for (const method of ["snapshot", "requestChange", "decideChange", "createPrivacyRequest", "transitionPrivacyRequest"]) {
     assertMethod(adapters.securityAdministration, method, "securityAdministration");
   }
+  for (const method of ["objectKey", "stage", "markReady", "signedDownload", "reconcile"]) assertMethod(adapters.attachmentStorage, method, "attachmentStorage");
   return adapters;
 }
 
@@ -76,6 +77,7 @@ export async function startProductionRuntime({
       users: adapters.users,
       authorization: adapters.authorization,
       securityAdministration: adapters.securityAdministration,
+      attachmentStorage: adapters.attachmentStorage,
       pool: pools.p1,
     });
     runtime = createHttpRuntime({

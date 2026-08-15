@@ -416,25 +416,70 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
     async saveJournalAttachment(client, trusted, attachment) {
       if (!isUuid(attachment.attachmentId) || !isUuid(attachment.journalId)
         || typeof attachment.fileName !== "string" || !attachment.fileName || attachment.fileName.length > 255
-        || !Number.isFinite(Date.parse(attachment.capturedAt))) throw new TypeError("invalid attachment");
+        || !Number.isFinite(Date.parse(attachment.capturedAt)) || typeof attachment.objectKey !== "string") throw new TypeError("invalid attachment");
       await requireCapability(client, "journal:write");
       const result = await client.query(`
         WITH inserted AS (
           INSERT INTO app.journal_attachment
             (tenant_id, attachment_id, journal_id, worker_user_id, file_name, content_type,
-             byte_size, sha256, content, captured_at)
-          VALUES ($1::uuid, $2::uuid, $3::uuid, app.current_user_id(), $4, $5, $6, $7, $8::bytea, $9::timestamptz)
+             byte_size, sha256, content, captured_at, object_key, storage_status, retention_class)
+          VALUES ($1::uuid, $2::uuid, $3::uuid, app.current_user_id(), $4, $5, $6, $7, NULL, $8::timestamptz, $9, 'pending', 'supporting')
           ON CONFLICT (tenant_id, attachment_id) DO NOTHING
-          RETURNING attachment_id, journal_id, byte_size, sha256
+          RETURNING attachment_id, journal_id, byte_size, sha256, object_key, storage_status
         )
-        SELECT attachment_id::text AS id, journal_id::text AS journal_id, byte_size, sha256 FROM inserted
+        SELECT attachment_id::text AS id, journal_id::text AS journal_id, byte_size, sha256, object_key, storage_status FROM inserted
         UNION ALL
-        SELECT attachment_id::text, journal_id::text, byte_size, sha256 FROM app.journal_attachment
+        SELECT attachment_id::text, journal_id::text, byte_size, sha256, object_key, storage_status FROM app.journal_attachment
         WHERE tenant_id = $1::uuid AND attachment_id = $2::uuid
         LIMIT 1`,
-      [trusted.authContext.tenantId, attachment.attachmentId, attachment.journalId, attachment.fileName, attachment.contentType, attachment.bytes.length, attachment.sha256, attachment.bytes, attachment.capturedAt]);
-      if (result.rows[0]?.sha256 !== attachment.sha256) { const error = new Error("attachment id reused"); error.code = "idempotency_conflict"; throw error; }
-      return { id: result.rows[0].id, journalId: result.rows[0].journal_id, byteSize: Number(result.rows[0].byte_size), sha256: result.rows[0].sha256 };
+      [trusted.authContext.tenantId, attachment.attachmentId, attachment.journalId, attachment.fileName, attachment.contentType, attachment.bytes.length, attachment.sha256, attachment.capturedAt, attachment.objectKey]);
+      if (result.rows[0]?.sha256 !== attachment.sha256 || result.rows[0]?.object_key !== attachment.objectKey) {
+        const error = new Error("attachment id reused"); error.code = "idempotency_conflict"; throw error;
+      }
+      return { id: result.rows[0].id, journalId: result.rows[0].journal_id, byteSize: Number(result.rows[0].byte_size), sha256: result.rows[0].sha256, objectKey: result.rows[0].object_key, storageStatus: result.rows[0].storage_status };
+    },
+
+    async markJournalAttachmentReady(client, _trusted, attachmentId, sha256) {
+      const result = await client.query(`UPDATE app.journal_attachment
+        SET storage_status = 'ready', ready_at = coalesce(ready_at, clock_timestamp()), last_storage_check_at = clock_timestamp()
+        WHERE tenant_id = app.current_tenant_id() AND attachment_id = $1::uuid AND sha256 = $2
+          AND storage_status IN ('pending', 'ready')
+        RETURNING attachment_id::text AS id, journal_id::text AS journal_id, byte_size, sha256, object_key, storage_status`, [attachmentId, sha256]);
+      if (!result.rows[0]) { const error = new Error("attachment finalization conflict"); error.code = "idempotency_conflict"; throw error; }
+      return { id: result.rows[0].id, journalId: result.rows[0].journal_id, byteSize: Number(result.rows[0].byte_size), sha256: result.rows[0].sha256, objectKey: result.rows[0].object_key, storageStatus: result.rows[0].storage_status };
+    },
+
+    async getJournalAttachment(client, _trusted, attachmentId) {
+      if (!isUuid(attachmentId)) throw new TypeError("invalid attachment");
+      const result = await client.query(`SELECT attachment_id::text AS id, journal_id::text AS journal_id,
+          file_name, content_type, byte_size, sha256, object_key, storage_status
+        FROM app.journal_attachment
+        WHERE tenant_id = app.current_tenant_id() AND attachment_id = $1::uuid`, [attachmentId]);
+      if (!result.rows[0]) throw new TypeError("unknown attachment");
+      const row = result.rows[0];
+      return { id: row.id, journalId: row.journal_id, fileName: row.file_name, contentType: row.content_type,
+        byteSize: Number(row.byte_size), sha256: row.sha256, objectKey: row.object_key, storageStatus: row.storage_status };
+    },
+
+    async listAttachmentStorageRecords(client) {
+      await requireCapability(client, "security:manage");
+      const result = await client.query(`SELECT attachment_id::text AS id, object_key, storage_status, created_at
+        FROM app.journal_attachment
+        WHERE tenant_id = app.current_tenant_id() AND object_key IS NOT NULL AND storage_status IN ('pending', 'ready')`);
+      return result.rows.map((row) => ({ id: row.id, objectKey: row.object_key, storageStatus: row.storage_status, createdAt: iso(row.created_at) }));
+    },
+
+    async applyAttachmentReconciliation(client, _trusted, { readyAttachmentIds, missingAttachmentIds }) {
+      await requireCapability(client, "security:manage");
+      const ready = readyAttachmentIds.filter(isUuid);
+      const missing = missingAttachmentIds.filter(isUuid);
+      if (ready.length) await client.query(`UPDATE app.journal_attachment SET storage_status = 'ready',
+          ready_at = coalesce(ready_at, clock_timestamp()), last_storage_check_at = clock_timestamp()
+        WHERE tenant_id = app.current_tenant_id() AND attachment_id = ANY($1::uuid[]) AND storage_status = 'pending'`, [ready]);
+      if (missing.length) await client.query(`UPDATE app.journal_attachment SET storage_status = 'quarantined',
+          last_storage_check_at = clock_timestamp()
+        WHERE tenant_id = app.current_tenant_id() AND attachment_id = ANY($1::uuid[]) AND storage_status = 'pending'`, [missing]);
+      return { finalized: ready.length, quarantined: missing.length };
     },
 
     async listJournals(client) {
@@ -450,6 +495,7 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         FROM app.work_journal journal
         LEFT JOIN app.field field ON field.tenant_id = journal.tenant_id AND field.field_id = journal.field_id
         LEFT JOIN app.journal_attachment attachment ON attachment.tenant_id = journal.tenant_id AND attachment.journal_id = journal.journal_id
+          AND attachment.storage_status IN ('legacy', 'ready')
         LEFT JOIN LATERAL (
           SELECT revision.reason FROM app.journal_revision revision
           WHERE revision.tenant_id = journal.tenant_id AND revision.journal_id = journal.journal_id

@@ -186,8 +186,9 @@ async function readAttachment(request) {
   };
 }
 
-export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, clock = () => Date.now() }) {
+export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, attachmentStorage, clock = () => Date.now() }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
+  if (!attachmentStorage) throw new Error("attachmentStorage is required");
 
   return async function handle(request) {
     const requestId = correlationId(request);
@@ -226,6 +227,14 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
         const body = await readJsonObject(request);
         return json(201, await securityAdministration.createPrivacyRequest(trusted, body), requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/security-admin/attachment-storage/reconcile") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const records = await database.transaction(trusted, (client, canonical) => repository.listAttachmentStorageRecords(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        const reconciliation = await attachmentStorage.reconcile({ tenantId: trusted.authContext.tenantId, records });
+        const applied = await database.transaction(trusted, (client, canonical) => repository.applyAttachmentReconciliation(client, canonical ? { ...trusted, authContext: canonical } : trusted, reconciliation));
+        return json(200, { scanned: reconciliation.scanned, taggedOrphans: reconciliation.taggedOrphans, ...applied }, requestId);
       }
 
       const privacyTransition = url.pathname.match(/^\/api\/v1\/security-admin\/privacy-requests\/([^/]+)\/transitions$/);
@@ -335,8 +344,18 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (request.method === "POST" && url.pathname === "/api/v1/journal-attachments") {
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
         const attachment = await readAttachment(request);
-        const result = await database.transaction(trusted, (client, canonical) => repository.saveJournalAttachment(client, canonical ? { ...trusted, authContext: canonical } : trusted, attachment));
+        const objectKey = attachmentStorage.objectKey(trusted.authContext.tenantId, attachment);
+        const reserved = await database.transaction(trusted, (client, canonical) => repository.saveJournalAttachment(client, canonical ? { ...trusted, authContext: canonical } : trusted, { ...attachment, objectKey }));
+        await attachmentStorage.stage({ tenantId: trusted.authContext.tenantId, userId: trusted.userId, attachment, key: reserved.objectKey });
+        await attachmentStorage.markReady({ key: reserved.objectKey });
+        const result = await database.transaction(trusted, (client, canonical) => repository.markJournalAttachmentReady(client, canonical ? { ...trusted, authContext: canonical } : trusted, attachment.attachmentId, attachment.sha256));
         return json(201, result, requestId);
+      }
+
+      const attachmentAccess = url.pathname.match(/^\/api\/v1\/journal-attachments\/([^/]+)\/access$/);
+      if (request.method === "GET" && attachmentAccess) {
+        const attachment = await database.transaction(trusted, (client, canonical) => repository.getJournalAttachment(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(attachmentAccess[1])), { readOnly: true });
+        return json(200, await attachmentStorage.signedDownload(attachment), requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/api/v1/work-instructions") {

@@ -74,6 +74,12 @@ describe("MVP REST and synchronization API", () => {
     }));
     assert.equal(created.status, 201);
     assert.equal((await created.json()).status, "pending");
+
+    const reconciliation = await fx.handle(fx.request("/api/v1/security-admin/attachment-storage/reconcile", {
+      method: "POST", headers: { Origin: ORIGIN, "X-CSRF-Token": "csrf-1" },
+    }));
+    assert.equal(reconciliation.status, 200);
+    assert.deepEqual(await reconciliation.json(), { scanned: 0, taggedOrphans: 0, finalized: 0, quarantined: 0 });
   });
 
   test("requires a different pesticide master reviewer before publication", async () => {
@@ -213,6 +219,15 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(retry.status, 201);
     assert.equal((await first.json()).sha256, (await retry.json()).sha256);
     assert.equal(fx.state.attachments.length, 1);
+    assert.equal(fx.state.attachments[0].storageStatus, "ready");
+    assert.equal(fx.state.attachments[0].objectKey.startsWith("attachments/tenant-1/"), true);
+
+    const access = await fx.handle(fx.request("/api/v1/journal-attachments/0198a6c0-0000-7000-8000-000000000201/access"));
+    assert.equal(access.status, 200);
+    const signed = await access.json();
+    assert.match(signed.url, /^https:\/\/objects\.example\//);
+    assert.equal(signed.contentType, "image/jpeg");
+    assert.equal("objectKey" in signed, false);
   });
 
   test("rejects spoofed image content and oversized JSON before repository processing", async () => {

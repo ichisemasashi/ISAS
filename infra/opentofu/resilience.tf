@@ -11,6 +11,30 @@ resource "aws_s3_bucket_lifecycle_configuration" "private_objects" {
     noncurrent_version_expiration { noncurrent_days = var.attachment_noncurrent_retention_days }
   }
 
+  rule {
+    id     = "unfinished-attachment-recovery"
+    status = "Enabled"
+    filter {
+      and {
+        prefix = "attachments/"
+        tags   = { "upload-state" = "pending" }
+      }
+    }
+    expiration { days = 2 }
+  }
+
+  rule {
+    id     = "orphaned-attachment-quarantine"
+    status = "Enabled"
+    filter {
+      and {
+        prefix = "attachments/"
+        tags   = { "upload-state" = "orphaned" }
+      }
+    }
+    expiration { days = 30 }
+  }
+
   depends_on = [aws_s3_bucket_versioning.private_objects]
 }
 
@@ -30,8 +54,19 @@ resource "aws_s3_access_point" "private_attachments" {
 
 data "aws_iam_policy_document" "private_attachment_access_point" {
   statement {
+    sid       = "ApplicationAttachmentList"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_access_point.private_attachments.arn]
+
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.application.arn]
+    }
+  }
+
+  statement {
     sid       = "ApplicationAttachmentObjects"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    actions   = ["s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectTagging", "s3:DeleteObject"]
     resources = ["${aws_s3_access_point.private_attachments.arn}/object/attachments/*"]
 
     principals {

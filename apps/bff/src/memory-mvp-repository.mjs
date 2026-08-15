@@ -17,6 +17,7 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   let sequence = 0;
   const instructions = clone(workInstructions);
   const attachments = [];
+  const attachmentObjects = new Map();
   const journals = clone(workJournals);
   const revisions = [];
   let currentPesticideRelease = clone(pesticideRelease);
@@ -74,8 +75,36 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       if (!trusted.authContext.capabilities.includes("journal:write")) { const error = new Error("forbidden"); error.code = "forbidden"; throw error; }
       const existing = attachments.find((item) => item.id === attachment.attachmentId && item.tenantId === trusted.authContext.tenantId);
       if (existing) return clone(existing);
-      const item = { id: attachment.attachmentId, journalId: attachment.journalId, tenantId: trusted.authContext.tenantId, byteSize: attachment.bytes.length, sha256: attachment.sha256 };
+      const item = { id: attachment.attachmentId, journalId: attachment.journalId, tenantId: trusted.authContext.tenantId,
+        fileName: attachment.fileName, contentType: attachment.contentType, byteSize: attachment.bytes.length,
+        sha256: attachment.sha256, objectKey: attachment.objectKey, storageStatus: "pending" };
       attachments.push(item); return clone(item);
+    },
+
+    async markJournalAttachmentReady(_client, trusted, attachmentId, sha256) {
+      const item = attachments.find((row) => row.id === attachmentId && row.tenantId === trusted.authContext.tenantId && row.sha256 === sha256);
+      if (!item) throw Object.assign(new Error("attachment conflict"), { code: "idempotency_conflict" });
+      item.storageStatus = "ready"; return clone(item);
+    },
+
+    async getJournalAttachment(_client, trusted, attachmentId) {
+      const item = attachments.find((row) => row.id === attachmentId && row.tenantId === trusted.authContext.tenantId);
+      if (!item) throw new TypeError("unknown attachment");
+      return clone(item);
+    },
+
+    async listAttachmentStorageRecords(_client, trusted) {
+      if (!trusted.authContext.capabilities.includes("security:manage")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      return clone(attachments.filter((row) => row.tenantId === trusted.authContext.tenantId).map((row) => ({ id: row.id, objectKey: row.objectKey, storageStatus: row.storageStatus, createdAt: row.createdAt || new Date(0).toISOString() })));
+    },
+
+    async applyAttachmentReconciliation(_client, trusted, { readyAttachmentIds, missingAttachmentIds }) {
+      if (!trusted.authContext.capabilities.includes("security:manage")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      for (const row of attachments) {
+        if (readyAttachmentIds.includes(row.id)) row.storageStatus = "ready";
+        if (missingAttachmentIds.includes(row.id)) row.storageStatus = "quarantined";
+      }
+      return { finalized: readyAttachmentIds.length, quarantined: missingAttachmentIds.length };
     },
 
     async listJournals(_client, trusted) {
@@ -297,5 +326,20 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, state: { receipts, changes, rejections, conflicts, instructions, attachments, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs } };
+  const attachmentStorage = {
+    objectKey: (tenantId, attachment) => `attachments/${tenantId}/${attachment.attachmentId}/${attachment.sha256}`,
+    async stage({ key, attachment }) {
+      const existing = attachmentObjects.get(key);
+      if (existing && existing.sha256 !== attachment.sha256) throw Object.assign(new Error("attachment object differs"), { code: "idempotency_conflict" });
+      attachmentObjects.set(key, { sha256: attachment.sha256, status: "pending" });
+    },
+    async markReady({ key }) { attachmentObjects.get(key).status = "ready"; },
+    async signedDownload(attachment) {
+      if (attachment.storageStatus !== "ready") throw new TypeError("attachment is not available");
+      return { url: `https://objects.example/${encodeURIComponent(attachment.id)}?signature=test`, expiresAt: new Date(Date.now() + 60000).toISOString(), contentType: attachment.contentType, byteSize: attachment.byteSize, sha256: attachment.sha256 };
+    },
+    async reconcile() { return { scanned: attachmentObjects.size, taggedOrphans: 0, readyAttachmentIds: [], missingAttachmentIds: [] }; },
+  };
+
+  return { database, repository, attachmentStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs } };
 }

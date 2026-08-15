@@ -80,6 +80,7 @@ test("runtime adapter contract is checked before accepting traffic", () => {
     users: { resolve() {} },
     authorization: { listTenants() {}, deriveContext() {} },
     securityAdministration: { snapshot() {}, requestChange() {}, decideChange() {}, createPrivacyRequest() {}, transitionPrivacyRequest() {} },
+    attachmentStorage: { objectKey() {}, stage() {}, markReady() {}, signedDownload() {}, reconcile() {} },
   };
   assert.equal(runtimeContract.validateAdapters(adapters), adapters);
   delete adapters.stores.sessions.touch;

@@ -1,6 +1,7 @@
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { KMSClient } from "@aws-sdk/client-kms";
+import { S3Client } from "@aws-sdk/client-s3";
 import { SQSClient } from "@aws-sdk/client-sqs";
 import { createCognitoOidc } from "../src/cognito-oidc.mjs";
 import { createDynamoStores } from "../src/dynamodb-stores.mjs";
@@ -8,6 +9,7 @@ import { createKmsEnvelopeCrypto } from "../src/envelope-crypto.mjs";
 import { createPostgresIdentityAdapters } from "../src/postgres-identity.mjs";
 import { createPostgresSecurityAdministration } from "../src/security-administration.mjs";
 import { createRevocationService } from "../src/revocation-service.mjs";
+import { createS3ObjectStorage } from "../src/s3-object-storage.mjs";
 
 function required(env, name) {
   const value = env[name];
@@ -25,11 +27,13 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
   const queueUrl = required(env, "AUTHORIZATION_REVOCATION_QUEUE_URL");
   const keyId = required(env, "TOKEN_SESSION_KMS_KEY_ARN");
   const pseudonymKey = required(env, "ACTOR_PSEUDONYM_KEY");
+  const attachmentAccessPoint = required(env, "ATTACHMENT_ACCESS_POINT_ARN");
 
   const dynamodb = clients.dynamodb || new DynamoDBClient({ region });
   const kms = clients.kms || new KMSClient({ region });
   const sqs = clients.sqs || new SQSClient({ region });
   const cognito = clients.cognito || new CognitoIdentityProviderClient({ region });
+  const s3 = clients.s3 || new S3Client({ region });
   const crypto = createKmsEnvelopeCrypto({
     kms,
     keyId,
@@ -44,6 +48,11 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
     pseudonymKey,
   });
   const securityAdministration = createPostgresSecurityAdministration({ pool: pools.authP1 });
+  const attachmentStorage = createS3ObjectStorage({
+    s3,
+    bucket: attachmentAccessPoint,
+    downloadTtlSeconds: Number(env.ATTACHMENT_DOWNLOAD_TTL_SECONDS || 60),
+  });
   let revocations;
   const identityProvider = createCognitoOidc({
     issuer,
@@ -69,6 +78,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
       stores.startupCheck(),
       revocations.startupCheck(),
       identityProvider.startupCheck({ redirectUri: config.redirectUri, logoutUri: `${config.origin}/` }),
+      attachmentStorage.startupCheck(),
     ]);
     lastReadinessAt = Date.now();
   }
@@ -84,6 +94,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
     users: postgres.users,
     authorization: postgres.authorization,
     securityAdministration,
+    attachmentStorage,
     revocations,
     async startupCheck() {
       await dependenciesCheck();
@@ -94,7 +105,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
     },
     async close() {
       await revocations.close();
-      for (const client of [dynamodb, kms, sqs, cognito]) client.destroy?.();
+      for (const client of [dynamodb, kms, sqs, cognito, s3]) client.destroy?.();
     },
   });
 }
