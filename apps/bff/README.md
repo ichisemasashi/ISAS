@@ -1,6 +1,49 @@
 # ISAS BFF core
 
-ADR-0009の同一オリジンBFF境界と、ADR-0007/0008のMVP REST・同期面を実装したコアである。HTTPサーバ、永続ストア、OIDC製品、PostgreSQL poolは配備アダプタとして注入する。
+ADR-0009の同一オリジンBFF境界と、ADR-0007/0008のMVP REST・同期面を実装したコアである。Production runtimeはNode.js HTTP server、graceful shutdown、health probe、`pg` driverによる優先度別poolを提供し、永続ストアとOIDC製品は配備アダプタとして注入する。
+
+## Production runtimeの操作
+
+Node.js 22以上を使い、最初に依存を固定lockから導入する。
+
+```bash
+cd apps/bff
+npm ci
+```
+
+必要な環境変数を設定した後、構成だけを検査する。成功時はsecretを含まないJSON logを出して終了code 0、失敗時は終了code 78となる。
+
+```bash
+npm run check:config
+```
+
+container／ECSでは前景起動を使う。`SIGTERM`または`SIGINT`でreadinessを即時503へ落とし、新規業務requestを拒否して、既定15秒まで処理中requestをdrainした後、adapter、5 poolの順に終了する。`SIGHUP`は同じ安全終了後に終了code 75を返すため、再起動はECS等のsupervisorに委ねる。
+
+```bash
+npm start
+```
+
+supervisorのない保守端末では、PIDを照合してからsignalする次のcommandを使う。logとPIDは既定で`apps/bff/runtime/`に作られる。停止が時間切れになっても強制終了しないため、当番者が処理中requestとDBを確認してescalateする。
+
+```bash
+npm run service:start
+npm run service:status
+npm run service:restart
+npm run service:stop
+```
+
+監視endpointは、process生存だけを返す`GET /health/live`と、5 poolおよびadapter依存先を検査する`GET /health/ready`である。ALB互換aliasとして`GET /healthz`もreadinessを返す。livenessをtraffic受入判定に使わない。
+
+### 起動時に必須の構成・secret
+
+| 分類 | 環境変数 | 条件 |
+|---|---|---|
+| 配備 | `NODE_ENV`、`ISAS_DEPLOYMENT_ID`、`ISAS_JURISDICTION`、`AWS_REGION` | productionは`production`、`isas-jp-prod-NN`、`JP`、`ap-northeast-1` |
+| HTTP/OIDC | `ISAS_PUBLIC_ORIGIN`、任意の`ISAS_OIDC_REDIRECT_URI` | HTTPS exact origin。redirectは同originの`/api/bff/callback`だけ |
+| adapter | `ISAS_RUNTIME_ADAPTER_MODULE` | local module。`createRuntimeAdapters`と全必須methodを起動前に検査 |
+| DB | `ISAS_DB_{P0,AUTH_P1,P1,P2,OPS}_{HOST,PORT,NAME,USER,PASSWORD,SSLMODE}` | productionは5つの異なるPgBouncer endpoint、TLS必須。P1は`app_user` |
+
+DBは各classについて上記componentの代わりに`ISAS_DB_<CLASS>_URL`も指定できる。ただしURLをlogや手順書へ貼らない。既定pool上限はP0=8、Auth-P1=12、P1=16、P2=8、Ops=4、statement timeoutは順に3/5/15/30/60秒である。共通調整値は`ISAS_DB_CONNECTION_TIMEOUT_MS`、`ISAS_DB_IDLE_TIMEOUT_MS`、HTTP調整値は`ISAS_REQUEST_TIMEOUT_MS`、`ISAS_HEADERS_TIMEOUT_MS`、`ISAS_KEEP_ALIVE_TIMEOUT_MS`、`ISAS_DRAIN_TIMEOUT_MS`、`ISAS_BODY_LIMIT_BYTES`、`ISAS_READINESS_CACHE_MS`を使う。body上限は最大16MiBで、既定11MiB（10MiB写真とmultipart等の余裕）である。
 
 ## 実装済みの境界
 
@@ -99,4 +142,4 @@ npm test
 npm run check
 ```
 
-2026-08-15時点でBFF 50テスト、Web 36テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群がPASSしている。backfillと安全条件付きrollbackも実DBで確認済みである。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。実配備に残るのは具体的なOIDCアダプタ、永続session/context store、失効consumer、pool driverを生成するHTTP runtimeである。
+2026-08-15時点でBFF 60テスト、Web 36テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群がPASSしている。backfillと安全条件付きrollbackも実DBで確認済みである。CSVの列・操作・制約は[CSVデータ移行・出力ガイド](../../docs/CSVデータ移行・出力ガイド.md)を参照する。HTTP runtimeと優先度別PostgreSQL pool driverは実装済みで、具体的なCognito OIDC adapter、DynamoDB session/context store、永続失効consumerは配備adapter側の残件である。

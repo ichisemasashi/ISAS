@@ -3,9 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
+    "start": "node bin/server.mjs start",
+    "check:config": "node bin/server.mjs check-config",
+    "service:start": "sh bin/runtime-control.sh start",
+    "service:stop": "sh bin/runtime-control.sh stop",
+    "service:restart": "sh bin/runtime-control.sh restart",
+    "service:status": "sh bin/runtime-control.sh status",
     "test": "node --test",
-    "check": "node --check src/*.mjs && node --check test/*.test.mjs"
+    "check": "node --check bin/server.mjs && node --check src/*.mjs && node --check test/*.test.mjs && sh -n bin/runtime-control.sh"
   },
   "dependencies": {
     "pg": "8.22.0"
