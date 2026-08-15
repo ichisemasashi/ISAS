@@ -1,6 +1,6 @@
 # ISAS Japan Phase 1 OpenTofu
 
-このroot moduleは、日本初期配備profileをAWS東京regionへ実装する。stagingとproductionは別AWS account、別backend、別variable fileで適用し、同一stateへ混在させない。現在のproduction profileは3 AZ、ECS Fargate、RDS PostgreSQL Multi-AZ DB cluster、Cognito、DynamoDB、S3、SQS、KMS、AWS Backup、CloudWatch／X-Ray、ECR、GitHub OIDCを採用する。
+このroot moduleは、日本初期配備profileをAWS東京regionへ実装する。stagingとproductionは別AWS account、別backend、別variable fileで適用し、同一stateへ混在させない。production候補profileは3 AZ、TLS ALB、ECS Fargate、RDS PostgreSQL Multi-AZ DB cluster、5系統PgBouncer、private attachment access point、quarantine／DLQ、静的shard manifest、用途別KMS、AWS Backupを採用する。
 
 OpenTofu `1.12.5`とAWS provider `6.51.0`を固定している。upgradeはstagingの保存planと本書の受入を再実施する別changeとする。
 
@@ -58,8 +58,8 @@ plan reviewerは次を確認する。
 
 1. account ID、`ap-northeast-1`、3個の相異なるAZ IDが正しい。
 2. public resourceはALBだけで、ECSとRDSにpublic IPがない。
-3. KMSはsingle-region、S3 CRR、DynamoDB global table、CloudFrontがない。
-4. RDSはwriter 1＋reader 2のMulti-AZ DB cluster、暗号化、backup 30日である。
+3. KMSはAWS KMS内のsingle-region customer managed key（AWS管理HSMで保護）で、S3 CRR、DynamoDB global table、CloudFront、CloudHSM custom key storeがない。
+4. RDSはwriter 1＋reader 2のMulti-AZ DB cluster、暗号化、RDS管理WAL archiveによる30日PITRである。
 5. image参照がすべて`@sha256:`、GitHub trustが対象repositoryの`environment:staging`だけである。
 6. productionで`deletion_protection=false`または`force_destroy=true`になるplanを拒否する。
 
@@ -70,6 +70,8 @@ AWS provider `6.51.0`はCognito WebAuthnの`FactorConfiguration`をまだ公開�
 ```bash
 tofu apply staging.tfplan
 tofu output -json deployment_manifest > /tmp/isas-staging-deployment-manifest.json
+chmod 0555 scripts/sign-shard-manifest.sh
+scripts/sign-shard-manifest.sh 123456789012
 ```
 
 `apply`後、Secrets Managerの5個のPgBouncer用secretへmigration担当が生成した個別DB role credentialをJSON `{"username":"<role>","password":"<random>"}` として投入する。P1の`username`は必ず`app_user`とし、5 secretを同じcredentialにしない。BFF taskはECS secret selectorで各JSON keyだけを対応する`ISAS_DB_<CLASS>_{USER,PASSWORD}`へ注入する。RDS master secretをapplicationへ渡さず、値をterminal、plan、ticketへ表示しない。
@@ -95,7 +97,7 @@ backfillは[migration backfill](../../apps/bff/migrations/backfill/0000_auth_con
 
 ## 5. staging受入
 
-apply直後にmigrationを一度だけ実行し、AWS APIの実値を収集する。
+apply後に静的shard manifestをKMS ECDSAで署名してからmigrationを一度だけ実行し、AWS APIの実値を収集する。署名scriptはOpenTofu出力とS3 objectのSHA-256一致を確認し、不一致なら署名を公開しない。
 
 ```bash
 chmod 0555 scripts/collect-staging-evidence.sh
@@ -105,7 +107,7 @@ scripts/collect-staging-evidence.sh \
   evidence/staging-acceptance.json
 ```
 
-collectorはmigration ECS taskも起動する。18検査がすべて`PASS`の場合だけ0終了する。AWS Backupのrecovery point、SNS購読確認、HTTPS healthがまだない場合は正常に`BLOCKED`となるので、backup／通知／DNSを実動確認して再実行する。
+collectorはmigration ECS taskも起動する。24検査がすべて`PASS`の場合だけ0終了する。TLS listener、Web／BFFの実taskが2 AZ以上へ分散、RDS PITR window、VPC-only attachment access point、queue／DLQ／quarantine、shard manifest署名もAWS APIでread-backする。AWS Backupのrecovery point、SNS購読確認、HTTPS healthがまだない場合は正常に`BLOCKED`となるので、backup／通知／DNSを実動確認して再実行する。
 
 ```bash
 node ../../ops/check-staging-acceptance.mjs evidence/staging-acceptance.json
@@ -113,6 +115,20 @@ node ../../ops/check-staging-acceptance.mjs evidence/staging-acceptance.json
 
 実証跡はGitへ入れず、KMS署名後にops evidence bucketへObject Lock付きで保存する。exampleは意図的に全項目`BLOCKED`である。
 
-## 6. destroy禁止とdrift
+## 6. production候補plan
+
+staging 24/24、復旧演習、性能・security gateの合格後だけ、別production accountでexampleをコピーする。production profileはRDS deletion protectionとAWS Backup Vault Lockを必須にし、S3 bucketは強制削除しない。
+
+```bash
+cp environments/production/backend.hcl.example environments/production/backend.hcl
+cp environments/production/production.tfvars.example environments/production/production.tfvars
+tofu init -reconfigure -backend-config=environments/production/backend.hcl
+tofu plan -var-file=environments/production/production.tfvars -out=production.tfplan
+tofu show -no-color production.tfplan > production.plan.txt
+```
+
+保存planを二人承認するまで`apply`しない。example内のaccount、ARN、domain、image digestは値ではなく置換対象である。
+
+## 7. destroy禁止とdrift
 
 productionで`tofu destroy`を使わない。staging削除もchange承認、DB final snapshot、S3 object／legal hold確認後にresource単位で行う。日次CIはread-only credentialで`tofu plan -detailed-exitcode`を実行し、exit 2をdrift ticketへ送る。console変更はSev-1の時限break-glassだけとし、復旧後に宣言構成へ戻す。
