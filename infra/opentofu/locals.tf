@@ -32,6 +32,53 @@ locals {
     { name = "DEPLOYMENT_ID", value = var.deployment_id },
   ]
 
+  adot_config = jsonencode({
+    receivers = { otlp = { protocols = {
+      grpc = { endpoint = "0.0.0.0:4317" }
+      http = { endpoint = "0.0.0.0:4318" }
+    } } }
+    processors = {
+      memory_limiter = { check_interval = "1s", limit_mib = 256, spike_limit_mib = 64 }
+      attributes = { actions = [
+        { key = "enduser.id", action = "delete" },
+        { key = "user.id", action = "delete" },
+        { key = "tenant.id", action = "delete" },
+        { key = "http.request.header.cookie", action = "delete" },
+        { key = "http.request.header.authorization", action = "delete" },
+        { key = "url.full", action = "delete" },
+        { key = "url.query", action = "delete" },
+        { key = "db.statement", action = "delete" },
+        { key = "db.query.text", action = "delete" },
+      ] }
+      resource = { attributes = [
+        { key = "deployment.environment", value = var.environment, action = "upsert" },
+        { key = "service.namespace", value = "isas", action = "upsert" },
+        { key = "cloud.region", value = var.region, action = "upsert" },
+        { key = "isas.jurisdiction", value = "JP", action = "upsert" },
+      ] }
+      batch = { send_batch_size = 512, timeout = "5s" }
+    }
+    exporters = {
+      awsxray = { region = var.region, index_all_attributes = false }
+      awsemf = {
+        region                  = var.region
+        namespace               = "ISAS/${var.environment}"
+        log_group_name          = aws_cloudwatch_log_group.telemetry_metrics.name
+        log_stream_name         = "otel-metrics"
+        dimension_rollup_option = "NoDimensionRollup"
+      }
+    }
+    extensions = { health_check = { endpoint = "0.0.0.0:13133" } }
+    service = {
+      extensions = ["health_check"]
+      telemetry  = { logs = { level = "warn" } }
+      pipelines = {
+        traces  = { receivers = ["otlp"], processors = ["memory_limiter", "attributes", "resource", "batch"], exporters = ["awsxray"] }
+        metrics = { receivers = ["otlp"], processors = ["memory_limiter", "attributes", "resource", "batch"], exporters = ["awsemf"] }
+      }
+    }
+  })
+
   shard_manifest = {
     schemaVersion = 1
     version       = var.shard_manifest_version

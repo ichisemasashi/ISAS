@@ -186,7 +186,7 @@ async function readAttachment(request) {
   };
 }
 
-export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, attachmentStorage, mapStorage, clock = () => Date.now() }) {
+export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, attachmentStorage, mapStorage, clock = () => Date.now(), logger = {} }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
   if (!attachmentStorage) throw new Error("attachmentStorage is required");
   if (!mapStorage) throw new Error("mapStorage is required");
@@ -235,6 +235,11 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         const records = await database.transaction(trusted, (client, canonical) => repository.listAttachmentStorageRecords(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
         const reconciliation = await attachmentStorage.reconcile({ tenantId: trusted.authContext.tenantId, records });
         const applied = await database.transaction(trusted, (client, canonical) => repository.applyAttachmentReconciliation(client, canonical ? { ...trusted, authContext: canonical } : trusted, reconciliation));
+        logger.info?.("attachment_storage_reconciled", {
+          scanned: reconciliation.scanned,
+          missing: reconciliation.missingAttachmentIds?.length || 0,
+          orphanBacklog: reconciliation.taggedOrphans || 0,
+        });
         return json(200, { scanned: reconciliation.scanned, taggedOrphans: reconciliation.taggedOrphans, ...applied }, requestId);
       }
 
@@ -404,6 +409,11 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         for (const bundle of input.bundles) {
           results.push(await database.transaction(trusted, (client, canonical) => repository.pushBundle(client, canonical ? { ...trusted, authContext: canonical } : trusted, bundle)));
         }
+        logger.info?.("sync_push_completed", {
+          bundles: results.length,
+          rejected: results.filter((result) => result.status === "rejected").length,
+          conflicted: results.filter((result) => result.status === "conflicted").length,
+        });
         return json(200, { results }, requestId);
       }
 

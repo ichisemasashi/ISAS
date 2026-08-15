@@ -296,3 +296,31 @@ resource "aws_vpc_endpoint" "dynamodb" {
   vpc_endpoint_type = "Gateway"
   route_table_ids   = aws_route_table.app[*].id
 }
+
+resource "aws_security_group" "observability_endpoint" {
+  name        = "${local.name}-observability-endpoint"
+  description = "Regional AWS observability endpoints from application tasks"
+  vpc_id      = aws_vpc.main.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "observability_endpoint_https" {
+  security_group_id            = aws_security_group.observability_endpoint.id
+  description                  = "ADOT exporters from BFF tasks"
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+  referenced_security_group_id = aws_security_group.bff.id
+}
+
+resource "aws_vpc_endpoint" "observability" {
+  for_each = toset(["logs", "monitoring", "xray"])
+
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.${each.key}"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = aws_subnet.app[*].id
+  security_group_ids  = [aws_security_group.observability_endpoint.id]
+
+  tags = { Name = "${local.name}-${each.key}-endpoint" }
+}

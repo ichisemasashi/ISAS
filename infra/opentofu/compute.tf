@@ -121,6 +121,11 @@ data "aws_iam_policy_document" "application" {
     actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "cloudwatch:PutMetricData"]
     resources = ["*"]
   }
+
+  statement {
+    actions   = ["logs:CreateLogStream", "logs:DescribeLogStreams", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.telemetry_metrics.arn}:*"]
+  }
 }
 
 resource "aws_iam_role_policy" "application" {
@@ -152,6 +157,12 @@ resource "aws_cloudwatch_log_group" "service" {
 
   name              = "/isas/${var.deployment_id}/${each.key}"
   retention_in_days = each.key == "adot" ? 30 : 90
+  kms_key_id        = aws_kms_key.queue.arn
+}
+
+resource "aws_cloudwatch_log_group" "telemetry_metrics" {
+  name              = "/isas/${var.deployment_id}/otel-metrics"
+  retention_in_days = 90
   kms_key_id        = aws_kms_key.queue.arn
 }
 
@@ -245,6 +256,12 @@ resource "aws_ecs_task_definition" "bff" {
         { name = "ISAS_KEEP_ALIVE_TIMEOUT_MS", value = "5000" },
         { name = "ISAS_DRAIN_TIMEOUT_MS", value = "15000" },
         { name = "ISAS_BODY_LIMIT_BYTES", value = "11534336" },
+        { name = "OTEL_SDK_DISABLED", value = "false" },
+        { name = "OTEL_SERVICE_NAME", value = "isas-bff" },
+        { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://127.0.0.1:4318" },
+        { name = "OTEL_TRACES_SAMPLER", value = "parentbased_traceidratio" },
+        { name = "OTEL_TRACES_SAMPLER_ARG", value = "0.10" },
+        { name = "OTEL_RESOURCE_ATTRIBUTES", value = "deployment.id=${var.deployment_id},deployment.environment=${var.environment},cloud.region=${var.region},isas.jurisdiction=JP" },
         { name = "SESSION_TABLE", value = aws_dynamodb_table.session_context.name },
         { name = "OBJECT_BUCKET", value = aws_s3_bucket.private_objects.id },
         { name = "ATTACHMENT_ACCESS_POINT_ARN", value = aws_s3_access_point.private_attachments.arn },
@@ -302,11 +319,22 @@ resource "aws_ecs_task_definition" "bff" {
       }
     },
     {
-      name                   = "adot"
-      image                  = var.container_images.adot
-      essential              = true
-      command                = ["--config=/etc/ecs/ecs-default-config.yaml"]
+      name      = "adot"
+      image     = var.container_images.adot
+      essential = true
+      command   = ["--config=env:AOT_CONFIG_CONTENT"]
+      environment = [
+        { name = "AWS_REGION", value = var.region },
+        { name = "AOT_CONFIG_CONTENT", value = local.adot_config },
+      ]
       readonlyRootFilesystem = true
+      healthCheck = {
+        command     = ["CMD", "/healthcheck"]
+        interval    = 15
+        timeout     = 5
+        retries     = 3
+        startPeriod = 15
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {

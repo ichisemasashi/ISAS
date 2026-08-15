@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-import { startProductionRuntime, createJsonLogger } from "../src/runtime.mjs";
-import { loadRuntimeConfig, publicRuntimeConfig } from "../src/runtime-config.mjs";
+import { startTelemetry } from "../src/telemetry.mjs";
 
-const logger = createJsonLogger();
 const command = process.argv[2] || "start";
+const telemetry = command === "start" ? await startTelemetry() : { async shutdown() {} };
+const [{ startProductionRuntime, createJsonLogger }, { loadRuntimeConfig, publicRuntimeConfig }] = await Promise.all([
+  import("../src/runtime.mjs"), import("../src/runtime-config.mjs"),
+]);
+const logger = createJsonLogger();
 
 if (command === "check-config") {
   try {
@@ -21,6 +24,7 @@ if (command === "check-config") {
     process.exitCode = exitCode;
     try {
       await service?.shutdown(reason);
+      await telemetry.shutdown();
     } catch (error) {
       logger.error("bff_shutdown_failed", { reason, message: error.message });
       process.exitCode = 1;
@@ -43,6 +47,7 @@ if (command === "check-config") {
     service = await startProductionRuntime({ logger });
   } catch (error) {
     logger.error("bff_start_failed", { message: error.message });
+    await telemetry.shutdown().catch(() => undefined);
     process.exitCode = 1;
   }
 } else {

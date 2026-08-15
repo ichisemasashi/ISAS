@@ -81,6 +81,7 @@ export async function startProductionRuntime({
       attachmentStorage: adapters.attachmentStorage,
       mapStorage: adapters.mapStorage,
       pool: pools.p1,
+      logger,
     });
     runtime = createHttpRuntime({
       config,

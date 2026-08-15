@@ -33,6 +33,7 @@ function fixture(capabilities = ["journal:write"], options = {}) {
     resolveContext: async (request) => request.headers.get("Cookie") ? trusted : null,
     clock: () => Date.parse("2026-08-14T00:05:00.000Z"),
     securityAdministration,
+    logger: options.logger,
     ...memory,
   });
   const request = (path, init = {}) => new Request(`${ORIGIN}${path}`, { ...init, headers: { Cookie: "session=1", ...init.headers } });
@@ -123,13 +124,15 @@ describe("MVP REST and synchronization API", () => {
   });
 
   test("retains an authorization rejection and reports it through the queue", async () => {
-    const fx = fixture();
+    const events = [];
+    const fx = fixture(["journal:write"], { logger: { info: (name, fields) => events.push({ name, ...fields }) } });
     const bundle = { bundleId: "bundle-revoked", events: [event({ membershipVersion: "membership-old" })] };
     const pushed = await fx.handle(pushRequest(fx, [bundle])).then((response) => response.json());
     assert.equal(pushed.results[0].status, "rejected");
     const queues = await fx.handle(fx.request("/api/v1/sync/queues")).then((response) => response.json());
     assert.equal(queues.rejections[0].bundleId, "bundle-revoked");
     assert.equal(queues.rejections[0].recoveryAction, "reauthenticate_or_request_manager_review");
+    assert.deepEqual(events.at(-1), { name: "sync_push_completed", bundles: 1, rejected: 1, conflicted: 0 });
   });
 
   test("pulls changes with an independent scope cursor and fails closed after scope revocation", async () => {
