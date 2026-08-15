@@ -15,7 +15,7 @@ import time
 import unittest
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 
@@ -23,6 +23,7 @@ MAX_BUNDLE_EVENTS = 2
 MAX_PENDING = 1_000
 MAX_DEPENDENCY_DEPTH = 8
 CACHE_WINDOW_DAYS = 14
+UTC = timezone.utc
 
 
 @dataclass(frozen=True)
