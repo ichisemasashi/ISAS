@@ -285,6 +285,10 @@ textarea { padding-top: 12px; resize: vertical; }
 .bottom-nav { display: none; }
 .toast { position: fixed; z-index: 50; right: 24px; bottom: 24px; max-width: min(430px, calc(100% - 32px)); min-height: 58px; padding: 10px 10px 10px 18px; border-radius: 16px; display: flex; align-items: center; gap: 16px; background: var(--forest-900); color: #fff; box-shadow: 0 16px 40px rgb(0 0 0 / 24%); font-weight: 700; pointer-events: none; }
 .toast button { width: 40px; height: 40px; border: 0; border-radius: 10px; background: rgb(255 255 255 / 12%); color: #fff; font-size: 20px; pointer-events: auto; }
+.pwa-update { position: fixed; z-index: 80; inset: 16px 16px auto auto; width: min(430px, calc(100% - 32px)); padding: 16px; border: 2px solid var(--forest-700); border-radius: 16px; display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center; background: var(--paper); color: var(--ink); box-shadow: var(--shadow); }
+.pwa-update strong, .pwa-update span { grid-column: 1; }
+.pwa-update span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.pwa-update button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; grid-column: 2; grid-row: 1 / span 2; background: var(--forest-700); color: #fff; font-weight: 800; }
 
 @media (max-width: 1000px) {
   .side-nav { width: 200px; }
@@ -340,6 +344,7 @@ textarea { padding-top: 12px; resize: vertical; }
   .bottom-nav .nav-items button.active { background: var(--forest-100); color: var(--forest-800); }
   .bottom-nav .icon { width: 22px; height: 22px; }
   .toast { right: 16px; bottom: 88px; }
+  .pwa-update { inset: 12px 12px auto; width: auto; }
   .field-gis-grid { min-height: 0; grid-template-columns: 1fr; }
   .field-list { max-height: 340px; }
   .map-panel { min-height: 430px; }

@@ -66,6 +66,7 @@ export const utGateway: MvpGateway = {
   async reviewJournal() { throw new Error("UT fixtureではレビューを行いません"); },
   async uploadJournalAttachment(_contextId, _csrfToken, attachment) { return { id: attachment.id, journalId: attachment.journalId, byteSize: attachment.blob.size, sha256: "ut-fixture" }; },
   async push(_contextId, _csrfToken, bundles) {
+    if (new URLSearchParams(window.location.search).get("sync") === "fail") throw new Error("UT fixture sync failure");
     return { results: bundles.map((bundle): PushResult => ({ bundleId: bundle.bundleId, status: "accepted", events: bundle.events.map((event) => ({ eventUuid: event.eventUuid, eventTs: new Date().toISOString() })) })) };
   },
   async pull(_contextId, _scope, _priority, cursor) { return { changes: [], nextCursor: cursor || "0", hasMore: false }; },

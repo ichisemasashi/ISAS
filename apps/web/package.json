@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test e2e/mvp.spec.ts",
     "test:a11y": "playwright test e2e/accessibility.spec.ts",
-    "test:quality": "pnpm test && pnpm build && pnpm test:e2e && pnpm test:a11y"
+    "test:pwa": "playwright test e2e/pwa-data.spec.ts",
+    "test:quality": "pnpm test && pnpm build && pnpm test:e2e && pnpm test:a11y && pnpm test:pwa"
   },
   "dependencies": {
     "maplibre-gl": "6.3.0",
