@@ -204,7 +204,7 @@ resource "aws_secretsmanager_secret" "database_role" {
   for_each = local.db_roles
 
   name                    = "${local.name}/database/${each.key}"
-  description             = "PgBouncer credential for ${each.key}; value is populated by the migration operator"
+  description             = "PgBouncer credential for ${each.key}; operator populates JSON keys username and password"
   kms_key_id              = aws_kms_key.data.arn
   recovery_window_in_days = 30
 }

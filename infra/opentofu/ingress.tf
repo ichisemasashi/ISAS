@@ -33,7 +33,7 @@ resource "aws_lb_target_group" "bff" {
 
   health_check {
     enabled             = true
-    path                = "/healthz"
+    path                = "/health/ready"
     matcher             = "200"
     healthy_threshold   = 2
     unhealthy_threshold = 3

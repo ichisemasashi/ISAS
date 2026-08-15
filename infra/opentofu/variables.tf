@@ -107,6 +107,17 @@ variable "container_images" {
   }
 }
 
+variable "bff_runtime_adapter_module" {
+  description = "Absolute module path bundled into the BFF image; must export createRuntimeAdapters."
+  type        = string
+  default     = "/app/runtime-adapters/aws.mjs"
+
+  validation {
+    condition     = startswith(var.bff_runtime_adapter_module, "/app/") && endswith(var.bff_runtime_adapter_module, ".mjs")
+    error_message = "bff_runtime_adapter_module must be an absolute .mjs path below /app/."
+  }
+}
+
 variable "rds_engine_version" {
   description = "AWS API engine version. Acceptance verifies the RDS release and PostGIS version."
   type        = string

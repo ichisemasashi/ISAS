@@ -17,6 +17,7 @@ provider "registry.opentofu.org/hashicorp/aws" {
     "h1:comIxIsGVfm7KdcADJRn5litAfvXpwbRUMroG3w/S2I=",
     "h1:gYa+AIafrTndZ9VKtROvsfCxit6fAnZhNXQJm+YNeVE=",
     "h1:pIQaZVg4Ht3Av5SROYU2+PC722IxzwxnuV3Pt43wrZA=",
+    "h1:xLYuqy1rKEfZxuTiRCKsDAh5FfVJfqpmLY+koUfybkE=",
     "h1:xdfKYl1FeB2ZmU06QBs5y2pKDv7eAvvGYYn17wrjZ4Q=",
     "h1:yoVU5tPgW2ffRxDo+qHsviZa98zrwIRiQXd3GDOZSyg=",
     "h1:zsH83JSsPpGGKZKfANtjMowelmjaxPv8aSlMqLHAWsI=",

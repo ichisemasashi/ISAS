@@ -198,16 +198,49 @@ resource "aws_ecs_task_definition" "bff" {
       name         = "bff"
       image        = var.container_images.bff
       essential    = true
+      command      = ["node", "bin/server.mjs", "start"]
+      stopTimeout  = 30
       portMappings = [{ containerPort = 3000, hostPort = 3000, protocol = "tcp" }]
       environment = concat(local.container_environment, [
-        { name = "DATABASE_HOST", value = "pgbouncer-p1.${local.name}.internal" },
-        { name = "DATABASE_PORT", value = "6432" },
+        { name = "ISAS_DEPLOYMENT_ID", value = var.deployment_id },
+        { name = "ISAS_JURISDICTION", value = "JP" },
+        { name = "ISAS_PUBLIC_ORIGIN", value = "https://${var.domain_name}" },
+        { name = "ISAS_OIDC_REDIRECT_URI", value = "https://${var.domain_name}/api/bff/callback" },
+        { name = "ISAS_RUNTIME_ADAPTER_MODULE", value = var.bff_runtime_adapter_module },
+        { name = "ISAS_HTTP_HOST", value = "0.0.0.0" },
+        { name = "ISAS_HTTP_PORT", value = "3000" },
+        { name = "ISAS_REQUEST_TIMEOUT_MS", value = "30000" },
+        { name = "ISAS_HEADERS_TIMEOUT_MS", value = "10000" },
+        { name = "ISAS_KEEP_ALIVE_TIMEOUT_MS", value = "5000" },
+        { name = "ISAS_DRAIN_TIMEOUT_MS", value = "15000" },
+        { name = "ISAS_BODY_LIMIT_BYTES", value = "11534336" },
         { name = "SESSION_TABLE", value = aws_dynamodb_table.session_context.name },
         { name = "OBJECT_BUCKET", value = aws_s3_bucket.private_objects.id },
         { name = "COGNITO_USER_POOL_ID", value = aws_cognito_user_pool.main.id },
         { name = "COGNITO_CLIENT_ID", value = aws_cognito_user_pool_client.web.id },
+        ], flatten([
+          for pool_class in sort(tolist(local.db_roles)) : [
+            { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_HOST", value = "pgbouncer-${pool_class}.${local.name}.internal" },
+            { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_PORT", value = "6432" },
+            { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_NAME", value = aws_rds_cluster.core.database_name },
+            { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_SSLMODE", value = "require" },
+          ]
+        ])
+      )
+      secrets = flatten([
+        for pool_class in sort(tolist(local.db_roles)) : [
+          { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_USER", valueFrom = "${aws_secretsmanager_secret.database_role[pool_class].arn}:username::" },
+          { name = "ISAS_DB_${upper(replace(pool_class, "-", "_"))}_PASSWORD", valueFrom = "${aws_secretsmanager_secret.database_role[pool_class].arn}:password::" },
+        ]
       ])
       readonlyRootFilesystem = true
+      healthCheck = {
+        command     = ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))\""]
+        interval    = 15
+        timeout     = 5
+        retries     = 3
+        startPeriod = 30
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {

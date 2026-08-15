@@ -37,7 +37,7 @@
 1. 実IdPでのID Token署名／issuer／audience／nonce／`azp`／認証強度検証、MFA・step-up・回復フロー。
 2. 暗号化済みtoken setを扱う永続session/context store、単調version付き失効配信、rate limit。
 3. TLS ingress、信頼proxyの限定、SPA静的配信の厳格CSP（nonce/hashとTrusted Types）、HSTS、成果物署名／SBOM。
-4. PostgreSQL pool driverとS8 AuthContext参照DDLの本番migration化、secret manager／KMS接続。
+4. 実装済み5系統PostgreSQL pool driver／AuthContext正式migrationをAWS stagingで検証し、Secrets Manager／KMS配備adapterを接続。
 5. 添付の隔離object storage、マルウェアscan／安全な再encode、期限付きdownload、輸出step-up／監査／自動削除。
 6. ADR-0017 S9の端末暗号化、暗号消去、offline recovery wrap、鍵交代／復旧試験。ブラウザPWAを高機微・長期offline用途へ無条件に適用しない。
 7. 構造化security log、異常検知、失効dead-letter、監査ハッシュchain検証の運用監視。

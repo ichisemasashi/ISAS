@@ -72,7 +72,9 @@ tofu apply staging.tfplan
 tofu output -json deployment_manifest > /tmp/isas-staging-deployment-manifest.json
 ```
 
-`apply`後、Secrets Managerの5個のPgBouncer用secretへmigration担当が生成した個別DB role credentialを投入する。RDS master secretをapplicationへ渡さない。値をterminal、plan、ticketへ表示しない。
+`apply`後、Secrets Managerの5個のPgBouncer用secretへmigration担当が生成した個別DB role credentialをJSON `{"username":"<role>","password":"<random>"}` として投入する。P1の`username`は必ず`app_user`とし、5 secretを同じcredentialにしない。BFF taskはECS secret selectorで各JSON keyだけを対応する`ISAS_DB_<CLASS>_{USER,PASSWORD}`へ注入する。RDS master secretをapplicationへ渡さず、値をterminal、plan、ticketへ表示しない。
+
+BFF imageには`bff_runtime_adapter_module`（既定`/app/runtime-adapters/aws.mjs`）を含める。module欠落、adapter契約不一致、5 poolのrole不一致、P1のread replica接続のどれかがあればBFFはlisten前に失敗する。ECS container healthは`/health/live`、ALB traffic判定は全依存を検査する`/health/ready`を使用し、ECSの30秒停止猶予内でBFFが15秒drainを完了する。
 
 ## 4. AuthContext migration
 
