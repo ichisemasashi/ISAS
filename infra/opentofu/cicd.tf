@@ -35,6 +35,30 @@ resource "aws_iam_role" "github_deploy" {
 
 data "aws_iam_policy_document" "github_deploy" {
   statement {
+    sid       = "AuthenticateRegistry"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "PublishImmutableArtifacts"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:CompleteLayerUpload",
+      "ecr:InitiateLayerUpload",
+      "ecr:PutImage",
+      "ecr:UploadLayerPart",
+    ]
+    resources = [for repository in aws_ecr_repository.application : repository.arn]
+  }
+
+  statement {
+    sid       = "SignArtifacts"
+    actions   = ["kms:DescribeKey", "kms:GetPublicKey", "kms:Sign", "kms:Verify"]
+    resources = [aws_kms_key.signing.arn]
+  }
+
+  statement {
     sid = "DeployServices"
     actions = [
       "ecs:DescribeServices",

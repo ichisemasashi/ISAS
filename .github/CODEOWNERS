@@ -1,0 +1,10 @@
+* @ichisemasashi
+
+# Two approvals, including this owner, are required by branch protection for security-sensitive changes.
+/.github/ @ichisemasashi
+/apps/bff/migrations/ @ichisemasashi
+/apps/bff/runtime-adapters/ @ichisemasashi
+/infra/ @ichisemasashi
+/ops/ @ichisemasashi
+/docs/design/ADR/ @ichisemasashi
+/docs/operations/ @ichisemasashi
