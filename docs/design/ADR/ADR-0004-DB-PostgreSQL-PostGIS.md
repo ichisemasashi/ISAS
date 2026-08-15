@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **提案中（再オープン・処置済／残あり）**（v7：v5=チェーン単位を `(tenant_id, 期間)` へ、v6=A1h-M3/L3。**v7で §2.5 新設＝最低要求 PostgreSQL バージョンを 15 以上と確定**（`security_invoker` ビューが無いと業務ビューが0行になるため。推奨16）＋**バージョン依存が成否を分ける箇所の一覧**。**v8で IND3-H5 を是正**（A4b-M1 の目的が未達成だった＝冪等/物理配置/端末申告時刻を3機構に分離。受理台帳を新設し `event_ts` を「サーバが検証・クランプした業務時点」に再定義。DEFAULTパーティションは置かない）。**2026-08-13のPG16＋PostGIS追試でPG-M2／PG-M8を実測確認。残：PG-M1、PG-M2のbbox緩和策、PG-M8のKNNクエリ規約と本番規模再測**。[レビュー記録](レビュー記録_ADR-0004.md)／[PG検証](../PostgreSQL実挙動検証記録.md)） |
+| ステータス | **採用（再クローズ） v9**（2026-08-15。PG-M1/M2/M8を、明示tenant、数値bbox事前絞込＋厳密PostGIS判定、tenant単位KNN規約で裁定。S2は100万ポリゴン・64接続でbbox p95 80.71ms／KNN p95 54.41ms、漏洩0。方式をmigration `0009`と実repositoryへ昇格済み。日本初期配備はRDS PostgreSQL 16.14R2／PostGIS 3.4.6／PgBouncer 1.24.x。再レビュー残存High 0／Medium 0。[レビュー記録](レビュー記録_ADR-0004.md)／[PG検証](../PostgreSQL実挙動検証記録.md)） |
 | 由来 | 確定済み（要求仕様7章の方向性をADRとして正式記録） |
 | 関連 | 要求仕様 [7章／5.2](../../農業営農支援システム_要求仕様書.md)、[ADR-0001 RLS](ADR-0001-マルチテナント分離-行レベル-RLS.md)、[ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0003 データライフサイクル](ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)、[ADR-0007 オフライン同期]、[ADR-0010 地図/GIS] |
 
@@ -27,7 +27,7 @@
 - **RDB＝PostgreSQL**：ADR-0001のRLS（USING/WITH CHECK・FORCE RLS・SET LOCAL）、ADR-0003の追記型/論理削除/版履歴/監査を、すべてPostgreSQLの機能（RLS・制約・トリガ・部分一意インデックス・JSONB等）で実装する。
 - **地理空間＝PostGIS拡張**：圃場ポリゴン・メッシュ・GPSログを geometry/geography で保持し、**GiST空間インデックス**で空間検索（近傍・包含）を行う（F-08 近傍圃場、F-01 ポリゴン）。数万圃場規模を前提に空間インデックス設計（ADR-0010の地図タイル/クラスタリングと連携）。
   - **空間×RLSの性能（A4-M1）**：空間クエリはRLSが付与する `tenant_id = current` 述語と組み合わさる。プランナが「tenant_idで絞ってから空間検索」を選べるよう、**`tenant_id` を含む空間複合インデックス**（例：`(tenant_id) B-tree ＋ (geom) GiST` の組合せ、または `gist(tenant_id, geom)` を btree_gist で）を設計し、**スパイクでクエリプランを検証**する（5.2 SLO：地図2秒/p95）。
-  - **【2026-08-13実測】空間×RLSの残課題（PG-M2／PG-M8）**：PostgreSQL 16.4＋PostGIS 3.4.3では `&&`／`<->` は非leakproof。bboxは明示的な `tenant_id` 等値を加えても空間 `&&` が `Filter` に残った。KNNはRLSのみだと他テナント行を読み捨てるが、明示的な `tenant_id` 等値では複合GiSTを選択した。合成10万行では全ケースが2秒以内だが、**bboxの緩和策とKNNのクエリ規約は未決定で、本番規模・並行負荷の再測前には合格としない**（[S2ログ](../../../spikes/results/S2_2026-08-13_PG16_PostGIS.log)）。
+  - **【v9確定】空間×RLS（PG-M1／PG-M2／PG-M8）**：PostGIS `&&`／`<->` は非leakproofであり、危険な`LEAKPROOF` wrapperやRLS迂回を行わない。単一tenant queryは、DBが再導出した`tenant_id`をSQLへ冗長に等値指定する。bboxは`bbox_min_x/max_x/min_y/max_y`の生成列をtenant付きB-treeで事前絞込し、最後に`geom && ST_MakeEnvelope(...)`で厳密判定する。KNNはtenantごとに明示等値で候補取得し、複数tenantは各tenant結果をapplicationでmergeする。RLSだけの全tenant KNNは禁止する。S2は100万ポリゴン、100 tenant、64接続、各200 query/秒でbbox p95 80.71ms、KNN p95 54.41ms、失敗・skip・他tenant漏洩0となりPASSした（[S2本番規模ログ](../../../spikes/results/S2_LOAD_2026-08-14_PG16_PostGIS.log)）。bbox生成列と索引は[`0009_field_bbox_prefilter.sql`](../../../apps/bff/migrations/0009_field_bbox_prefilter.sql)、queryは`postgres-mvp-repository.mjs`へ昇格済みである。
 - **時系列・稼働ログ＝PostgreSQL内で追記型＋パーティション**：位置ログ・打刻・農機稼働ログ・在庫イベント等は、**時間（＋tenant_id）でのレンジ/リストパーティション**で管理し、古いパーティションはアーカイブ/物理削除（ADR-0003 A3-L1、ADR-0017保持ポリシー）。**規模・書込頻度が閾値を超えたら TimescaleDB拡張や列指向を段階導入**する（初期は素のPostgreSQLパーティションで足りる想定）。
   - **パーティション×RLS×一意の接合（A4-H1）**：宣言的パーティションでは既知の制約があるため、以下を接合ルールとして定める（**スパイク必須**）：
     - **一意制約はパーティションキーを含む**（`UNIQUE(..., tenant_id, 時間キー)`）。パーティション跨ぎの全体一意はキー包含が必要。ADR-0003のイベント重複排除・ADR-0001の部分一意もこの制約下で設計する。
@@ -58,14 +58,14 @@
     - **代償**：チェーン数とアンカ署名数が `(テナント数 × 期間数)` に増える。**署名のバッチ化・保管・検証手順は ADR-0017**、**並行性の実測は S5** で扱う。
     - **配備モデルの決定がストレージ設計を拘束する例**であり、ADR-0002（シャード化）→ ADR-0004（チェーン単位）という依存を明記する。
 - **1DB＝1国（ADR-0002）**：各国システムがそれぞれPostgreSQLインスタンス（プライマリ＋レプリカ）を持つ。周辺（バックアップ・レプリカ）も対象国内（ADR-0002 A2-H1）。
-- **接続**：トランザクションプーリング（PgBouncer等）を用いる（ADR-0001 A1b-L1のSET LOCAL前提）。
+- **接続**：トランザクションプーリングを用いる（ADR-0001 A1b-L1のSET LOCAL前提）。日本初期配備はPgBouncer 1.24.xを採用し、P0／Auth-P1／P1／P2／Opsを別service・role・接続予算へ分ける。
 
 ### 2.5 【v7】最低要求 PostgreSQL バージョン（PG-H4／PG-L4／PG検証の所見）
 
 **v6 まで、最低要求バージョンがどのADRにも設計書にも書かれていなかった**（言及は「実行環境＝PG16＋PostGIS 3.4」のみで、方針は ADR-0019 へ先送りされていた）。**しかし設計上の成否がバージョンで変わる箇所がある**ため、ここで確定する。
 
 - **最低要求＝PostgreSQL 15 以上**。決定的な理由は **`CREATE VIEW … WITH (security_invoker = true)`（PG15 以降）**——これが無いと**RLS 有効な表を参照する業務ビューが誰にも0行**になる（PG-H4／ADR-0001 v16 §2.10.2）。**回避策は「ビューを使わない」しかないが、③共有＋上書きの解決・訂正チェーンの有効値・未確定期間の導出はいずれもビューを前提としている。**
-- **推奨＝PostgreSQL 16 以上**（スパイクの実行環境と一致させ、検証済みの構成で運用する）。
+- **production採用major＝PostgreSQL 16**。日本初期配備はRDS PostgreSQL 16.14R2＋PostGIS 3.4.6とし、検証済み16.4＋3.4.3との差分をstagingで全migration、RLS、S2、S5、S7再試験してから昇格する。
 - **バージョン依存が成否を分ける箇所の一覧**（実装時に確認すること）：
 
   | 機能 | 必要版 | 影響 |
@@ -75,7 +75,7 @@
   | パーティション親への BEFORE ROW トリガ | PG13+ | 「BEFORE はルーティング後」という結論の前提 |
   | パーティション表への UNIQUE 索引（キー包含） | PG11+ | 冪等一意の前提 |
   | `gen_random_uuid()` 組込み | PG13+ | `DEFAULT` に使用 |
-  | PgBouncer のトランザクションプーリング＋prepared statements | **PgBouncer 1.21+**（要確認） | ADR-0001 の「prepared statement に依存しない」は 1.21 未満での制約。**プーラの製品・最低版を ADR-0019 で確定する** |
+  | PgBouncer のトランザクションプーリング＋prepared statements | **PgBouncer 1.21+** | 日本初期配備は1.24.x。ただし正しさをprepared statement対応へ依存させず、transaction終了時のGUC消去と接続再利用を統合試験する |
   | PostGIS 関数の volatility／leakproof | PostGIS 版依存 | 生成列（`ST_Area(geography)`）／`gist(tenant_id, geom)` の索引利用（PG-M2） |
 
 - **アップグレード時の注意**：**生成列・CHECK・索引が PostGIS 関数に依存する**ため、PostGIS のメジャーアップグレードで依存関係が問題になり得る（要確認）。**アップグレード手順の検証を ADR-0019 の運用項目に含める。**
@@ -104,12 +104,13 @@
 - **RLS＋PostGIS**：空間クエリもRLS配下で走るため、空間インデックスと`tenant_id`複合インデックスの両立を設計する（ADR-0001の性能留意点）。
 - **機能の相互制約はスパイクで潰す**：PostgreSQL単体で全機能を賄える利点の裏返しとして、**パーティション×RLS×一意（A4-H1）・空間×RLS性能（A4-M1）・高頻度書込（A4-M2）**が相互に干渉する。これらは要求仕様レビューで挙げた技術リスク（オフライン同期・地図性能・RLS×規模）と直結するため、**基本設計初期にPoC（スパイク）で検証**する。
 
-## 5. 未解決事項（設計フェーズで詰める → 9.1へ）
+## 5. 実装・運用上の受入条件
 
-- 時系列（位置ログ・打刻・稼働ログ・在庫イベント）の**パーティション戦略**（キー＝時間＋tenant_id、粒度、保持、アーカイブ）と、A4-H1接合（RLS/一意/FORCE RLS）のスパイク検証。
-- **TimescaleDB段階導入の閾値と互換性（A4-L1）**：導入閾値（書込量・データ量の目安）を定義し、TimescaleDB（ハイパーテーブル）の**RLS・一意制約・レプリカ互換性を事前確認**する（制約があれば素のパーティションで据え置く）。
-- **座標系/SRID（A4-L2）**：既定を「**4326（WGS84）で格納、面積（F-04）・距離は geography 型または適切な投影で計算**」とし、国別プロファイル（ADR-0015/0002）で投影を選べるようにする。国内（JGD2011等）・海外の投影の具体は設計フェーズで確定。
-- 空間インデックス（GiST）と`tenant_id`複合インデックスの共存・クエリプラン検証（5.2 SLO）。
-- レプリカ構成（読取レプリカ・DR）と**国内リージョン制約**（ADR-0002 A2-H1）の両立。
-- PostGIS/PostgreSQLの**バージョン方針・アップグレード**運用（ADR-0019）。
-- JSONB等の柔軟スキーマをどこまで使うか（国別プロファイル・多言語ラベル等：ADR-0015）。
+方式上の未解決事項はない。次は決定を実装・運用するための受入条件であり、ADRを再オープンせずrelease manifestで追跡する。
+
+- 時系列は月次rangeを主軸、必要な表だけtenant hash/listを第2軸とする。`DEFAULT` partitionを置かず、3か月先まで自動作成する。保持期限のdropは[日本初期配備profile](../../operations/日本初期配備プロファイル.md#4-日本phase-1保持削除profile)とlegal holdを確認する。
+- Phase 1はTimescaleDBを**採用しない**。native partitionで、30日予測のstorage／CPU／connection／WAL 70%または対象SLO超過が2回連続する場合だけ、新ADRでRLS、一意、replica、backup、license、移行を再評価する。
+- geometryはSRID 4326で格納し、面積・距離は`geography`または国profileで承認した投影へ変換する。日本profileでJGD2011成果を入力する場合も保存境界でWGS84/4326へ正規化し、原座標系metadataを保持する。
+- 日本初期配備は東京regionのRDS Multi-AZ DB cluster（writer 1＋reader 2、3 AZ）とする。P0/P1 writeと権威readはwriter、遅延許容P2だけreaderを使う。
+- PostgreSQL/PostGIS minor更新はempty DBと前版snapshotで全migration、RLS/FORCE、owner、trigger、`security_invoker`、bbox/KNN plan、S2/S5/S7を再実行する。
+- JSONBはversion付き同期payload、外部取込原文、非索引metadataへ限定する。tenant、scope、status、時刻、金額、数量、農薬安全、FK対象は型付きcolumnとconstraintを正とする。

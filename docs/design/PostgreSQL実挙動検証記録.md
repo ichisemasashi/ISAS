@@ -67,13 +67,13 @@ DETAIL:  Array value must start with "{" or dimension information.
 | ID | 表題 | 判定 | ステータス |
 |---|---|---|---|
 | PG-M1 | **tenant_id ハッシュ副軸による「RLSプルーニング」は成立しない**。ハッシュプルーニングはプラン時定数を要求し、`current_setting()`／STABLE関数は該当しない。**§7 の S1 結果自身が証拠**（「July月の h0/h1 **のみ**scan」＝ハッシュ副軸は両方スキャンされている） | ❌ 誤り | 未対応 |
-| PG-M2 | **RLS 下では非 leakproof な述語が索引条件に使えなくなる**。PostGIS 3.4.3 の `&&`／`<->` は実測で非leakproof。`gist(tenant_id, geom)` は **tenant_id 側しか効かず、bboxの空間条件は `Filter` に落ちた** | ❌ **実測確認** | **設計処置待ち** |
+| PG-M2 | **RLS 下では非 leakproof な述語が索引条件に使えなくなる**。PostGIS 3.4.3 の `&&`／`<->` は実測で非leakproof。`gist(tenant_id, geom)` は **tenant_id 側しか効かず、bboxの空間条件は `Filter` に落ちた** | ✅ **処置・再測済み** | 数値bbox 4列をtenant付きB-treeで事前絞込後、厳密PostGIS判定。100万行・64接続でPASSし`0009`へ昇格 |
 | PG-M3 | **restrictive 形(e)（③共有＋上書き）を `USING` のみで書くと、一般テナント接続が共有行を作れる／自テナント行を共有行に昇格できる**（`WITH CHECK` 省略時は `USING` が書込検査に流用される）。**検査項目は USING と `TO` と本数しか見ておらず WITH CHECK を一切見ない**。スパイク S4 の restrictive は全て `USING` のみ | ⚠️ 条件付き | 未対応 |
 | PG-M4 | **検査4/5（qual に `current_user`／`app.user_id` が現れるか）は関数ラップで無効化される**。しかも**スパイクの実SQLがそのラップ形**（`allowed_tenants()` 等）。ADR-0001 自身が禁じた「文字列比較」でもある。**代替＝`pg_policy`→`pg_depend`→`pg_proc` を辿る**（実測で依存が記録されることを確認） | ⚠️ 判定不能 | 未対応 |
 | PG-M5 | **「RLSを迂回できる主体の全列挙」に superuser が入っていない**。`CREATE ROLE … SUPERUSER` は `rolbypassrls = false` のまま RLS を迂回する（実測）。**BYPASSRLS はロールメンバーシップで継承されない**（`SET ROLE` して初めて有効） | ⚠️ 不完全 | 未対応 |
 | PG-M6 | **`information_schema.role_table_grants` はカレントロール依存**で、CI が非特権ロールで走ると**静かに合格する**（実測：r_app からは r_other への付与が見えない）。**代替＝`pg_class.relacl` ＋ `aclexplode()`**。列単位権限・`pg_default_acl`・PUBLIC 付与・関数/シーケンス権限は別カタログ | ⚠️ 偽の合格 | 未対応 |
 | PG-M7 | **パーティション子があるため検査1／3／6は素朴に実装すると成立しない**。素朴走査＝毎月増える子が全部違反として出る（ノイズで検査が無効化）／`relispartition` 除外＝**PG-H6 の実際の穴が検査から消える**。検査3「1本以上」では **PG-H3/H4（所有者に permissive が無い）を検出できない** | ⚠️ 条件付き | 未対応 |
-| PG-M8 | **KNN + RLS の増幅がテナント数に比例する**。`ORDER BY geom <-> p LIMIT 20` は自テナントの20件が揃うまで索引を走り続ける。20テナントで276行をRLS除外。明示的な `tenant_id` 等値で複合GiSTを選択し、増幅を回避できた | ⚠️ **実測確認** | **設計処置・本番規模再測待ち** |
+| PG-M8 | **KNN + RLS の増幅がテナント数に比例する**。`ORDER BY geom <-> p LIMIT 20` は自テナントの20件が揃うまで索引を走り続ける。20テナントで276行をRLS除外。明示的な `tenant_id` 等値で複合GiSTを選択し、増幅を回避できた | ✅ **処置・再測済み** | tenant単位の明示等値＋複数tenantはapplication merge。100万行・64接続でp95 54.41ms、漏洩0 |
 | PG-M9 | **監査の append-only が BYPASSRLS の「範囲」を誤解している**。「audit_writer は INSERT のみだから権限集中を抑えられる」は不正確——**BYPASSRLS はそのロールに切り替わっている間、全テーブルの RLS を迂回する**（テーブル権限とは独立）。BYPASSRLS 所有の SECURITY DEFINER 関数は**関数内の全ての文が RLS を迂回**する | ⚠️ 理由付けが不正確 | 未対応 |
 
 ## Low（表現の不正確・バージョン注記）
