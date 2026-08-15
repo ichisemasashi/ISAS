@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "release": {
+    "version": "0.0.0-example",
+    "source_commit": "0000000000000000000000000000000000000000",
+    "created_at": "2026-08-15T00:00:00Z",
+    "status": "BLOCKED"
+  },
+  "deployment": {
+    "deployment_id": "replace-me",
+    "jurisdiction": "replace-me",
+    "shard_manifest_version": "replace-me",
+    "shard_manifest_digest": "sha256:replace-me"
+  },
+  "artifacts": [],
+  "gates": {
+    "unit_contract": { "status": "blocked", "evidence": "replace-me" },
+    "postgres_rls": { "status": "blocked", "evidence": "replace-me" },
+    "e2e_pwa": { "status": "blocked", "evidence": "replace-me" },
+    "accessibility": { "status": "blocked", "evidence": "replace-me" },
+    "security": { "status": "blocked", "evidence": "replace-me" },
+    "supply_chain": { "status": "blocked", "evidence": "replace-me" },
+    "performance_slo": { "status": "blocked", "evidence": "replace-me" },
+    "device_encryption": { "status": "blocked", "evidence": "replace-me" },
+    "user_acceptance": { "status": "blocked", "evidence": "replace-me" }
+  },
+  "quality": {
+    "no_data_count": 1,
+    "unresolved_high": 0,
+    "unresolved_medium": 0,
+    "error_budget_remaining_percent": 0,
+    "active_sev1": 0,
+    "active_sev2": 0
+  },
+  "dr": {
+    "status": "blocked",
+    "tested_at": "2026-01-01T00:00:00Z",
+    "rpo_minutes": 999,
+    "rto_minutes": 999,
+    "recovery_set_id": "replace-me",
+    "evidence": "replace-me"
+  },
+  "approvals": []
+}

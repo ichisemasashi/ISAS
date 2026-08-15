@@ -19,6 +19,7 @@
 | [docs/CSVデータ移行・出力ガイド.md](docs/CSVデータ移行・出力ガイド.md) | CSV取込の列・重複検査・確定手順と出力仕様 |
 | [docs/design/PostgreSQL実挙動検証記録.md](docs/design/PostgreSQL実挙動検証記録.md) | 設計文書の PostgreSQL に関する主張を実測で検証した記録（スパイクSQLと文書の差異を含む） |
 | [docs/design/UXデザインシステム.md](docs/design/UXデザインシステム.md) | Phase 1のUXデザインシステム、IA、主要導線、UT計画 |
+| [docs/operations/](docs/operations/README.md) | デプロイ、ロールバック、バックアップ、復旧、障害対応runbook |
 | [spikes/](spikes/README.md) | 技術検証（PostgreSQL＋PostGIS の PoC ハーネス） |
 | [apps/web/](apps/web/) | React＋TypeScript＋PWAによるPhase 1 MVPフロントエンド |
 | [apps/bff/](apps/bff/) | ADR-0009のOIDC／Cookie session／context／AuthContext境界を担うBFFコア |
