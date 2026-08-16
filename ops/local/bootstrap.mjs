@@ -12,6 +12,14 @@ const objectDir = resolve(root, ".local/objects");
 const envFile = resolve(secretDir, "runtime.env");
 
 function secret(bytes = 32) { return randomBytes(bytes).toString("base64url"); }
+function base32Secret(bytes = 20) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const value of randomBytes(bytes)) bits += value.toString(2).padStart(8, "0");
+  let encoded = "";
+  for (let offset = 0; offset < bits.length; offset += 5) encoded += alphabet[Number.parseInt(bits.slice(offset, offset + 5).padEnd(5, "0"), 2)];
+  return encoded;
+}
 function writeSecretFile(path, value) {
   writeFileSync(path, `${value}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
   chmodSync(path, 0o600);
@@ -28,6 +36,7 @@ if (!existsSync(envFile)) {
     KEYCLOAK_DB_PASSWORD: secret(),
     KEYCLOAK_CLIENT_SECRET: secret(),
     LOCAL_OPERATOR_PASSWORD: secret(18),
+    LOCAL_OPERATOR_TOTP_SECRET: base32Secret(),
     ISAS_DB_P0_PASSWORD: secret(),
     ISAS_DB_AUTH_P1_PASSWORD: secret(),
     ISAS_DB_P1_PASSWORD: secret(),
@@ -49,6 +58,7 @@ if (!existsSync(envFile)) {
 
 const existingEnvironment = readFileSync(envFile, "utf8");
 if (!/^LOCAL_OPERATOR_PASSWORD=/m.test(existingEnvironment)) appendFileSync(envFile, `LOCAL_OPERATOR_PASSWORD=${secret(18)}\n`, { mode: 0o600 });
+if (!/^LOCAL_OPERATOR_TOTP_SECRET=/m.test(existingEnvironment)) appendFileSync(envFile, `LOCAL_OPERATOR_TOTP_SECRET=${base32Secret()}\n`, { mode: 0o600 });
 
 const certificate = resolve(tlsDir, "isas.localhost.pem");
 const certificateKey = resolve(tlsDir, "isas.localhost-key.pem");

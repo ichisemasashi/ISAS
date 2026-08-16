@@ -10,6 +10,11 @@
   "accessTokenLifespan": 300,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 43200,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "otpPolicyLookAheadWindow": 1,
   "clients": [
     {
       "clientId": "isas-bff",
@@ -23,6 +28,15 @@
       "redirectUris": ["https://isas.localhost:8443/api/bff/callback"],
       "webOrigins": ["https://isas.localhost:8443"],
       "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "https://isas.localhost:8443/*" },
+      "protocolMappers": [
+        {
+          "name": "authentication-method-reference",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-amr-mapper",
+          "consentRequired": false,
+          "config": { "id.token.claim": "true", "access.token.claim": "true" }
+        }
+      ],
       "defaultClientScopes": ["openid", "profile", "email", "acr", "roles"]
     }
   ],
@@ -31,10 +45,20 @@
       "id": "10000000-0000-4000-8000-000000000001",
       "username": "local-operator",
       "enabled": true,
+      "email": "local-operator@invalid.example",
       "emailVerified": true,
       "firstName": "Local",
       "lastName": "Operator",
-      "credentials": [{ "type": "password", "value": "${env.LOCAL_OPERATOR_PASSWORD}", "temporary": false }]
+      "credentials": [
+        { "type": "password", "value": "${env.LOCAL_OPERATOR_PASSWORD}", "temporary": false },
+        {
+          "id": "30000000-0000-4000-8000-000000000001",
+          "type": "otp",
+          "userLabel": "ISAS local TOTP",
+          "secretData": "{\"value\":\"${env.LOCAL_OPERATOR_TOTP_SECRET}\"}",
+          "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\",\"secretEncoding\":\"BASE32\"}"
+        }
+      ]
     }
   ]
 }

@@ -32,7 +32,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
   const securityAdministration = createPostgresSecurityAdministration({ pool: pools.authP1 });
   const attachmentStorage = createLocalObjectStorage({ root: env.LOCAL_OBJECT_ROOT, crypto: objectCrypto, origin: config.origin });
   const mapStorage = createLocalMapStorage({ root: env.LOCAL_OBJECT_ROOT });
-  const identityProvider = createKeycloakOidc({ issuer: env.KEYCLOAK_ISSUER, clientId: required(env, "KEYCLOAK_CLIENT_ID"), clientSecret: required(env, "KEYCLOAK_CLIENT_SECRET"), crypto: sessionCrypto });
+  const identityProvider = createKeycloakOidc({ issuer: env.KEYCLOAK_ISSUER, clientId: required(env, "KEYCLOAK_CLIENT_ID"), clientSecret: required(env, "KEYCLOAK_CLIENT_SECRET"), crypto: sessionCrypto, logger });
   const revocations = createLocalRevocationService({ pool: pools.ops, outbox: postgres.revocationOutbox, stores, identityProvider, crypto: sessionCrypto, logger });
   let lastReadinessAt = 0;
   async function dependenciesCheck() {

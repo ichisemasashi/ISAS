@@ -92,7 +92,12 @@ function authenticationLevel(value) {
   throw new Error("identity provider returned an unsupported authentication level");
 }
 
-export function createBffHandler({ origin, redirectUri, stores, identityProvider, users, authorization, clock = () => Date.now() }) {
+function satisfiesAuthenticationLevel(actual, required) {
+  const rank = { "single-factor": 1, mfa: 2, "phishing-resistant": 3 };
+  return rank[authenticationLevel(actual)] >= rank[authenticationLevel(required)];
+}
+
+export function createBffHandler({ origin, redirectUri, stores, identityProvider, users, authorization, clock = () => Date.now(), logger = console }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
   if (new URL(redirectUri).origin !== origin) throw new Error("redirectUri must use the BFF origin");
 
@@ -131,6 +136,7 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
           returnTo: safeReturnTo(url.searchParams.get("return_to"), origin),
           expectedUserId: current?.session.user.id,
           previousSessionHash: current?.sessionHash,
+          requiredAuthenticationLevel: stepUp ? "mfa" : "single-factor",
           expiresAt: clock() + LOGIN_TTL_MS,
         });
         const location = await identityProvider.authorizationUrl({
@@ -150,6 +156,10 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
         if (!attempt || !code || attempt.expiresAt <= clock()) return json(400, { error: "authentication_failed" }, correlationId);
 
         const identity = await identityProvider.exchangeCode({ code, verifier: attempt.verifier, nonce: attempt.nonce, redirectUri });
+        if (!satisfiesAuthenticationLevel(identity.authenticationLevel, attempt.requiredAuthenticationLevel || "single-factor")) {
+          await identityProvider.revoke?.(identity.tokenSetCiphertext);
+          return json(403, { error: "mfa_required" }, correlationId);
+        }
         const user = await users.resolve(identity.issuer, identity.subject);
         if (!user || (attempt.expectedUserId && attempt.expectedUserId !== user.id)) {
           await identityProvider.revoke?.(identity.tokenSetCiphertext);
@@ -260,7 +270,8 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
       }
 
       return json(404, { error: "not_found" }, correlationId);
-    } catch {
+    } catch (error) {
+      logger.error?.("bff_request_failed", { path: url.pathname, message: error instanceof Error ? error.message : "unknown" });
       return json(500, { error: "request_failed" }, correlationId);
     }
   };

@@ -38,7 +38,7 @@ export function createPriorityDatabase(databasePools, { adapterFactory = createP
 }
 
 export function createIsasApplication({ origin, redirectUri, stores, identityProvider, users, authorization, securityAdministration, attachmentStorage, mapStorage, pool, databasePools, clock, logger }) {
-  const bffOptions = { origin, redirectUri, stores, identityProvider, users, authorization, ...(clock ? { clock } : {}) };
+  const bffOptions = { origin, redirectUri, stores, identityProvider, users, authorization, logger, ...(clock ? { clock } : {}) };
   const bffHandler = createBffHandler(bffOptions);
   const resolveContext = createContextResolver({ stores, authorization, ...(clock ? { clock } : {}) });
   const database = databasePools ? createPriorityDatabase(databasePools) : createPostgresAuthContextAdapter(pool);

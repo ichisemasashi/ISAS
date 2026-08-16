@@ -7,7 +7,7 @@ function sameOriginEndpoint(value, origin, label) {
   return url.toString();
 }
 
-export function createKeycloakOidc({ issuer, clientId, clientSecret, crypto, fetchImpl = fetch, clock = () => Date.now() }) {
+export function createKeycloakOidc({ issuer, clientId, clientSecret, crypto, fetchImpl = fetch, clock = () => Date.now(), logger = {} }) {
   if (!issuer || !clientId || !clientSecret || clientSecret.length < 32 || !crypto?.sealString || !crypto?.openString) throw new Error("Keycloak OIDC configuration is incomplete");
   const issuerUrl = new URL(issuer);
   if (issuerUrl.protocol !== "https:" || issuerUrl.origin !== "https://isas.localhost:8443") throw new Error("Keycloak issuer is outside the local allowlist");
@@ -65,6 +65,7 @@ export function createKeycloakOidc({ issuer, clientId, clientSecret, crypto, fet
       const factors = Array.isArray(claims.amr) ? claims.amr : [];
       const authenticationLevel = factors.some((value) => /webauthn|hwk|passkey/i.test(value)) ? "phishing-resistant"
         : factors.some((value) => /otp|mfa/i.test(value)) || Number(claims.acr || 0) >= 2 ? "mfa" : "single-factor";
+      logger.info?.("oidc_authentication_assurance", { authenticationLevel, amr: factors, acr: claims.acr ?? null });
       return {
         issuer,
         subject: claims.sub,
