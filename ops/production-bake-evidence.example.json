@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "status": "BLOCKED",
+  "environment": "production",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "artifact_set_digest": "sha256:replace-me",
+  "release_manifest_digest": "sha256:replace-me",
+  "started_at": "2026-01-01T00:00:00Z",
+  "completed_at": "2026-01-01T00:00:00Z",
+  "alarm_breaches": 1,
+  "no_data_count": 1,
+  "active_sev1": 0,
+  "active_sev2": 0,
+  "unresolved_high": 0,
+  "unresolved_medium": 0,
+  "error_budget_remaining_percent": 0,
+  "evidence": "replace-me",
+  "approvals": [],
+  "tag": {
+    "name": "replace-me",
+    "target_commit": "0000000000000000000000000000000000000000"
+  }
+}

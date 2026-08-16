@@ -13,18 +13,26 @@ const REQUIRED_OBSERVATIONS = { "5": [1800, 1000], "25": [7200, 1000], "100": [1
 const date = (value) => typeof value === "string" && Number.isFinite(Date.parse(value));
 const evidence = (value) => typeof value === "string" && URI.test(value) && !/replace-me|example|todo|unset|未設定/i.test(value);
 
-export function validateProductionRelease({ release, build, delivery, bake, releaseBytes, now = new Date() }) {
+export function validateProductionRelease({ release, build, delivery, bake, releaseBytes, now = new Date(), preFinalize = false }) {
   const errors = [...validateReleaseManifest(release, now), ...validateBuildPromotion(build, release)];
   const add = (message) => errors.push(message);
-  if (delivery?.stage !== "finalized") add("delivery.stage must be finalized");
+  const expectedDeliveryStage = preFinalize ? "100" : "finalized";
+  if (delivery?.stage !== expectedDeliveryStage) add(`delivery.stage must be ${expectedDeliveryStage}`);
   if (delivery?.source_commit !== release?.release?.source_commit) add("delivery source_commit must match release");
   if (delivery?.artifact_set_digest !== build?.artifact_set_digest) add("delivery artifact_set_digest must match build");
 
   const history = Array.isArray(delivery?.history) ? delivery.history : [];
   let previousIndex = -1;
-  for (const stage of ["prepared", "5", "25", "100", "finalized"]) {
+  let previousTime = -Infinity;
+  for (const stage of preFinalize ? ["prepared", "5", "25", "100"] : ["prepared", "5", "25", "100", "finalized"]) {
     const index = history.findIndex((entry, candidateIndex) => candidateIndex > previousIndex && entry?.stage === stage && date(entry?.entered_at));
-    if (index < 0) add(`delivery history must contain ordered ${stage} transition`); else previousIndex = index;
+    if (index < 0) add(`delivery history must contain ordered ${stage} transition`);
+    else {
+      const enteredAt = Date.parse(history[index].entered_at);
+      if (enteredAt < previousTime) add("delivery history timestamps must be monotonic");
+      previousIndex = index;
+      previousTime = enteredAt;
+    }
   }
   const observations = Array.isArray(delivery?.observations) ? delivery.observations : [];
   for (const [stage, [minimumSeconds, minimumTransactions]] of Object.entries(REQUIRED_OBSERVATIONS)) {
@@ -39,6 +47,10 @@ export function validateProductionRelease({ release, build, delivery, bake, rele
   const expectedManifestDigest = releaseBytes ? `sha256:${createHash("sha256").update(releaseBytes).digest("hex")}` : null;
   if (expectedManifestDigest && bake?.release_manifest_digest !== expectedManifestDigest) add("24-hour evidence release_manifest_digest does not match");
   if (!date(bake?.started_at) || !date(bake?.completed_at) || Date.parse(bake?.completed_at) - Date.parse(bake?.started_at) < 86400000 || Date.parse(bake?.completed_at) > now.getTime()) add("enhanced monitoring must cover at least 24 hours and end in the past");
+  const hundredTransition = history.find((entry) => entry?.stage === "100");
+  const finalizedTransition = history.find((entry) => entry?.stage === "finalized");
+  if (date(hundredTransition?.entered_at) && date(bake?.started_at) && Date.parse(bake.started_at) < Date.parse(hundredTransition.entered_at)) add("enhanced monitoring must start after the 100% transition");
+  if (!preFinalize && date(finalizedTransition?.entered_at) && date(bake?.completed_at) && Date.parse(finalizedTransition.entered_at) < Date.parse(bake.completed_at)) add("finalization must occur after enhanced monitoring completes");
   for (const key of ["alarm_breaches", "no_data_count", "active_sev1", "active_sev2", "unresolved_high", "unresolved_medium"]) if (bake?.[key] !== 0) add(`24-hour evidence ${key} must be 0`);
   if (typeof bake?.error_budget_remaining_percent !== "number" || bake.error_budget_remaining_percent < 25 || bake.error_budget_remaining_percent > 100) add("24-hour evidence error budget must be between 25 and 100");
   if (!evidence(bake?.evidence)) add("24-hour monitoring evidence URI is required");
@@ -59,8 +71,10 @@ export function validateProductionRelease({ release, build, delivery, bake, rele
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  const preFinalize = argv[0] === "--pre-finalize";
+  if (preFinalize) argv = argv.slice(1);
   if (argv.length !== 4) {
-    console.error("usage: node ops/check-production-release.mjs RELEASE BUILD DELIVERY_STATE BAKE_EVIDENCE");
+    console.error("usage: node ops/check-production-release.mjs [--pre-finalize] RELEASE BUILD DELIVERY_STATE BAKE_EVIDENCE");
     return 2;
   }
   try {
@@ -68,7 +82,7 @@ export async function main(argv = process.argv.slice(2)) {
     const [release, build, delivery, bake] = await Promise.all([
       JSON.parse(releaseBytes), ...argv.slice(1).map(async (path) => JSON.parse(await readFile(path, "utf8"))),
     ]);
-    const errors = validateProductionRelease({ release, build, delivery, bake, releaseBytes });
+    const errors = validateProductionRelease({ release, build, delivery, bake, releaseBytes, preFinalize });
     if (errors.length) {
       console.error(`production release: BLOCKED (${errors.length})`);
       errors.forEach((error) => console.error(`- ${error}`));

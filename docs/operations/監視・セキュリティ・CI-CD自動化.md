@@ -38,6 +38,7 @@ Repository Settings → Environmentsで次を設定する。値はOpenTofuの`de
 | `staging` | `AWS_DEPLOY_ROLE_ARN`、`AWS_ACCOUNT_ID`、`ECR_NAMESPACE=isas-jp-stg`、`ARTIFACT_SIGNING_KEY_ARN` |
 | `production-canary` | `AWS_DEPLOY_ROLE_ARN`（production OpenTofu output） |
 | `production` | `AWS_DEPLOY_ROLE_ARN`（production OpenTofu output） |
+| `production-release` | `AWS_DEPLOY_ROLE_ARN`（production OpenTofu output）。異なる二名をrequired reviewerにする |
 
 長寿命AWS access keyは登録しない。ActionsはGitHub OIDCで環境別roleを引き受ける。
 
@@ -84,12 +85,17 @@ workflowは3 imageをECRへpushし、各digestをTrivyで再検査し、SPDX JSO
 
 ### 4.2 release manifestを承認する
 
-`ops/release-manifest.example.json`をGit管理外で複製し、実証拠と二人の承認を記録する。`artifacts`のWeb/BFF/migration digestはbuild manifestと一致させ、platform imageもreleaseのsecurity evidenceへ含める。
+`ops/release-manifest.example.json`をGit管理外で複製してcandidateを作り、実証拠と二人の承認を記録する。各gateには同じ`source_commit`、31日以内の`collected_at`、S3／artifact／HTTPS証跡URIが必要である。`operational_acceptance`にはBackup・復旧・運用受入の統合証跡を指定する。`artifacts`のWeb/BFF/migration digestはbuild manifestと一致させ、platform imageもreleaseのsecurity evidenceへ含める。`READY`を手入力して完成扱いにせず、検査済みmanifestを新規ファイルとして生成する。
 
 ```bash
+node ops/assemble-release-manifest.mjs \
+  /secure/path/release-candidate.json \
+  /secure/path/release-manifest.json
 node ops/check-release-readiness.mjs /secure/path/release-manifest.json
 aws s3 cp /secure/path/release-manifest.json "s3://<staging-ops-evidence>/releases/v1.1.0.json" --region ap-northeast-1
 ```
+
+生成先が既に存在するとassemblerは上書きせず失敗する。承認後のcandidate差し替えや同名manifestの再利用をせず、新しいversionと二者承認を採る。
 
 ### 4.3 stagingへ同じdigestを配備する
 
@@ -129,15 +135,29 @@ gh workflow run promote-production.yml \
 
 ### 5.2 24時間後にstable slotへ確定する
 
-100%直後はcanary slotが全trafficを受け、stable slotは直前digestを保持する。24時間の強化監視後に次を実行する。
+100%直後はcanary slotが全trafficを受け、stable slotは直前digestを保持する。24時間、全blocking alarm、error budget、Sev-1/2、未解決High/Medium、signal欠落を監視する。`ops/production-bake-evidence.example.json`をGit管理外へ複製し、実測値、release manifestファイルのSHA-256、monitoring evidence URI、監視完了後のRelease ManagerとIndependent Verifierの承認証跡、予定tagと対象commitを記録する。推測値や手動で作ったゼロを登録しない。
+
+ローカルで最終gateを先に確認する。
+
+```bash
+node ops/check-production-release.mjs \
+  /secure/path/release-manifest.json \
+  /secure/path/build-manifest.json \
+  /secure/path/delivery-state.json \
+  /secure/path/production-bake-evidence.json
+```
+
+PASSした証跡だけをproduction evidence bucketへ保存し、次を実行する。
 
 ```bash
 gh workflow run finalize-production.yml \
   -f build_run_id=<build-run-id> \
-  -f production_deployment_manifest_s3_uri=s3://<production-ops-evidence>/releases/deployment-manifest.json
+  -f release_manifest_s3_uri=s3://<production-ops-evidence>/releases/v1.1.0.json \
+  -f production_deployment_manifest_s3_uri=s3://<production-ops-evidence>/releases/deployment-manifest.json \
+  -f production_bake_evidence_s3_uri=s3://<production-ops-evidence>/releases/v1.1.0-production-bake.json
 ```
 
-workflowは24時間経過と全blocking alarmの`OK`を再検査し、stable slotへ同じtask definitionを反映してtrafficをstable 100%／canary 0%へ戻す。24時間未満、state不一致、alarm異常では確定しない。
+workflowは24時間経過と全blocking alarmの`OK`を再検査し、stable slotへ同じtask definitionを反映してtrafficをstable 100%／canary 0%へ戻す。その後、release／build／delivery／24時間証跡のcommit・digest、`prepared→5→25→100→finalized`、各観測時間・transaction、最終二者承認を再検証する。すべてPASSした場合だけ`v<release.version>`のannotated tagを対象commitへ作りoriginへpushする。既存tag、24時間未満、signal欠落、承認者重複、manifest差し替えではtagを作らない。
 
 ## 6. dashboard・alertの操作
 

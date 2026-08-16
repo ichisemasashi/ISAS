@@ -23,7 +23,13 @@ function evidence() {
   };
   const releaseBytes = Buffer.from(`${JSON.stringify(release)}\n`);
   const build = { version: "1.1.0", source_commit: source, artifact_set_digest: digest, artifacts: [{ name: "bff", digest }] };
-  const history = ["prepared", "5", "25", "100", "finalized"].map((stage, index) => ({ stage, entered_at: `2026-08-15T0${index}:00:00Z` }));
+  const history = [
+    { stage: "prepared", entered_at: "2026-08-14T23:00:00Z" },
+    { stage: "5", entered_at: "2026-08-15T00:00:00Z" },
+    { stage: "25", entered_at: "2026-08-15T01:00:00Z" },
+    { stage: "100", entered_at: "2026-08-15T03:00:00Z" },
+    { stage: "finalized", entered_at: "2026-08-16T04:30:00Z" },
+  ];
   const observations = [
     { stage: "5", duration_seconds: 1800, eligible_transactions: 1000 },
     { stage: "25", duration_seconds: 7200, eligible_transactions: 1000 },
@@ -49,6 +55,14 @@ test("authorizes a tag only after ordered rollout and a 24-hour clean bake", () 
   assert.deepEqual(validateProductionRelease({ ...evidence(), now: new Date("2026-08-16T05:00:00Z") }), []);
 });
 
+test("permits the same evidence before finalization without authorizing finalized state", () => {
+  const value = evidence();
+  value.delivery.stage = "100";
+  value.delivery.history = value.delivery.history.filter(({ stage }) => stage !== "finalized");
+  assert.deepEqual(validateProductionRelease({ ...value, now: new Date("2026-08-16T05:00:00Z"), preFinalize: true }), []);
+  assert.ok(validateProductionRelease({ ...value, now: new Date("2026-08-16T05:00:00Z") }).some((error) => error.includes("must be finalized")));
+});
+
 test("blocks a skipped stage, short bake, and duplicate final approvers", () => {
   const value = evidence();
   value.delivery.history = value.delivery.history.filter(({ stage }) => stage !== "25");
@@ -65,4 +79,11 @@ test("blocks release manifest substitution", () => {
   value.releaseBytes = Buffer.from("different manifest");
   const errors = validateProductionRelease({ ...value, now: new Date("2026-08-16T05:00:00Z") });
   assert.ok(errors.some((error) => error.includes("release_manifest_digest")));
+});
+
+test("blocks non-monotonic delivery timestamps", () => {
+  const value = evidence();
+  value.delivery.history[2].entered_at = "2026-08-14T22:00:00Z";
+  const errors = validateProductionRelease({ ...value, now: new Date("2026-08-16T05:00:00Z") });
+  assert.ok(errors.some((error) => error.includes("timestamps must be monotonic")));
 });
