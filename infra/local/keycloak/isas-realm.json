@@ -1,0 +1,29 @@
+{
+  "realm": "isas-local",
+  "enabled": true,
+  "displayName": "ISAS local-integration",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 43200,
+  "clients": [
+    {
+      "clientId": "isas-bff",
+      "name": "ISAS BFF local-integration",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${env.KEYCLOAK_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["https://isas.localhost:8443/api/bff/callback"],
+      "webOrigins": ["https://isas.localhost:8443"],
+      "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "https://isas.localhost:8443/*" },
+      "defaultClientScopes": ["openid", "profile", "email", "acr", "roles"]
+    }
+  ]
+}

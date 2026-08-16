@@ -1,0 +1,31 @@
+{
+  admin off
+  auto_https off
+}
+
+https://isas.localhost:8443 {
+  tls /etc/isas/tls/isas.localhost.pem /etc/isas/tls/isas.localhost-key.pem
+  encode zstd gzip
+
+  @live path /health/live
+  respond @live "ok" 200
+
+  handle /oidc/* {
+    reverse_proxy keycloak:8080
+  }
+
+  handle /api/* {
+    reverse_proxy bff:3000
+  }
+
+  handle {
+    reverse_proxy web:8080
+  }
+
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy no-referrer
+  }
+}

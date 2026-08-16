@@ -1,0 +1,21 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+processors:
+  memory_limiter: { check_interval: 1s, limit_mib: 256 }
+  batch: {}
+  attributes/redact:
+    actions:
+      - { key: http.request.header.cookie, action: delete }
+      - { key: http.request.header.authorization, action: delete }
+exporters:
+  prometheus: { endpoint: 0.0.0.0:9464 }
+  otlp/jaeger: { endpoint: jaeger:4317, tls: { insecure: true } }
+  debug: { verbosity: basic }
+service:
+  telemetry: { logs: { level: warn } }
+  pipelines:
+    metrics: { receivers: [otlp], processors: [memory_limiter, attributes/redact, batch], exporters: [prometheus] }
+    traces: { receivers: [otlp], processors: [memory_limiter, attributes/redact, batch], exporters: [otlp/jaeger] }

@@ -1,0 +1,62 @@
+#!/usr/bin/env node
+import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const secretDir = resolve(root, ".local/secrets");
+const tlsDir = resolve(root, ".local/tls");
+const objectDir = resolve(root, ".local/objects");
+const envFile = resolve(secretDir, "runtime.env");
+
+function secret(bytes = 32) { return randomBytes(bytes).toString("base64url"); }
+function writeSecretFile(path, value) {
+  writeFileSync(path, `${value}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  chmodSync(path, 0o600);
+}
+
+for (const path of [secretDir, tlsDir, objectDir]) mkdirSync(path, { recursive: true, mode: 0o700 });
+chmodSync(secretDir, 0o700);
+
+if (!existsSync(envFile)) {
+  const values = {
+    POSTGRES_PASSWORD: secret(),
+    KEYCLOAK_ADMIN: "local-admin",
+    KEYCLOAK_ADMIN_PASSWORD: secret(),
+    KEYCLOAK_DB_PASSWORD: secret(),
+    KEYCLOAK_CLIENT_SECRET: secret(),
+    ISAS_DB_P0_PASSWORD: secret(),
+    ISAS_DB_AUTH_P1_PASSWORD: secret(),
+    ISAS_DB_P1_PASSWORD: secret(),
+    ISAS_DB_P2_PASSWORD: secret(),
+    ISAS_DB_OPS_PASSWORD: secret(),
+    ACTOR_PSEUDONYM_KEY: secret(48),
+    LOCAL_SESSION_KEY_FILE: "/run/isas/secrets/session.key",
+    LOCAL_OBJECT_KEY_FILE: "/run/isas/secrets/object.key",
+    LOCAL_OFFLINE_RECOVERY_KEY_FILE: "/run/isas/secrets/offline-recovery.key",
+    KEYCLOAK_ISSUER: "https://isas.localhost:8443/oidc/realms/isas-local",
+    KEYCLOAK_CLIENT_ID: "isas-bff"
+  };
+  writeFileSync(envFile, `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join("\n")}\n`, { mode: 0o600, flag: "wx" });
+  chmodSync(envFile, 0o600);
+  writeSecretFile(resolve(secretDir, "session.key"), secret());
+  writeSecretFile(resolve(secretDir, "object.key"), secret());
+  writeSecretFile(resolve(secretDir, "offline-recovery.key"), secret());
+}
+
+const certificate = resolve(tlsDir, "isas.localhost.pem");
+const certificateKey = resolve(tlsDir, "isas.localhost-key.pem");
+const rootCa = resolve(tlsDir, "rootCA.pem");
+if (!existsSync(certificate) || !existsSync(certificateKey) || !existsSync(rootCa)) {
+  let caRoot;
+  try { caRoot = execFileSync("mkcert", ["-CAROOT"], { encoding: "utf8" }).trim(); }
+  catch { throw new Error("mkcertが必要です。Homebrewで `brew install mkcert` と `mkcert -install` を実行してください"); }
+  execFileSync("mkcert", ["-cert-file", certificate, "-key-file", certificateKey, "isas.localhost", "127.0.0.1", "::1"], { stdio: "inherit" });
+  writeFileSync(rootCa, execFileSync("/bin/cat", [resolve(caRoot, "rootCA.pem")]), { mode: 0o600 });
+  chmodSync(certificateKey, 0o600);
+  chmodSync(rootCa, 0o600);
+}
+
+process.stdout.write("local bootstrap: ready (secret values are not displayed)\n");

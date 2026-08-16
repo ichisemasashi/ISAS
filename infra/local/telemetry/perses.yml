@@ -1,0 +1,8 @@
+database:
+  file:
+    folder: /perses
+security:
+  enable_auth: false
+frontend:
+  explorer:
+    enable: true
