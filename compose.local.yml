@@ -19,7 +19,14 @@ x-pgbouncer: &pgbouncer
     MAX_CLIENT_CONN: "80"
     SERVER_RESET_QUERY: DISCARD ALL
   read_only: true
-  tmpfs: [/tmp]
+  tmpfs:
+    - /tmp
+    - /etc/pgbouncer:uid=70,gid=70,mode=0750
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -d isas -U $$DB_USER"]
+    interval: 3s
+    timeout: 3s
+    retries: 30
 
 services:
   caddy:
@@ -79,11 +86,11 @@ services:
       ISAS_DB_P1_HOST: pgbouncer-p1
       ISAS_DB_P2_HOST: pgbouncer-p2
       ISAS_DB_OPS_HOST: pgbouncer-ops
-      ISAS_DB_P0_PORT: "6432"
-      ISAS_DB_AUTH_P1_PORT: "6432"
-      ISAS_DB_P1_PORT: "6432"
-      ISAS_DB_P2_PORT: "6432"
-      ISAS_DB_OPS_PORT: "6432"
+      ISAS_DB_P0_PORT: "5432"
+      ISAS_DB_AUTH_P1_PORT: "5432"
+      ISAS_DB_P1_PORT: "5432"
+      ISAS_DB_P2_PORT: "5432"
+      ISAS_DB_OPS_PORT: "5432"
       ISAS_DB_P0_NAME: isas
       ISAS_DB_AUTH_P1_NAME: isas
       ISAS_DB_P1_NAME: isas
@@ -107,6 +114,7 @@ services:
     tmpfs: [/tmp]
     cap_drop: [ALL]
     depends_on:
+      migration: { condition: service_completed_successfully }
       pgbouncer-p0: { condition: service_healthy }
       pgbouncer-auth-p1: { condition: service_healthy }
       pgbouncer-p1: { condition: service_healthy }
@@ -138,6 +146,25 @@ services:
       interval: 3s
       timeout: 3s
       retries: 40
+
+  migration:
+    <<: *common
+    restart: "no"
+    build:
+      context: .
+      dockerfile: infra/local/database/Dockerfile.migration
+    env_file: ./.local/secrets/runtime.env
+    environment:
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: isas
+      DB_USER: postgres
+      PGSSLMODE: disable
+    depends_on:
+      database: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
 
   pgbouncer-p0:
     <<: *pgbouncer
