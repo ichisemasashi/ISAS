@@ -25,5 +25,16 @@
       "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "https://isas.localhost:8443/*" },
       "defaultClientScopes": ["openid", "profile", "email", "acr", "roles"]
     }
+  ],
+  "users": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "username": "local-operator",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Local",
+      "lastName": "Operator",
+      "credentials": [{ "type": "password", "value": "${env.LOCAL_OPERATOR_PASSWORD}", "temporary": false }]
+    }
   ]
 }

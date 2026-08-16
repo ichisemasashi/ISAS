@@ -206,6 +206,12 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
     }
 
     try {
+      const localObject = url.pathname.match(/^\/api\/v1\/local-objects\/([A-Za-z0-9_-]{32,128})$/);
+      if (request.method === "GET" && localObject && typeof attachmentStorage.readSigned === "function") {
+        const object = await attachmentStorage.readSigned(localObject[1], trusted);
+        return new Response(object.bytes, { status: 200, headers: { "Content-Type": object.contentType, "Content-Disposition": "inline", "Cache-Control": "no-store", "X-Correlation-ID": requestId, "X-Content-Type-Options": "nosniff" } });
+      }
+
       if (request.method === "GET" && url.pathname === "/api/v1/security-admin") {
         if (!securityAdministration) return problem(503, "service_unavailable", "Security administration unavailable", requestId);
         return json(200, await securityAdministration.snapshot(trusted), requestId);

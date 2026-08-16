@@ -9,7 +9,7 @@ COPY apps/web/src ./src
 RUN pnpm build
 
 FROM nginx:1.29.1-alpine@sha256:42a516af16b852e33b7682d5ef8acbd5d13fe08fecadc7ed98605ba5e3b26ab8
-COPY apps/web/nginx.conf /etc/nginx/nginx.conf
+COPY --chmod=0444 apps/web/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build --chown=nginx:nginx /build/dist /usr/share/nginx/html
 USER nginx
 EXPOSE 8080

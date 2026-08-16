@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +27,7 @@ if (!existsSync(envFile)) {
     KEYCLOAK_ADMIN_PASSWORD: secret(),
     KEYCLOAK_DB_PASSWORD: secret(),
     KEYCLOAK_CLIENT_SECRET: secret(),
+    LOCAL_OPERATOR_PASSWORD: secret(18),
     ISAS_DB_P0_PASSWORD: secret(),
     ISAS_DB_AUTH_P1_PASSWORD: secret(),
     ISAS_DB_P1_PASSWORD: secret(),
@@ -45,6 +46,9 @@ if (!existsSync(envFile)) {
   writeSecretFile(resolve(secretDir, "object.key"), secret());
   writeSecretFile(resolve(secretDir, "offline-recovery.key"), secret());
 }
+
+const existingEnvironment = readFileSync(envFile, "utf8");
+if (!/^LOCAL_OPERATOR_PASSWORD=/m.test(existingEnvironment)) appendFileSync(envFile, `LOCAL_OPERATOR_PASSWORD=${secret(18)}\n`, { mode: 0o600 });
 
 const certificate = resolve(tlsDir, "isas.localhost.pem");
 const certificateKey = resolve(tlsDir, "isas.localhost-key.pem");

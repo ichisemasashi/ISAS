@@ -10,6 +10,10 @@ https://isas.localhost:8443 {
   @live path /health/live
   respond @live "ok" 200
 
+  handle /health/ready {
+    reverse_proxy bff:3000
+  }
+
   handle /oidc/* {
     reverse_proxy keycloak:8080
   }

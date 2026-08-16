@@ -36,7 +36,7 @@ function adapterModule(value) {
   return value;
 }
 
-function connection(env, prefix, environment) {
+function connection(env, prefix, deploymentProfile) {
   let value = env[`${prefix}_URL`];
   if (!value) {
     for (const suffix of ["HOST", "NAME", "USER", "PASSWORD"]) {
@@ -44,7 +44,7 @@ function connection(env, prefix, environment) {
     }
     const port = env[`${prefix}_PORT`] || "6432";
     if (!INTEGER.test(port) || Number(port) > 65535) throw new Error(`${prefix}_PORT is invalid`);
-    const sslmode = env[`${prefix}_SSLMODE`] || (environment === "production" ? "require" : "disable");
+    const sslmode = env[`${prefix}_SSLMODE`] || (deploymentProfile === "production" ? "require" : "disable");
     const assembled = new URL("postgresql://runtime.invalid");
     assembled.hostname = env[`${prefix}_HOST`];
     assembled.port = port;
@@ -67,7 +67,7 @@ function connection(env, prefix, environment) {
   if ([...url.searchParams.keys()].some((key) => !["sslmode", "application_name"].includes(key))) {
     throw new Error(`${prefix} contains an unsupported connection option`);
   }
-  if (environment === "production") {
+  if (deploymentProfile === "production") {
     if (["localhost", "127.0.0.1", "::1"].includes(url.hostname)) throw new Error(`${prefix} cannot use a loopback host in production`);
     if (url.searchParams.get("sslmode") !== "require" && url.searchParams.get("sslmode") !== "verify-full") {
       throw new Error(`${prefix} must set sslmode=require or verify-full in production`);
@@ -83,14 +83,26 @@ function connection(env, prefix, environment) {
 export function loadRuntimeConfig(env = process.env) {
   const environment = env.NODE_ENV || "production";
   if (!(["production", "test", "development"].includes(environment))) throw new Error("NODE_ENV is invalid");
+  const deploymentProfile = env.ISAS_ENV_PROFILE || (environment === "production" ? "production" : environment);
+  if (!(deploymentProfile === "production" || deploymentProfile === "local-integration" || deploymentProfile === "test" || deploymentProfile === "development")) {
+    throw new Error("ISAS_ENV_PROFILE is invalid");
+  }
   const origin = exactOrigin(env.ISAS_PUBLIC_ORIGIN);
   const redirectUri = env.ISAS_OIDC_REDIRECT_URI || `${origin}/api/bff/callback`;
   if (new URL(redirectUri).origin !== origin || new URL(redirectUri).pathname !== "/api/bff/callback") {
     throw new Error("ISAS_OIDC_REDIRECT_URI must be the BFF callback on ISAS_PUBLIC_ORIGIN");
   }
-  if (!/^isas-jp-(?:stg|prod)-[0-9]{2}$/.test(env.ISAS_DEPLOYMENT_ID || "")) throw new Error("ISAS_DEPLOYMENT_ID is invalid");
+  const deploymentPattern = deploymentProfile === "local-integration" ? /^isas-jp-local-[0-9]{2}$/ : /^isas-jp-(?:stg|prod)-[0-9]{2}$/;
+  if (!deploymentPattern.test(env.ISAS_DEPLOYMENT_ID || "")) throw new Error("ISAS_DEPLOYMENT_ID is invalid");
   if (env.ISAS_JURISDICTION !== "JP") throw new Error("ISAS_JURISDICTION must be JP");
-  if (environment === "production" && env.AWS_REGION !== "ap-northeast-1") throw new Error("AWS_REGION must be ap-northeast-1 in production");
+  if (deploymentProfile === "production" && env.AWS_REGION !== "ap-northeast-1") throw new Error("AWS_REGION must be ap-northeast-1 in production");
+  if (deploymentProfile === "local-integration") {
+    if (environment !== "production") throw new Error("local-integration must run the production-mode BFF build");
+    if (origin !== "https://isas.localhost:8443") throw new Error("local-integration origin must be https://isas.localhost:8443");
+    if (env.ISAS_RUNTIME_ADAPTER_MODULE !== "./runtime-adapters/local-integration.mjs") throw new Error("local-integration adapter module is fixed");
+    const forbidden = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_WEB_IDENTITY_TOKEN_FILE", "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"];
+    if (forbidden.some((name) => env[name])) throw new Error("AWS credential sources are forbidden in local-integration");
+  }
 
   const connectionTimeoutMs = integer(env, "ISAS_DB_CONNECTION_TIMEOUT_MS", 3000, { max: 30000 });
   const idleTimeoutMs = integer(env, "ISAS_DB_IDLE_TIMEOUT_MS", 30000, { max: 600000 });
@@ -98,7 +110,7 @@ export function loadRuntimeConfig(env = process.env) {
   for (const name of POOL_CLASSES) {
     const envPrefix = name === "authP1" ? "AUTH_P1" : name.toUpperCase();
     pools[name] = {
-      ...connection(env, POOL_PREFIX[name], environment),
+      ...connection(env, POOL_PREFIX[name], deploymentProfile),
       max: integer(env, `ISAS_DB_${envPrefix}_MAX`, DEFAULT_POOL_MAX[name], { max: 100 }),
       connectionTimeoutMs,
       idleTimeoutMs,
@@ -106,8 +118,12 @@ export function loadRuntimeConfig(env = process.env) {
     };
   }
   const endpointCount = new Set(POOL_CLASSES.map((name) => pools[name].endpointIdentity)).size;
-  if (environment === "production" && endpointCount !== POOL_CLASSES.length) {
-    throw new Error("Production priority pools must use five distinct PgBouncer endpoints");
+  if ((deploymentProfile === "production" || deploymentProfile === "local-integration") && endpointCount !== POOL_CLASSES.length) {
+    throw new Error("Priority pools must use five distinct PgBouncer endpoints");
+  }
+  if (deploymentProfile === "local-integration") {
+    const expectedHosts = new Set(["pgbouncer-p0", "pgbouncer-auth-p1", "pgbouncer-p1", "pgbouncer-p2", "pgbouncer-ops"]);
+    if (POOL_CLASSES.some((name) => !expectedHosts.has(new URL(pools[name].connectionString).hostname))) throw new Error("local-integration database host is outside the allowlist");
   }
   if (pools.p1.expectedRole !== "app_user") throw new Error("ISAS_DB_P1 must authenticate as app_user");
 
@@ -118,6 +134,7 @@ export function loadRuntimeConfig(env = process.env) {
 
   return Object.freeze({
     environment,
+    deploymentProfile,
     deploymentId: env.ISAS_DEPLOYMENT_ID,
     jurisdiction: "JP",
     region: env.AWS_REGION || "ap-northeast-1",
@@ -139,6 +156,7 @@ export function loadRuntimeConfig(env = process.env) {
 export function publicRuntimeConfig(config) {
   return Object.freeze({
     environment: config.environment,
+    deploymentProfile: config.deploymentProfile,
     deploymentId: config.deploymentId,
     jurisdiction: config.jurisdiction,
     region: config.region,

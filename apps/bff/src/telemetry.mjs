@@ -5,12 +5,15 @@ import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 
 const LOOPBACK_OTLP = /^http:\/\/(?:127\.0\.0\.1|localhost):4318$/;
+const LOCAL_COMPOSE_OTLP = /^http:\/\/otel-collector:4318$/;
 const SENSITIVE_ATTRIBUTES = ["http.url", "url.full", "url.query", "db.statement", "db.query.text"];
 
 export function telemetryConfig(env = process.env) {
   const disabled = env.OTEL_SDK_DISABLED === "true";
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4318";
-  if (!disabled && env.NODE_ENV === "production" && !LOOPBACK_OTLP.test(endpoint)) {
+  const localIntegration = env.ISAS_ENV_PROFILE === "local-integration";
+  const allowedCollector = LOOPBACK_OTLP.test(endpoint) || (localIntegration && LOCAL_COMPOSE_OTLP.test(endpoint));
+  if (!disabled && env.NODE_ENV === "production" && !allowedCollector) {
     throw new Error("Production telemetry must use the task-local ADOT collector");
   }
   if (!disabled && (!/^https?:\/\//.test(endpoint) || endpoint.includes("\0"))) throw new Error("OTLP endpoint is invalid");

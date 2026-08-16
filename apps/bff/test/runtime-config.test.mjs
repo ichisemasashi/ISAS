@@ -56,6 +56,22 @@ test("HTTP header timeout cannot exceed the application request timeout", () => 
   })), /cannot exceed/);
 });
 
+test("local-integration separates production build mode and blocks cloud credentials", () => {
+  const local = environment({
+    NODE_ENV: "production",
+    ISAS_ENV_PROFILE: "local-integration",
+    ISAS_PUBLIC_ORIGIN: "https://isas.localhost:8443",
+    ISAS_DEPLOYMENT_ID: "isas-jp-local-01",
+    ISAS_RUNTIME_ADAPTER_MODULE: "./runtime-adapters/local-integration.mjs",
+    AWS_REGION: ""
+  });
+  const hosts = { P0: "pgbouncer-p0", AUTH_P1: "pgbouncer-auth-p1", P1: "pgbouncer-p1", P2: "pgbouncer-p2", OPS: "pgbouncer-ops" };
+  for (const [name, host] of Object.entries(hosts)) local[`ISAS_DB_${name}_HOST`] = host;
+  assert.equal(loadRuntimeConfig(local).deploymentProfile, "local-integration");
+  assert.throws(() => loadRuntimeConfig({ ...local, AWS_PROFILE: "production" }), /credential sources are forbidden/);
+  assert.throws(() => loadRuntimeConfig({ ...local, ISAS_DB_P2_HOST: "prod.example" }), /outside the allowlist/);
+});
+
 test("structured logger removes secret fields and embedded database URLs", () => {
   let output = "";
   const stream = { write(chunk) { output += chunk; } };
