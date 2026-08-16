@@ -127,13 +127,14 @@ export function createHttpRuntime({ config, handler, readinessProbe, closeResour
   async function dispatch(message) {
     const path = new URL(message.url || "/", config.origin).pathname;
     if (path === "/health/live") {
-      return jsonResponse(200, { status: "live", deploymentId: config.deploymentId });
+      return jsonResponse(200, { status: "live", deploymentId: config.deploymentId, deploymentProfile: config.deploymentProfile });
     }
     if (path === "/health/ready" || path === "/healthz") {
       const isReady = await ready();
       return jsonResponse(isReady ? 200 : 503, {
         status: isReady ? "ready" : "not_ready",
         deploymentId: config.deploymentId,
+        deploymentProfile: config.deploymentProfile,
       }, isReady ? {} : { "Retry-After": "5" });
     }
     if (state !== "ready") return jsonResponse(503, { error: "service_draining" }, { Connection: "close", "Retry-After": "5" });

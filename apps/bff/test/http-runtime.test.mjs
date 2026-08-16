@@ -6,6 +6,7 @@ function config(overrides = {}) {
   return {
     origin: "https://staging.isas.example",
     deploymentId: "isas-jp-stg-01",
+    deploymentProfile: "staging",
     host: "127.0.0.1",
     port: 0,
     requestTimeoutMs: 50,
@@ -36,7 +37,9 @@ test("exposes live and dependency-aware ready endpoints", async () => {
     readinessProbe: async () => { if (!available) throw new Error("database unavailable"); },
   });
   assert.equal((await fetch(`${base}/health/live`)).status, 200);
-  assert.equal((await fetch(`${base}/health/ready`)).status, 200);
+  const ready = await fetch(`${base}/health/ready`);
+  assert.equal(ready.status, 200);
+  assert.equal((await ready.json()).deploymentProfile, "staging");
   available = false;
   await new Promise((resolve) => setTimeout(resolve, 3));
   const unavailable = await fetch(`${base}/healthz`);
