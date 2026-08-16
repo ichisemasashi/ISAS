@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "status": "NOT_RUN",
+  "evidence_class": "real_participant",
+  "round_id": "replace-me",
+  "environment": "staging_actual_device",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "completed_at": null,
+  "participant_count": 0,
+  "cohort_counts": {"worker": 0, "older_worker": 0, "technical_intern": 0},
+  "recruitment_evidence": {"worker": null, "older_worker": null, "technical_intern": null},
+  "consent_register": null,
+  "observation_records": null,
+  "device_matrix": null,
+  "analysis_inputs_digest": null,
+  "approvals": []
+}
