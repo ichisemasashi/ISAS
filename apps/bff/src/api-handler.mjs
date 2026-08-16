@@ -297,7 +297,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
 
       if (request.method === "GET" && url.pathname === "/api/v1/pesticide-bootstrap") {
         const fieldId = url.searchParams.get("fieldId");
-        const result = await database.transaction(trusted, (client, canonical) => repository.getPesticideBootstrap(client, canonical ? { ...trusted, authContext: canonical } : trusted, { fieldId }), { readOnly: true });
+        const result = await database.transaction(trusted, (client, canonical) => repository.getPesticideBootstrap(client, canonical ? { ...trusted, authContext: canonical } : trusted, { fieldId }), { readOnly: true, poolClass: "p0" });
         return json(200, result, requestId);
       }
 
@@ -311,12 +311,12 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         const idempotencyKey = request.headers.get("Idempotency-Key");
         if (!idempotencyKey || !/^[A-Za-z0-9._:-]{1,200}$/.test(idempotencyKey)) return problem(400, "invalid_request", "Invalid idempotency key", requestId);
         const input = await readMigrationJob(request);
-        const result = await database.transaction(trusted, (client, canonical) => repository.createMigrationJob(client, canonical ? { ...trusted, authContext: canonical } : trusted, { ...input, idempotencyKey }));
+        const result = await database.transaction(trusted, (client, canonical) => repository.createMigrationJob(client, canonical ? { ...trusted, authContext: canonical } : trusted, { ...input, idempotencyKey }), { poolClass: "p2" });
         return json(201, result, requestId);
       }
 
       if (request.method === "GET" && url.pathname === "/api/v1/migration-jobs") {
-        const result = await database.transaction(trusted, (client, canonical) => repository.listMigrationJobs(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        const result = await database.transaction(trusted, (client, canonical) => repository.listMigrationJobs(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true, poolClass: "p2" });
         return json(200, result, requestId);
       }
 
@@ -324,14 +324,14 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (request.method === "POST" && migrationCommitMatch) {
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
         const body = await readJsonObject(request);
-        const result = await database.transaction(trusted, (client, canonical) => repository.commitMigrationJob(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(migrationCommitMatch[1]), body));
+        const result = await database.transaction(trusted, (client, canonical) => repository.commitMigrationJob(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(migrationCommitMatch[1]), body), { poolClass: "p2" });
         return json(200, result, requestId);
       }
 
       const exportMatch = url.pathname.match(/^\/api\/v1\/exports\/(fields|journals|pesticide-records)\.csv$/);
       if (request.method === "GET" && exportMatch) {
         const search = exportSearch(url);
-        const result = await database.transaction(trusted, (client, canonical) => repository.exportCsv(client, canonical ? { ...trusted, authContext: canonical } : trusted, exportMatch[1], search), { readOnly: true });
+        const result = await database.transaction(trusted, (client, canonical) => repository.exportCsv(client, canonical ? { ...trusted, authContext: canonical } : trusted, exportMatch[1], search), { readOnly: true, poolClass: "p2" });
         return csvResponse(result, requestId);
       }
 
@@ -422,7 +422,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         const priority = url.searchParams.get("priority") || "normal";
         const cursor = url.searchParams.get("cursor");
         if (!scope || !["priority", "normal"].includes(priority)) return problem(400, "invalid_request", "Invalid pull request", requestId);
-        const result = await database.transaction(trusted, (client, canonical) => repository.pull(client, canonical ? { ...trusted, authContext: canonical } : trusted, { scope, priority, cursor }), { readOnly: true });
+        const result = await database.transaction(trusted, (client, canonical) => repository.pull(client, canonical ? { ...trusted, authContext: canonical } : trusted, { scope, priority, cursor }), { readOnly: true, poolClass: priority === "priority" ? "p0" : "p1" });
         return json(200, result, requestId);
       }
 

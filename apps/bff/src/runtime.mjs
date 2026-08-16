@@ -80,7 +80,7 @@ export async function startProductionRuntime({
       securityAdministration: adapters.securityAdministration,
       attachmentStorage: adapters.attachmentStorage,
       mapStorage: adapters.mapStorage,
-      pool: pools.p1,
+      databasePools: Object.fromEntries(["p0", "p1", "p2"].map((name) => [name, { pool: pools[name], expectedRole: config.pools[name].expectedRole }])),
       logger,
     });
     runtime = createHttpRuntime({

@@ -35,6 +35,7 @@ function fixture(capabilities = ["journal:write"], options = {}) {
     securityAdministration,
     logger: options.logger,
     ...memory,
+    ...(options.database ? { database: options.database } : {}),
   });
   const request = (path, init = {}) => new Request(`${ORIGIN}${path}`, { ...init, headers: { Cookie: "session=1", ...init.headers } });
   return { ...memory, handle, request };
@@ -61,6 +62,16 @@ function pushRequest(fx, bundles) {
 }
 
 describe("MVP REST and synchronization API", () => {
+  test("classifies priority pull as P0, ordinary pull as P1, and migration work as P2", async () => {
+    const poolClasses = [];
+    const database = { async transaction(_trusted, operation, options = {}) { poolClasses.push(options.poolClass || "p1"); return operation({}); } };
+    const fx = fixture(["migration:manage"], { database });
+    assert.equal((await fx.handle(fx.request("/api/v1/sync/pull?scope=field-group-1&priority=priority"))).status, 200);
+    assert.equal((await fx.handle(fx.request("/api/v1/sync/pull?scope=field-group-1&priority=normal"))).status, 200);
+    assert.equal((await fx.handle(fx.request("/api/v1/migration-jobs"))).status, 200);
+    assert.deepEqual(poolClasses, ["p0", "p1", "p2"]);
+  });
+
   test("protects security administration with recent MFA, CSRF, and the dedicated adapter", async () => {
     const fx = fixture(["security:manage"]);
     const snapshot = await fx.handle(fx.request("/api/v1/security-admin"));

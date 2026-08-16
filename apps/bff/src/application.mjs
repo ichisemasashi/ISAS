@@ -21,11 +21,27 @@ export function createApplicationRouter({ bffHandler, apiHandler }) {
   };
 }
 
-export function createIsasApplication({ origin, redirectUri, stores, identityProvider, users, authorization, securityAdministration, attachmentStorage, mapStorage, pool, clock, logger }) {
+export function createPriorityDatabase(databasePools, { adapterFactory = createPostgresAuthContextAdapter } = {}) {
+  if (!databasePools?.p0 || !databasePools?.p1 || !databasePools?.p2) throw new Error("p0, p1 and p2 database pools are required");
+  const adapters = Object.fromEntries(["p0", "p1", "p2"].map((poolClass) => {
+    const item = databasePools[poolClass];
+    if (!item?.pool || !item.expectedRole) throw new Error(`${poolClass} database pool and expected role are required`);
+    return [poolClass, adapterFactory(item.pool, { expectedRole: item.expectedRole })];
+  }));
+  return Object.freeze({
+    transaction(trusted, operation, options = {}) {
+      const poolClass = options.poolClass || "p1";
+      if (!Object.hasOwn(adapters, poolClass)) throw new Error(`unsupported application pool class: ${poolClass}`);
+      return adapters[poolClass].transaction(trusted, operation, options);
+    },
+  });
+}
+
+export function createIsasApplication({ origin, redirectUri, stores, identityProvider, users, authorization, securityAdministration, attachmentStorage, mapStorage, pool, databasePools, clock, logger }) {
   const bffOptions = { origin, redirectUri, stores, identityProvider, users, authorization, ...(clock ? { clock } : {}) };
   const bffHandler = createBffHandler(bffOptions);
   const resolveContext = createContextResolver({ stores, authorization, ...(clock ? { clock } : {}) });
-  const database = createPostgresAuthContextAdapter(pool);
+  const database = databasePools ? createPriorityDatabase(databasePools) : createPostgresAuthContextAdapter(pool);
   const repository = createPostgresMvpRepository();
   const apiHandler = createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, attachmentStorage, mapStorage, logger, ...(clock ? { clock } : {}) });
   return createApplicationRouter({ bffHandler, apiHandler });
