@@ -104,6 +104,7 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0009_field_bbox_prefilter.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0010_identity_runtime.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0011_security_administration.sql
 psql "$DATABASE_URL" -f apps/bff/migrations/0012_attachment_object_storage.sql
+psql "$DATABASE_URL" -f apps/bff/migrations/0013_phase2_data_model.sql
 ```
 
 旧データを移す場合は、法域内の隔離環境で`backfill/0000_auth_context_v1_stage.sql`を適用し、review済みCSVを`migration_stage`へ`\copy`してから`backfill/0000_auth_context_v1_backfill.sql`を実行する。backfillは全対象userのversionを進めて失効eventを作り、完了時にstaging schemaを削除する。`rollback/0000_auth_context_v1_rollback.sql`は業務表も永続userもない場合だけ成功し、それ以外はdropせず停止する。
@@ -128,6 +129,8 @@ PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
   -f apps/bff/migrations/0009_field_bbox_prefilter.sql \
   -f apps/bff/migrations/0010_identity_runtime.sql \
   -f apps/bff/migrations/0011_security_administration.sql \
+  -f apps/bff/migrations/0012_attachment_object_storage.sql \
+  -f apps/bff/migrations/0013_phase2_data_model.sql \
   -f apps/bff/migrations/verify/0000_auth_context_v1_verify.sql \
   -f apps/bff/migrations/verify/0001_mvp_sync_verify.sql \
   -f apps/bff/migrations/verify/0003_field_gis_verify.sql \
@@ -136,7 +139,9 @@ PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
   -f apps/bff/migrations/verify/0008_data_migration_verify.sql \
   -f apps/bff/migrations/verify/0009_field_bbox_prefilter_verify.sql \
   -f apps/bff/migrations/verify/0010_identity_runtime_verify.sql \
-  -f apps/bff/migrations/verify/0011_security_administration_verify.sql
+  -f apps/bff/migrations/verify/0011_security_administration_verify.sql \
+  -f apps/bff/migrations/verify/0012_attachment_object_storage_verify.sql \
+  -f apps/bff/migrations/verify/0013_phase2_data_model_verify.sql
 ```
 
 ## AWS production adapterの保証条件
@@ -167,4 +172,4 @@ npm test
 npm run check
 ```
 
-2026-08-16時点でBFF 84テスト、Web 44テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群＋identity runtimeがPASSしている。backfill、安全条件付きrollback、production owner／FORCE RLS／監査trigger／runtime関数検査も実DBで確認済みである。Cognito／DynamoDB／KMS／SQS adapter、法域内OpenTelemetry、CI scan／署名、段階配備は実装済みだが、実AWS stagingへのapplyと受入はcredential・DNS・課金承認待ちである。
+2026-08-16時点でBFF 86テスト、Web 44テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群＋identity runtimeがPASSしている。Phase 2 modelは`0013`に追加し、PG14代替環境で専用verify 10群、review mapping backfill、安全rollback／拒否条件がPASSした。`security_invoker`を含む正式なPG16再実行はDocker daemon復旧後のgateとする。Cognito／DynamoDB／KMS／SQS adapter、法域内OpenTelemetry、CI scan／署名、段階配備は実装済みだが、実AWS stagingへのapplyと受入はcredential・DNS・課金承認待ちである。
