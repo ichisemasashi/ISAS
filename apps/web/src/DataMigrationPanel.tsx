@@ -23,7 +23,7 @@ const DATASETS: Record<MigrationDataset, { label: string; fields: FieldDefinitio
 };
 
 const EXPORTS: Array<{ dataset: ExportDataset; label: string }> = [
-  { dataset: "journals", label: "作業日誌" }, { dataset: "fields", label: "圃場台帳" }, { dataset: "pesticide-records", label: "農薬記録" },
+  { dataset: "journals", label: "作業日誌" }, { dataset: "fields", label: "圃場台帳" }, { dataset: "pesticide-records", label: "農薬記録" }, { dataset: "jgap-inventory", label: "JGAP在庫・入出庫" },
 ];
 
 function firstRecord(csv: string): string[] {

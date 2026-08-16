@@ -9,7 +9,7 @@ function clone(value) {
   return structuredClone(value);
 }
 
-export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [], pesticideRelease = null, agrochemicals = [], stockEvents = [], planningTemplates = [], planningResources = [] } = {}) {
+export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [], pesticideRelease = null, agrochemicals = [], stockEvents = [], planningTemplates = [], planningResources = [], purchaseOrders = [], stockLots = [], inventoryCounts = [], inventoryPolicies = [] } = {}) {
   const receipts = new Map();
   const changes = [];
   const rejections = [];
@@ -25,6 +25,10 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   let currentPesticideRelease = clone(pesticideRelease);
   const chemicals = clone(agrochemicals);
   const inventoryEvents = clone(stockEvents);
+  const orders = clone(purchaseOrders);
+  const lots = clone(stockLots);
+  const countSessions = clone(inventoryCounts);
+  const policies = clone(inventoryPolicies);
   const pesticideUsages = [];
   const pesticideAlerts = [];
   const pesticideReviews = [];
@@ -226,7 +230,56 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
         chemicalId: chemical.id, name: chemical.name, registrationNumber: chemical.registrationNumber,
         quantity: inventoryEvents.filter((item) => item.chemicalId === chemical.id).reduce((sum, item) => sum + item.quantityDelta, 0), updatedAt: null,
       }));
-      return { balances, alerts: clone(stockAlerts.filter((item) => item.tenantId === trusted.authContext.tenantId && item.status === "pending")) };
+      const tenantId = trusted.authContext.tenantId;
+      return { balances: balances.map((item) => ({ ...item, policy: clone(policies.find((policy) => policy.tenantId === tenantId && policy.chemicalId === item.chemicalId && policy.status === "active") || null) })),
+        alerts: clone(stockAlerts.filter((item) => item.tenantId === tenantId && item.status === "pending")),
+        incoming: clone(orders.filter((item) => item.tenantId === tenantId && ["ordered", "partially_received"].includes(item.status)).flatMap((item) => item.lines.map((line) => ({ purchaseOrderId: item.id, orderNumber: item.orderNumber, supplierName: item.supplierName, chemicalId: line.chemicalId, incomingQuantity: line.orderedQuantity - (line.receivedQuantity || 0), unit: line.unit, expectedOn: line.expectedOn || item.expectedOn })))),
+        lots: clone(lots.filter((item) => item.tenantId === tenantId).map((lot) => ({ ...lot, quantity: inventoryEvents.filter((event) => event.tenantId === tenantId && event.lotId === lot.id).reduce((sum, event) => sum + event.quantityDelta, 0), inventoryValue: inventoryEvents.filter((event) => event.tenantId === tenantId && event.lotId === lot.id).reduce((sum, event) => sum + event.quantityDelta, 0) * lot.unitCost }))),
+        counts: clone(countSessions.filter((item) => item.tenantId === tenantId)),
+      };
+    },
+
+    async createPurchaseOrder(_client, trusted, input) {
+      if (!trusted.authContext.capabilities.includes("inventory:adjust") || !input?.orderNumber || !input?.supplierName || !Array.isArray(input.lines) || !input.lines.length) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const item = { id: `purchase-order-${orders.length + 1}`, tenantId: trusted.authContext.tenantId, orderNumber: input.orderNumber,
+        supplierName: input.supplierName, orderedOn: input.orderedOn, expectedOn: input.expectedOn || null, currency: input.currency || "JPY",
+        status: "ordered", version: 1, lines: input.lines.map((line, index) => ({ id: `purchase-line-${orders.length + 1}-${index + 1}`, ...clone(line), receivedQuantity: 0 })) };
+      orders.push(item); return clone(item);
+    },
+
+    async receiveInventoryLot(_client, trusted, input) {
+      if (!trusted.authContext.capabilities.includes("inventory:adjust")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const duplicate = inventoryEvents.find((event) => event.tenantId === trusted.authContext.tenantId && event.eventUuid === input.eventUuid);
+      if (duplicate) return clone({ lot: lots.find((item) => item.id === duplicate.lotId), purchaseOrderStatus: orders.find((item) => item.lines.some((line) => line.id === input.purchaseOrderLineId))?.status, duplicate: true });
+      const order = orders.find((item) => item.tenantId === trusted.authContext.tenantId && item.lines.some((line) => line.id === input.purchaseOrderLineId));
+      const line = order?.lines.find((candidate) => candidate.id === input.purchaseOrderLineId);
+      if (!line || !Number.isFinite(input.quantity) || input.quantity <= 0 || line.receivedQuantity + input.quantity > line.orderedQuantity) throw new TypeError("invalid receipt");
+      const lot = { id: input.lotId || `lot-${lots.length + 1}`, tenantId: trusted.authContext.tenantId, chemicalId: line.chemicalId,
+        purchaseOrderLineId: line.id, lotNumber: input.lotNumber, supplierName: order.supplierName, receivedOn: input.receivedOn,
+        expiresOn: input.expiresOn || null, initialQuantity: input.quantity, unit: line.unit, unitCost: line.unitCost, currency: order.currency, status: "available" };
+      lots.push(lot); line.receivedQuantity += input.quantity;
+      order.status = order.lines.every((item) => item.receivedQuantity === item.orderedQuantity) ? "received" : "partially_received";
+      inventoryEvents.push({ id: input.stockEventId || input.eventUuid, eventUuid: input.eventUuid, tenantId: trusted.authContext.tenantId,
+        chemicalId: line.chemicalId, lotId: lot.id, eventType: "receipt", quantityDelta: input.quantity, reason: input.reason || `発注 ${order.orderNumber} 入荷`, unitCost: line.unitCost, currency: order.currency });
+      return clone({ lot, purchaseOrderStatus: order.status });
+    },
+
+    async createInventoryCount(_client, trusted, input) {
+      if (!trusted.authContext.capabilities.includes("inventory:adjust") || !input?.locationName || !Array.isArray(input.lines) || !input.lines.length) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const item = { id: `count-${countSessions.length + 1}`, tenantId: trusted.authContext.tenantId, locationName: input.locationName,
+        countedAt: input.countedAt, status: "draft", version: 1, createdBy: trusted.userId, lines: input.lines.map((line, index) => ({ id: `count-line-${index + 1}`, ...clone(line), variance: line.countedQuantity - line.systemQuantity })) };
+      countSessions.push(item); return clone(item);
+    },
+
+    async postInventoryCount(_client, trusted, sessionId, input) {
+      if (!trusted.authContext.capabilities.includes("inventory:adjust")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const session = countSessions.find((item) => item.id === sessionId && item.tenantId === trusted.authContext.tenantId && item.status === "draft");
+      if (!session || session.version !== input.expectedVersion) throw new TypeError("invalid count posting");
+      if (session.createdBy === trusted.userId) throw Object.assign(new Error("independent count review required"), { code: "forbidden" });
+      for (const line of session.lines) if (line.variance !== 0) inventoryEvents.push({ id: `count-event-${inventoryEvents.length + 1}`, eventUuid: input.eventUuids?.[line.id],
+        tenantId: trusted.authContext.tenantId, chemicalId: line.chemicalId, lotId: line.lotId || null, eventType: "adjustment", quantityDelta: line.variance,
+        reason: line.reason || `棚卸し ${session.locationName}` });
+      session.status = "posted"; session.version += 1; return clone(session);
     },
 
     async createMigrationJob(_client, trusted, input) {
@@ -268,6 +321,12 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
       if (dataset === "fields") return { fileName: "fields.csv", headers: ["圃場コード", "圃場名", "作物"], rows: fields.filter((item) => !item.tenantId || item.tenantId === trusted.authContext.tenantId).map((item) => ({ "圃場コード": item.externalKey || item.id, "圃場名": item.properties.name, "作物": item.properties.cropName || "" })) };
       if (dataset === "journals") return { fileName: "work-journals.csv", headers: ["記録コード", "圃場名", "作業種別", "メモ"], rows: journals.filter((item) => item.tenantId === trusted.authContext.tenantId).map((item) => ({ "記録コード": item.externalKey || item.id, "圃場名": item.fieldName || "", "作業種別": item.body.workType || "", "メモ": item.body.memo || "" })) };
       if (dataset === "pesticide-records") return { fileName: "pesticide-records.csv", headers: ["散布日", "作物", "薬剤名"], rows: pesticideUsages.filter((item) => item.tenantId === trusted.authContext.tenantId).map((item) => ({ "散布日": item.appliedOn || "", "作物": item.cropName || "", "薬剤名": chemicals.find((chemical) => chemical.id === item.chemicalId)?.name || "" })) };
+      if (dataset === "jgap-inventory") return { fileName: "jgap-inventory.csv",
+        headers: ["受入・使用日時", "農薬名", "登録番号", "ロット番号", "有効期限", "仕入先", "区分", "数量", "理由", "記録者"],
+        rows: inventoryEvents.filter((item) => item.tenantId === trusted.authContext.tenantId).map((item) => {
+          const chemical = chemicals.find((candidate) => candidate.id === item.chemicalId) || {}; const lot = lots.find((candidate) => candidate.id === item.lotId) || {};
+          return { "受入・使用日時": item.eventTs || item.occurredAt || "", "農薬名": chemical.name || "", "登録番号": chemical.registrationNumber || "", "ロット番号": lot.lotNumber || "", "有効期限": lot.expiresOn || "", "仕入先": lot.supplierName || "", "区分": item.eventType, "数量": item.quantityDelta, "理由": item.reason, "記録者": item.actorUserId || "" };
+        }) };
       throw new TypeError("invalid export dataset");
     },
 
@@ -325,7 +384,9 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
           const delta = event.payload.eventType === "withdrawal" ? -Math.abs(event.payload.quantity)
             : event.payload.eventType === "receipt" ? Math.abs(event.payload.quantity) : event.payload.quantity;
           const stockEvent = { id: event.payload.aggregateId || event.eventUuid, eventUuid: event.eventUuid, tenantId,
-            chemicalId: event.payload.chemicalId, eventType: event.payload.eventType, quantityDelta: delta, reason: event.payload.reason };
+            chemicalId: event.payload.chemicalId, lotId: event.payload.lotId || null, eventType: event.payload.eventType,
+            quantityDelta: delta, reason: event.payload.reason, unitCost: event.payload.unitCost || null, currency: event.payload.currency || null,
+            jgapAttributes: clone(event.payload.jgapAttributes || {}) };
           inventoryEvents.push(stockEvent);
           const balance = inventoryEvents.filter((item) => item.tenantId === tenantId && item.chemicalId === event.payload.chemicalId).reduce((sum, item) => sum + item.quantityDelta, 0);
           if (balance < 0) {
@@ -409,5 +470,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, attachmentStorage, mapStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs } };
+  return { database, repository, attachmentStorage, mapStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs, orders, lots, countSessions, policies } };
 }

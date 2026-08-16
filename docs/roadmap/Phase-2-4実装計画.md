@@ -22,7 +22,7 @@
 |---|---|---|---|
 | 2.0 | 契約とmodel拡張 | **実装済み**：作期／作付計画、作業依存、resource、在庫policy、分析event、位置同意。正式`0013` migration、review付きbackfill、安全rollback、owner／FORCE RLS／監査、cycle／scope検査を追加。PG14代替検証とBFF N/N-1はPASS | Docker復旧後に同じ検証をPG16で再実行してgateを閉じ、Phase 2.1へ進む |
 | 2.1 | 作付計画＋高度ガント | **実装済み**：作物・品種・面積・収量目標の投影、日offset template展開、依存、追記進捗、resource競合、PCガント／mobile同一正本 | 機能testをPASS。PG16 migration再実行と500 task p95をrelease gateで確認 |
-| 2.2 | 在庫高度化＋traceability | 発注点、入荷予定、棚卸しsession、lot／期限、評価、F-43履歴、JGAP項目CSV | 追記型残高を維持し、並行棚卸し・負在庫・単位換算・RLS・帳票照合をPASS |
+| 2.2 | 在庫高度化＋traceability | **実装済み**：発注点、入荷予定、二人確認棚卸し、lot／期限／評価、追記型履歴、JGAP在庫CSV | 機能・RLS・migration testをPASS。並行棚卸し負荷、単位換算profile、実JGAP帳票照合をrelease gateで確認 |
 | 2.3 | 位置ログと作業実績 | 多言語同意、打刻連動ON/OFF、短期track、在圃時間、本人表示、管理者の最小権限 | 同意拒否でも全業務成立、休憩中0点、期限削除、失効／端末紛失、閲覧監査を実機PASS |
 | 2.4 | tenant内分析 | 計画対実績、収量、作業時間、資材、欠測／鮮度表示、CSV | DWHなしで動作、通貨混在禁止、projection再構築一致、dashboard p95をPASS |
 | 2.5 | UX／i18n batch L1〜L2 | 高度template、onboarding、横断検索、dashboard、共通／計画画面辞書化 | 翻訳scan対象をL1〜L2で0、英語native review、RTL疑似locale、実ユーザーUTをPASS |

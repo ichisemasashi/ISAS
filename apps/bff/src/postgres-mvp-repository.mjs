@@ -175,7 +175,11 @@ async function projectPesticideUsage(client, tenantId, trusted, event, eventTs, 
 async function projectStockEvent(client, tenantId, event, eventTs, uuid) {
   const payload = event.payload;
   if (!isUuid(payload.chemicalId) || !["receipt", "withdrawal", "adjustment"].includes(payload.eventType)
-    || !Number.isFinite(payload.quantity) || payload.quantity === 0 || typeof payload.reason !== "string" || !payload.reason.trim()) throw new TypeError("invalid stock event");
+    || !Number.isFinite(payload.quantity) || payload.quantity === 0 || typeof payload.reason !== "string" || !payload.reason.trim()
+    || (payload.lotId != null && !isUuid(payload.lotId))
+    || (payload.unitCost != null && (!Number.isFinite(payload.unitCost) || payload.unitCost < 0))
+    || (payload.currency != null && !/^[A-Z]{3}$/.test(payload.currency))
+    || (payload.jgapAttributes != null && (typeof payload.jgapAttributes !== "object" || Array.isArray(payload.jgapAttributes)))) throw new TypeError("invalid stock event");
   const stockEventId = isUuid(payload.aggregateId) ? payload.aggregateId : uuid();
   const delta = payload.eventType === "withdrawal" ? -Math.abs(payload.quantity)
     : payload.eventType === "receipt" ? Math.abs(payload.quantity) : payload.quantity;
@@ -183,10 +187,13 @@ async function projectStockEvent(client, tenantId, event, eventTs, uuid) {
   // This prevents two concurrent withdrawals from both missing the negative-balance transition.
   await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))", [tenantId, payload.chemicalId]);
   await client.query(`INSERT INTO app.stock_event
-    (tenant_id, stock_event_id, event_uuid, chemical_id, event_type, quantity_delta, reason, occurred_at, event_ts, actor_user_id)
-    VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8::timestamptz, $9::timestamptz, app.current_user_id())
+    (tenant_id, stock_event_id, event_uuid, chemical_id, lot_id, event_type, quantity_delta, reason,
+     unit_cost, currency, jgap_attributes, occurred_at, event_ts, actor_user_id)
+    VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $10::uuid, $5, $6, $7, $11, $12, $13::jsonb,
+      $8::timestamptz, $9::timestamptz, app.current_user_id())
     ON CONFLICT (tenant_id, event_uuid) DO NOTHING`,
-  [tenantId, stockEventId, event.eventUuid, payload.chemicalId, payload.eventType, delta, payload.reason, event.occurredAt, eventTs]);
+  [tenantId, stockEventId, event.eventUuid, payload.chemicalId, payload.eventType, delta, payload.reason, event.occurredAt, eventTs,
+    payload.lotId || null, payload.unitCost ?? null, payload.currency || null, JSON.stringify(payload.jgapAttributes || {})]);
   if (payload.eventType === "adjustment" && isUuid(payload.alertId)) {
     await client.query(`UPDATE app.stock_alert
       SET status = 'resolved', resolved_by = app.current_user_id(), resolved_at = clock_timestamp(), resolution_event_id = $3::uuid
@@ -841,14 +848,18 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
     },
 
     async listInventory(client) {
-      const [balances, alerts] = await Promise.all([
+      const [balances, alerts, incoming, lots, counts] = await Promise.all([
         client.query(`SELECT chemical.chemical_id::text AS chemical_id, chemical.name, chemical.registration_number,
-            coalesce(balance.quantity, 0) AS quantity, balance.updated_at
+            coalesce(balance.quantity, 0) AS quantity, balance.updated_at,
+            policy.reorder_point, policy.target_level, policy.safety_stock, policy.allow_negative
           FROM app.agrochemical chemical
           JOIN app.pesticide_master_release release
             ON release.tenant_id = chemical.tenant_id AND release.release_id = chemical.release_id
           LEFT JOIN app.stock_balance balance
             ON balance.tenant_id = chemical.tenant_id AND balance.chemical_id = chemical.chemical_id
+          LEFT JOIN app.inventory_policy policy
+            ON policy.tenant_id = chemical.tenant_id AND policy.chemical_id = chemical.chemical_id
+           AND policy.status = 'active' AND policy.deleted_at IS NULL
           WHERE chemical.tenant_id = app.current_tenant_id()
             AND release.release_id = (SELECT release_id FROM app.pesticide_master_release
               WHERE tenant_id = app.current_tenant_id() ORDER BY published_at DESC LIMIT 1)
@@ -860,11 +871,153 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
             ON chemical.tenant_id = alert.tenant_id AND chemical.chemical_id = alert.chemical_id
           WHERE alert.tenant_id = app.current_tenant_id() AND alert.status = 'pending'
           ORDER BY alert.created_at`),
+        client.query(`SELECT incoming.purchase_order_line_id::text, incoming.purchase_order_id::text,
+            incoming.order_number, incoming.supplier_name, incoming.chemical_id::text,
+            chemical.name, incoming.incoming_quantity, incoming.unit, incoming.unit_cost,
+            incoming.currency, incoming.expected_on
+          FROM app.incoming_stock incoming JOIN app.agrochemical chemical USING (tenant_id,chemical_id)
+          ORDER BY incoming.expected_on NULLS LAST,incoming.order_number`),
+        client.query(`SELECT balance.lot_id::text,balance.chemical_id::text,chemical.name,balance.lot_number,
+            balance.supplier_name,balance.received_on,balance.expires_on,balance.unit,balance.unit_cost,
+            balance.currency,balance.status,balance.quantity,balance.quantity*balance.unit_cost AS inventory_value,
+            balance.updated_at
+          FROM app.inventory_lot_balance balance JOIN app.agrochemical chemical USING (tenant_id,chemical_id)
+          ORDER BY balance.expires_on NULLS LAST,balance.lot_number`),
+        client.query(`SELECT session.count_session_id::text AS id,session.location_name,session.counted_at,
+            session.status,session.version,count(line.count_line_id)::integer AS line_count,
+            coalesce(sum(abs(line.variance)),0) AS absolute_variance
+          FROM app.inventory_count_session session LEFT JOIN app.inventory_count_line line USING (tenant_id,count_session_id)
+          GROUP BY session.tenant_id,session.count_session_id ORDER BY session.counted_at DESC LIMIT 50`),
       ]);
       return {
-        balances: balances.rows.map((row) => ({ chemicalId: row.chemical_id, name: row.name, registrationNumber: row.registration_number, quantity: Number(row.quantity), updatedAt: iso(row.updated_at) || null })),
+        balances: balances.rows.map((row) => ({ chemicalId: row.chemical_id, name: row.name, registrationNumber: row.registration_number, quantity: Number(row.quantity), updatedAt: iso(row.updated_at) || null,
+          policy: row.reorder_point == null ? null : { reorderPoint: Number(row.reorder_point), targetLevel: Number(row.target_level), safetyStock: Number(row.safety_stock), allowNegative: row.allow_negative },
+          belowReorderPoint: row.reorder_point != null && Number(row.quantity) <= Number(row.reorder_point) })),
         alerts: alerts.rows.map((row) => ({ id: row.id, chemicalId: row.chemical_id, name: row.name, negativeQuantity: Number(row.negative_quantity), triggeringEventId: row.triggering_event_id, status: row.status, createdAt: iso(row.created_at) })),
+        incoming: incoming.rows.map((row) => ({ purchaseOrderLineId: row.purchase_order_line_id, purchaseOrderId: row.purchase_order_id,
+          orderNumber: row.order_number, supplierName: row.supplier_name, chemicalId: row.chemical_id, name: row.name,
+          incomingQuantity: Number(row.incoming_quantity), unit: row.unit, unitCost: Number(row.unit_cost), currency: row.currency, expectedOn: row.expected_on })),
+        lots: lots.rows.map((row) => ({ id: row.lot_id, chemicalId: row.chemical_id, name: row.name, lotNumber: row.lot_number,
+          supplierName: row.supplier_name, receivedOn: row.received_on, expiresOn: row.expires_on || null, unit: row.unit,
+          unitCost: Number(row.unit_cost), currency: row.currency, status: row.status, quantity: Number(row.quantity),
+          inventoryValue: Number(row.inventory_value), updatedAt: iso(row.updated_at) || null })),
+        counts: counts.rows.map((row) => ({ id: row.id, locationName: row.location_name, countedAt: iso(row.counted_at),
+          status: row.status, version: Number(row.version), lineCount: Number(row.line_count), absoluteVariance: Number(row.absolute_variance) })),
       };
+    },
+
+    async createPurchaseOrder(client, trusted, input) {
+      await requireCapability(client, "inventory:adjust");
+      if (!input || typeof input.orderNumber !== "string" || !input.orderNumber.trim() || typeof input.supplierName !== "string" || !input.supplierName.trim()
+        || !/^\d{4}-\d{2}-\d{2}$/.test(input.orderedOn || "") || (input.expectedOn != null && !/^\d{4}-\d{2}-\d{2}$/.test(input.expectedOn))
+        || (input.currency != null && !/^[A-Z]{3}$/.test(input.currency)) || !Array.isArray(input.lines) || !input.lines.length || input.lines.length > 500) throw new TypeError("invalid purchase order");
+      for (const line of input.lines) if (!isUuid(line.chemicalId) || !Number.isFinite(line.orderedQuantity) || line.orderedQuantity <= 0
+        || !Number.isFinite(line.unitCost) || line.unitCost < 0 || typeof line.unit !== "string" || !line.unit.trim()) throw new TypeError("invalid purchase order line");
+      const orderId = uuid();
+      const order = await client.query(`INSERT INTO app.purchase_order
+        (tenant_id,purchase_order_id,order_number,supplier_name,ordered_on,expected_on,currency,note,created_by,updated_by)
+        VALUES(app.current_tenant_id(),$1::uuid,$2,$3,$4::date,$5::date,$6,$7,app.current_user_id(),app.current_user_id())
+        RETURNING purchase_order_id::text AS id,order_number,supplier_name,ordered_on,expected_on,status,currency,note,version`,
+      [orderId,input.orderNumber.trim(),input.supplierName.trim(),input.orderedOn,input.expectedOn || null,input.currency || "JPY",input.note || ""]);
+      const lines = [];
+      for (const line of input.lines) {
+        const result = await client.query(`INSERT INTO app.purchase_order_line
+          (tenant_id,purchase_order_line_id,purchase_order_id,chemical_id,ordered_quantity,unit,unit_cost,expected_on)
+          VALUES(app.current_tenant_id(),$1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7::date)
+          RETURNING purchase_order_line_id::text AS id,chemical_id::text,ordered_quantity,received_quantity,unit,unit_cost,expected_on,version`,
+        [uuid(),orderId,line.chemicalId,line.orderedQuantity,line.unit.trim(),line.unitCost,line.expectedOn || input.expectedOn || null]);
+        lines.push({ id: result.rows[0].id, chemicalId: result.rows[0].chemical_id, orderedQuantity: Number(result.rows[0].ordered_quantity),
+          receivedQuantity: 0, unit: result.rows[0].unit, unitCost: Number(result.rows[0].unit_cost), expectedOn: result.rows[0].expected_on, version: Number(result.rows[0].version) });
+      }
+      return { id: order.rows[0].id, orderNumber: order.rows[0].order_number, supplierName: order.rows[0].supplier_name,
+        orderedOn: order.rows[0].ordered_on, expectedOn: order.rows[0].expected_on, status: order.rows[0].status,
+        currency: order.rows[0].currency, note: order.rows[0].note, version: Number(order.rows[0].version), lines };
+    },
+
+    async receiveInventoryLot(client, trusted, input) {
+      await requireCapability(client, "inventory:adjust"); await requireCapability(client, "inventory:write");
+      if (!isUuid(input?.purchaseOrderLineId) || !isUuid(input?.eventUuid) || !isUuid(input?.lotId)
+        || typeof input.lotNumber !== "string" || !input.lotNumber.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(input.receivedOn || "")
+        || (input.expiresOn != null && !/^\d{4}-\d{2}-\d{2}$/.test(input.expiresOn)) || !Number.isFinite(input.quantity) || input.quantity <= 0) throw new TypeError("invalid inventory receipt");
+      const duplicate = await client.query(`SELECT event.stock_event_id::text,lot.lot_id::text,lot.chemical_id::text,lot.lot_number,
+          lot.expires_on,lot.unit,lot.unit_cost,lot.currency,purchase.status
+        FROM app.stock_event event JOIN app.stock_lot lot USING(tenant_id,lot_id)
+        LEFT JOIN app.purchase_order_line line USING(tenant_id,purchase_order_line_id)
+        LEFT JOIN app.purchase_order purchase USING(tenant_id,purchase_order_id)
+        WHERE event.tenant_id=app.current_tenant_id() AND event.event_uuid=$1::uuid`,[input.eventUuid]);
+      if(duplicate.rows[0]) return {lot:{id:duplicate.rows[0].lot_id,chemicalId:duplicate.rows[0].chemical_id,lotNumber:duplicate.rows[0].lot_number,
+        expiresOn:duplicate.rows[0].expires_on||null,unit:duplicate.rows[0].unit,unitCost:Number(duplicate.rows[0].unit_cost),currency:duplicate.rows[0].currency},
+        purchaseOrderStatus:duplicate.rows[0].status,stockEventId:duplicate.rows[0].stock_event_id,duplicate:true};
+      const locked = await client.query(`SELECT line.*,purchase.supplier_name,purchase.currency,purchase.order_number
+        FROM app.purchase_order_line line JOIN app.purchase_order purchase USING(tenant_id,purchase_order_id)
+        WHERE line.tenant_id=app.current_tenant_id() AND line.purchase_order_line_id=$1::uuid FOR UPDATE OF line,purchase`, [input.purchaseOrderLineId]);
+      const line = locked.rows[0];
+      if (!line || Number(line.received_quantity)+input.quantity>Number(line.ordered_quantity)) throw new TypeError("receipt exceeds order");
+      await client.query(`INSERT INTO app.stock_lot
+        (tenant_id,lot_id,chemical_id,purchase_order_line_id,lot_number,supplier_name,received_on,expires_on,
+         initial_quantity,unit,unit_cost,currency,created_by,updated_by)
+        VALUES(app.current_tenant_id(),$1::uuid,$2::uuid,$3::uuid,$4,$5,$6::date,$7::date,$8,$9,$10,$11,app.current_user_id(),app.current_user_id())`,
+      [input.lotId,line.chemical_id,input.purchaseOrderLineId,input.lotNumber.trim(),line.supplier_name,input.receivedOn,input.expiresOn || null,input.quantity,line.unit,line.unit_cost,line.currency]);
+      const stockEventId=uuid();
+      await client.query(`INSERT INTO app.stock_event
+        (tenant_id,stock_event_id,event_uuid,chemical_id,lot_id,event_type,quantity_delta,reason,unit_cost,currency,jgap_attributes,occurred_at,event_ts,actor_user_id)
+        VALUES(app.current_tenant_id(),$1::uuid,$2::uuid,$3::uuid,$4::uuid,'receipt',$5,$6,$7,$8,$9::jsonb,$10::timestamptz,statement_timestamp(),app.current_user_id())`,
+      [stockEventId,input.eventUuid,line.chemical_id,input.lotId,input.quantity,input.reason || `発注 ${line.order_number} 入荷`,line.unit_cost,line.currency,JSON.stringify(input.jgapAttributes || {}),`${input.receivedOn}T00:00:00Z`]);
+      await client.query(`UPDATE app.purchase_order_line SET received_quantity=received_quantity+$2,version=version+1
+        WHERE tenant_id=app.current_tenant_id() AND purchase_order_line_id=$1::uuid`,[input.purchaseOrderLineId,input.quantity]);
+      const status=await client.query(`UPDATE app.purchase_order purchase SET status=CASE WHEN NOT EXISTS(
+          SELECT 1 FROM app.purchase_order_line line WHERE line.tenant_id=purchase.tenant_id AND line.purchase_order_id=purchase.purchase_order_id AND line.received_quantity<line.ordered_quantity
+        ) THEN 'received' ELSE 'partially_received' END,version=version+1,updated_at=clock_timestamp(),updated_by=app.current_user_id()
+        WHERE tenant_id=app.current_tenant_id() AND purchase_order_id=$1::uuid RETURNING status`,[line.purchase_order_id]);
+      return { lot: { id: input.lotId, chemicalId: line.chemical_id, lotNumber: input.lotNumber, quantity: input.quantity,
+        expiresOn: input.expiresOn || null, unit: line.unit, unitCost: Number(line.unit_cost), currency: line.currency }, purchaseOrderStatus: status.rows[0].status, stockEventId };
+    },
+
+    async createInventoryCount(client, trusted, input) {
+      await requireCapability(client,"inventory:adjust");
+      if (!input || typeof input.locationName!=="string" || !input.locationName.trim() || !Number.isFinite(Date.parse(input.countedAt))
+        || !Array.isArray(input.lines) || !input.lines.length || input.lines.length>1000) throw new TypeError("invalid inventory count");
+      const sessionId=uuid();
+      await client.query(`INSERT INTO app.inventory_count_session
+        (tenant_id,count_session_id,location_name,counted_at,note,created_by)
+        VALUES(app.current_tenant_id(),$1::uuid,$2,$3::timestamptz,$4,app.current_user_id())`,[sessionId,input.locationName.trim(),input.countedAt,input.note||""]);
+      const lines=[];
+      for(const line of input.lines){
+        if(!isUuid(line.chemicalId)||(line.lotId!=null&&!isUuid(line.lotId))||!Number.isFinite(line.countedQuantity)||line.countedQuantity<0||typeof line.unit!=="string") throw new TypeError("invalid inventory count line");
+        const balance=await client.query(line.lotId
+          ? "SELECT quantity FROM app.inventory_lot_balance WHERE tenant_id=app.current_tenant_id() AND chemical_id=$1::uuid AND lot_id=$2::uuid"
+          : "SELECT quantity FROM app.stock_balance WHERE tenant_id=app.current_tenant_id() AND chemical_id=$1::uuid",[line.chemicalId,...(line.lotId?[line.lotId]:[])]);
+        const systemQuantity=Number(balance.rows[0]?.quantity||0); const lineId=uuid();
+        const inserted=await client.query(`INSERT INTO app.inventory_count_line
+          (tenant_id,count_session_id,count_line_id,chemical_id,lot_id,system_quantity,counted_quantity,unit,reason,jgap_attributes)
+          VALUES(app.current_tenant_id(),$1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,$8,$9::jsonb)
+          RETURNING count_line_id::text AS id,chemical_id::text,lot_id::text,system_quantity,counted_quantity,variance,unit,reason`,
+        [sessionId,lineId,line.chemicalId,line.lotId||null,systemQuantity,line.countedQuantity,line.unit,line.reason||"",JSON.stringify(line.jgapAttributes||{})]);
+        lines.push({...inserted.rows[0],systemQuantity:Number(inserted.rows[0].system_quantity),countedQuantity:Number(inserted.rows[0].counted_quantity),variance:Number(inserted.rows[0].variance)});
+      }
+      return {id:sessionId,locationName:input.locationName,countedAt:input.countedAt,status:"draft",version:1,lines};
+    },
+
+    async postInventoryCount(client, trusted, sessionId, input) {
+      await requireCapability(client,"inventory:adjust"); await requireCapability(client,"inventory:write");
+      if(!isUuid(sessionId)||!Number.isInteger(input?.expectedVersion)||typeof input?.eventUuids!=="object") throw new TypeError("invalid count posting");
+      const session=await client.query(`SELECT count_session_id::text,created_by::text,version,status,location_name,counted_at
+        FROM app.inventory_count_session WHERE tenant_id=app.current_tenant_id() AND count_session_id=$1::uuid FOR UPDATE`,[sessionId]);
+      if(!session.rows[0]||session.rows[0].status!=="draft") throw new TypeError("count not postable");
+      if(session.rows[0].created_by===trusted.userId) throw Object.assign(new Error("independent count review required"),{code:"forbidden"});
+      if(Number(session.rows[0].version)!==input.expectedVersion) throw Object.assign(new Error("version conflict"),{code:"version_conflict",currentVersion:Number(session.rows[0].version)});
+      const lines=await client.query(`SELECT * FROM app.inventory_count_line WHERE tenant_id=app.current_tenant_id() AND count_session_id=$1::uuid ORDER BY count_line_id`,[sessionId]);
+      for(const line of lines.rows){
+        if(Number(line.variance)===0) continue; const eventUuid=input.eventUuids[line.count_line_id]; if(!isUuid(eventUuid)) throw new TypeError("missing count event UUID");
+        await client.query(`INSERT INTO app.stock_event
+          (tenant_id,stock_event_id,event_uuid,chemical_id,lot_id,event_type,quantity_delta,reason,jgap_attributes,occurred_at,event_ts,actor_user_id)
+          VALUES(app.current_tenant_id(),$1::uuid,$2::uuid,$3::uuid,$4::uuid,'adjustment',$5,$6,$7::jsonb,$8::timestamptz,statement_timestamp(),app.current_user_id())`,
+        [uuid(),eventUuid,line.chemical_id,line.lot_id,Number(line.variance),line.reason||`棚卸し ${session.rows[0].location_name}`,JSON.stringify(line.jgap_attributes||{}),session.rows[0].counted_at]);
+      }
+      const posted=await client.query(`UPDATE app.inventory_count_session SET status='posted',reviewed_by=app.current_user_id(),posted_by=app.current_user_id(),
+        posted_at=clock_timestamp(),updated_at=clock_timestamp(),version=version+1 WHERE tenant_id=app.current_tenant_id() AND count_session_id=$1::uuid
+        RETURNING status,version,posted_at`,[sessionId]);
+      return {id:sessionId,status:posted.rows[0].status,version:Number(posted.rows[0].version),postedAt:iso(posted.rows[0].posted_at),adjustmentCount:lines.rows.filter((line)=>Number(line.variance)!==0).length};
     },
 
     async createMigrationJob(client, trusted, input) {
@@ -1057,6 +1210,21 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
             AND ($1::date IS NULL OR usage.applied_on >= $1::date)
             AND ($2::date IS NULL OR usage.applied_on <= $2::date)
           ORDER BY usage.applied_on, usage.usage_id LIMIT 100001`, [from, to]);
+      } else if (dataset === "jgap-inventory") {
+        headers = ["受入・使用日時","農薬名","登録番号","ロット番号","有効期限","仕入先","区分","数量","単位","単価","通貨","理由","記録者ID","JGAP属性"];
+        fileName = `jgap-inventory-${stamp}.csv`;
+        result = await client.query(`SELECT event.event_ts::text AS "受入・使用日時",chemical.name AS "農薬名",
+            chemical.registration_number AS "登録番号",coalesce(lot.lot_number,'') AS "ロット番号",
+            coalesce(lot.expires_on::text,'') AS "有効期限",coalesce(lot.supplier_name,'') AS "仕入先",
+            event.event_type AS "区分",event.quantity_delta::text AS "数量",coalesce(lot.unit,'') AS "単位",
+            coalesce(event.unit_cost,lot.unit_cost)::text AS "単価",coalesce(event.currency,lot.currency,'') AS "通貨",
+            event.reason AS "理由",event.actor_user_id::text AS "記録者ID",event.jgap_attributes::text AS "JGAP属性"
+          FROM app.stock_event event JOIN app.agrochemical chemical USING(tenant_id,chemical_id)
+          LEFT JOIN app.stock_lot lot USING(tenant_id,lot_id)
+          WHERE event.tenant_id=app.current_tenant_id()
+            AND ($1::date IS NULL OR event.event_ts::date >= $1::date)
+            AND ($2::date IS NULL OR event.event_ts::date <= $2::date)
+          ORDER BY event.event_ts,event.stock_event_id LIMIT 100001`,[from,to]);
       } else throw new TypeError("invalid export dataset");
       if (result.rows.length > 100000) throw new RangeError("export_too_large");
       return { fileName, headers, rows: result.rows };

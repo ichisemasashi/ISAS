@@ -65,6 +65,7 @@ function privilegedPath(method, path) {
     || path.startsWith("/api/v1/security-admin")
     || path.startsWith("/api/v1/exports/")
     || path.startsWith("/api/v1/pesticide-master/reviews")
+    || (method !== "GET" && path.startsWith("/api/v1/inventory/"))
     || (method === "POST" && /^\/api\/v1\/journals\/[^/]+\/review$/.test(path))
     || (method === "PATCH" && /^\/api\/v1\/work-instructions\/[^/]+\/assignment$/.test(path))
     || (method === "POST" && /^\/api\/v1\/sync\/conflicts\/[^/]+\/resolve$/.test(path));
@@ -319,6 +320,31 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         return json(200, result, requestId);
       }
 
+      if (request.method === "POST" && url.pathname === "/api/v1/inventory/purchase-orders") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(201, await database.transaction(trusted, (client, canonical) => repository.createPurchaseOrder(client, canonical ? { ...trusted, authContext: canonical } : trusted, body)), requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/inventory/receipts") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(201, await database.transaction(trusted, (client, canonical) => repository.receiveInventoryLot(client, canonical ? { ...trusted, authContext: canonical } : trusted, body)), requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/inventory/counts") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(201, await database.transaction(trusted, (client, canonical) => repository.createInventoryCount(client, canonical ? { ...trusted, authContext: canonical } : trusted, body)), requestId);
+      }
+
+      const countPosting = url.pathname.match(/^\/api\/v1\/inventory\/counts\/([^/]+)\/post$/);
+      if (request.method === "POST" && countPosting) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(200, await database.transaction(trusted, (client, canonical) => repository.postInventoryCount(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(countPosting[1]), body)), requestId);
+      }
+
       if (request.method === "POST" && url.pathname === "/api/v1/migration-jobs") {
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
         const idempotencyKey = request.headers.get("Idempotency-Key");
@@ -341,7 +367,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         return json(200, result, requestId);
       }
 
-      const exportMatch = url.pathname.match(/^\/api\/v1\/exports\/(fields|journals|pesticide-records)\.csv$/);
+      const exportMatch = url.pathname.match(/^\/api\/v1\/exports\/(fields|journals|pesticide-records|jgap-inventory)\.csv$/);
       if (request.method === "GET" && exportMatch) {
         const search = exportSearch(url);
         const result = await database.transaction(trusted, (client, canonical) => repository.exportCsv(client, canonical ? { ...trusted, authContext: canonical } : trusted, exportMatch[1], search), { readOnly: true, poolClass: "p2" });

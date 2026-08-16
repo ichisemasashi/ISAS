@@ -379,6 +379,36 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(fx.state.inventoryEvents.length, 2);
   });
 
+  test("tracks purchase arrivals, lots, inventory counts, valuation and JGAP CSV", async () => {
+    const chemicalId = "0198a6c0-0000-7000-8000-000000000502";
+    const fx = fixture(["inventory:write", "inventory:adjust", "export:read"], {
+      pesticideRelease: { id: "release-1", version: "v1", validUntil: "2027-08-21T00:00:00Z" },
+      agrochemicals: [{ id: chemicalId, tenantId: "tenant-1", name: "試験水和剤", registrationNumber: "農林1" }],
+      inventoryPolicies: [{ tenantId: "tenant-1", chemicalId, status: "active", reorderPoint: 5, targetLevel: 20, safetyStock: 3 }],
+    });
+    const order = await fx.handle(fx.request("/api/v1/inventory/purchase-orders", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ orderNumber: "PO-2027-001", supplierName: "農業資材店", orderedOn: "2027-01-01", expectedOn: "2027-01-10", currency: "JPY", lines: [{ chemicalId, orderedQuantity: 10, unit: "L", unitCost: 1200 }] }),
+    })).then((response) => response.json());
+    assert.equal(order.status, "ordered");
+    const receipt = await fx.handle(fx.request("/api/v1/inventory/receipts", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ purchaseOrderLineId: order.lines[0].id, lotId: "lot-1", eventUuid: "receipt-1", lotNumber: "LOT-A", receivedOn: "2027-01-09", expiresOn: "2028-01-09", quantity: 6, jgapAttributes: { storage: "施錠庫" } }),
+    })).then((response) => response.json());
+    assert.equal(receipt.purchaseOrderStatus, "partially_received");
+    const count = await fx.handle(fx.request("/api/v1/inventory/counts", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ locationName: "農薬庫", countedAt: "2027-01-31T00:00:00Z", lines: [{ chemicalId, lotId: "lot-1", systemQuantity: 6, countedQuantity: 5, unit: "L", reason: "月次棚卸し" }] }),
+    })).then((response) => response.json());
+    assert.equal(count.lines[0].variance, -1);
+    const inventory = await fx.handle(fx.request("/api/v1/inventory")).then((response) => response.json());
+    assert.equal(inventory.incoming[0].incomingQuantity, 4);
+    assert.equal(inventory.lots[0].inventoryValue, 7200);
+    const exported = await fx.handle(fx.request("/api/v1/exports/jgap-inventory.csv"));
+    assert.equal(exported.status, 200);
+    assert.match(await exported.text(), /LOT-A/);
+  });
+
   test("stages mapped CSV rows, reports duplicates and commits only a validated migration job", async () => {
     const fx = fixture(["migration:manage"]);
     const create = await fx.handle(fx.request("/api/v1/migration-jobs", {
