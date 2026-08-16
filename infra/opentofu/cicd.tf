@@ -22,7 +22,10 @@ data "aws_iam_policy_document" "github_deploy_assume" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:environment:${var.environment}"]
+      values = var.environment == "production" ? [
+        "repo:${var.github_repository}:environment:production",
+        "repo:${var.github_repository}:environment:production-canary",
+      ] : ["repo:${var.github_repository}:environment:staging"]
     }
   }
 }
@@ -85,12 +88,37 @@ data "aws_iam_policy_document" "github_deploy" {
       "ecr:DescribeImageScanFindings",
       "ecr:DescribeImages",
       "elasticloadbalancing:DescribeTargetHealth",
+      "elasticloadbalancing:DescribeListeners",
+      "elasticloadbalancing:DescribeRules",
       "logs:GetLogEvents",
       "logs:StartQuery",
       "logs:GetQueryResults",
       "rds:DescribeDBClusters",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid = "ProgressiveTrafficControl"
+    actions = [
+      "elasticloadbalancing:ModifyListener",
+      "elasticloadbalancing:ModifyRule",
+      "cloudwatch:GetMetricData",
+      "cloudwatch:PutMetricData",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ReleaseEvidence"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.ops_evidence.arn}/releases/*"]
+  }
+
+  statement {
+    sid       = "ReleaseEvidenceEncryption"
+    actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
+    resources = [aws_kms_key.backup.arn]
   }
 }
 

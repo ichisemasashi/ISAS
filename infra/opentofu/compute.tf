@@ -501,6 +501,54 @@ resource "aws_ecs_service" "bff" {
   depends_on = [aws_lb_listener_rule.bff, aws_ecs_service.pooler]
 }
 
+resource "aws_ecs_service" "web_canary" {
+  name                          = "web-canary"
+  cluster                       = aws_ecs_cluster.main.id
+  task_definition               = aws_ecs_task_definition.web.arn
+  desired_count                 = 1
+  launch_type                   = "FARGATE"
+  availability_zone_rebalancing = "ENABLED"
+
+  network_configuration {
+    subnets          = aws_subnet.app[*].id
+    security_groups  = [aws_security_group.web.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.web_canary.arn
+    container_name   = "web"
+    container_port   = 8080
+  }
+
+  lifecycle { ignore_changes = [task_definition] }
+  depends_on = [aws_lb_listener.https]
+}
+
+resource "aws_ecs_service" "bff_canary" {
+  name                          = "bff-canary"
+  cluster                       = aws_ecs_cluster.main.id
+  task_definition               = aws_ecs_task_definition.bff.arn
+  desired_count                 = 1
+  launch_type                   = "FARGATE"
+  availability_zone_rebalancing = "ENABLED"
+
+  network_configuration {
+    subnets          = aws_subnet.app[*].id
+    security_groups  = [aws_security_group.bff.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.bff_canary.arn
+    container_name   = "bff"
+    container_port   = 3000
+  }
+
+  lifecycle { ignore_changes = [task_definition] }
+  depends_on = [aws_lb_listener_rule.bff, aws_ecs_service.pooler]
+}
+
 resource "aws_ecs_service" "worker" {
   name                          = "worker"
   cluster                       = aws_ecs_cluster.main.id

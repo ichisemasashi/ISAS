@@ -1,0 +1,127 @@
+name: Promote staging build to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id: { description: Build release once workflow run ID, required: true, type: string }
+      release_manifest_s3_uri: { description: Ready release manifest in the staging evidence bucket, required: true, type: string }
+      staging_acceptance_s3_uri: { description: Current 25-check staging acceptance evidence S3 URI, required: true, type: string }
+      production_deployment_manifest_s3_uri: { description: OpenTofu production deployment manifest S3 URI, required: true, type: string }
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-progressive-delivery
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify staging evidence
+    runs-on: ubuntu-24.04
+    environment: staging
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: build-manifest-*
+          path: approved
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with: { role-to-assume: "${{ vars.AWS_DEPLOY_ROLE_ARN }}", aws-region: ap-northeast-1 }
+      - name: Fetch and verify approval evidence
+        run: |
+          case "${{ inputs.release_manifest_s3_uri }}" in s3://*/releases/*.json) ;; *) exit 64 ;; esac
+          case "${{ inputs.staging_acceptance_s3_uri }}" in s3://*/*.json) ;; *) exit 64 ;; esac
+          aws s3 cp "${{ inputs.release_manifest_s3_uri }}" approved/release-manifest.json --only-show-errors
+          aws s3 cp "${{ inputs.staging_acceptance_s3_uri }}" approved/staging-acceptance.json --only-show-errors
+          node ops/check-release-readiness.mjs approved/release-manifest.json
+          node ops/check-staging-acceptance.mjs approved/staging-acceptance.json
+          node ops/check-build-promotion.mjs approved/build-manifest.json approved/release-manifest.json approved/staging-acceptance.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: approved-production-release
+          path: approved/
+          if-no-files-found: error
+          retention-days: 30
+
+  canary-5:
+    name: Production 5 percent
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    environment: production-canary
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with: { name: approved-production-release, path: approved }
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with: { role-to-assume: "${{ vars.AWS_DEPLOY_ROLE_ARN }}", aws-region: ap-northeast-1 }
+      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+      - name: Reverify artifact signatures at the production boundary
+        run: |
+          jq -r '.artifacts[] | [.reference,.public_key,.public_key_sha256] | @tsv' approved/build-manifest.json | while IFS="$(printf '\t')" read -r image public_key expected_key_sha; do
+            actual_key_sha="sha256:$(sha256sum "approved/$public_key" | awk '{print $1}')"
+            test "$actual_key_sha" = "$expected_key_sha"
+            cosign verify --key "approved/$public_key" "$image"
+            cosign verify-attestation --key "approved/$public_key" --type spdxjson "$image"
+          done
+      - name: Prepare candidate and observe 5 percent
+        env: { AWS_REGION: ap-northeast-1, ISAS_ENVIRONMENT: production, MAX_MONITOR_SECONDS: "14400" }
+        run: |
+          aws s3 cp "${{ inputs.production_deployment_manifest_s3_uri }}" deployment-manifest.json --only-show-errors
+          jq -e '.environment == "production" and .jurisdiction == "JP"' deployment-manifest.json
+          evidence_bucket=$(jq -er '.storage.ops_evidence_bucket' deployment-manifest.json)
+          artifact_set=$(jq -er '.artifact_set_digest | sub("^sha256:";"")' approved/build-manifest.json)
+          export STATE_URI="s3://$evidence_bucket/releases/$artifact_set.delivery.json"
+          ops/progressive-deploy.sh prepare deployment-manifest.json approved/build-manifest.json
+          ops/progressive-deploy.sh 5 deployment-manifest.json approved/build-manifest.json
+          ops/monitor-progressive-delivery.sh 5 1800 1000 deployment-manifest.json approved/build-manifest.json
+
+  canary-25:
+    name: Production 25 percent
+    needs: canary-5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    environment: production-canary
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with: { name: approved-production-release, path: approved }
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with: { role-to-assume: "${{ vars.AWS_DEPLOY_ROLE_ARN }}", aws-region: ap-northeast-1 }
+      - name: Observe 25 percent for at least two hours
+        env: { AWS_REGION: ap-northeast-1, ISAS_ENVIRONMENT: production, MAX_MONITOR_SECONDS: "18000" }
+        run: |
+          aws s3 cp "${{ inputs.production_deployment_manifest_s3_uri }}" deployment-manifest.json --only-show-errors
+          evidence_bucket=$(jq -er '.storage.ops_evidence_bucket' deployment-manifest.json)
+          artifact_set=$(jq -er '.artifact_set_digest | sub("^sha256:";"")' approved/build-manifest.json)
+          export STATE_URI="s3://$evidence_bucket/releases/$artifact_set.delivery.json"
+          ops/progressive-deploy.sh 25 deployment-manifest.json approved/build-manifest.json
+          ops/monitor-progressive-delivery.sh 25 7200 1000 deployment-manifest.json approved/build-manifest.json
+
+  production-100:
+    name: Production 100 percent
+    needs: canary-25
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    environment: production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with: { name: approved-production-release, path: approved }
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with: { role-to-assume: "${{ vars.AWS_DEPLOY_ROLE_ARN }}", aws-region: ap-northeast-1 }
+      - name: Promote to 100 percent and keep rollback slot
+        env: { AWS_REGION: ap-northeast-1, ISAS_ENVIRONMENT: production, MAX_MONITOR_SECONDS: "14400" }
+        run: |
+          aws s3 cp "${{ inputs.production_deployment_manifest_s3_uri }}" deployment-manifest.json --only-show-errors
+          evidence_bucket=$(jq -er '.storage.ops_evidence_bucket' deployment-manifest.json)
+          artifact_set=$(jq -er '.artifact_set_digest | sub("^sha256:";"")' approved/build-manifest.json)
+          export STATE_URI="s3://$evidence_bucket/releases/$artifact_set.delivery.json"
+          ops/progressive-deploy.sh 100 deployment-manifest.json approved/build-manifest.json
+          ops/monitor-progressive-delivery.sh 100 1800 1000 deployment-manifest.json approved/build-manifest.json

@@ -77,19 +77,26 @@ jobs:
           IMAGE: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com/${{ vars.ECR_NAMESPACE }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
           KMS_KEY_ARN: ${{ vars.ARTIFACT_SIGNING_KEY_ARN }}
         run: |
+          cosign public-key --key "awskms:///$KMS_KEY_ARN" > "${{ matrix.component }}.cosign.pub"
           cosign sign --yes --key "awskms:///$KMS_KEY_ARN" "$IMAGE"
           cosign attest --yes --key "awskms:///$KMS_KEY_ARN" --type spdxjson --predicate "${{ matrix.component }}.spdx.json" "$IMAGE"
       - name: Record immutable artifact identity
         env:
           IMAGE_REPOSITORY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com/${{ vars.ECR_NAMESPACE }}/${{ matrix.component }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
-        run: node ops/build-artifact-manifest.mjs fragment "${{ matrix.component }}" "$IMAGE_REPOSITORY" "$IMAGE_DIGEST" "${{ matrix.component }}.spdx.json" "${{ matrix.component }}.fragment.json"
+          KMS_KEY_ARN: ${{ vars.ARTIFACT_SIGNING_KEY_ARN }}
+        run: |
+          key_sha256="sha256:$(sha256sum "${{ matrix.component }}.cosign.pub" | awk '{print $1}')"
+          node ops/build-artifact-manifest.mjs fragment "${{ matrix.component }}" "$IMAGE_REPOSITORY" "$IMAGE_DIGEST" \
+            "${{ matrix.component }}.spdx.json" "${{ matrix.component }}.cosign.pub" "$key_sha256" "$KMS_KEY_ARN" \
+            "${{ matrix.component }}.fragment.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-${{ matrix.component }}-${{ github.sha }}
           path: |
             ${{ matrix.component }}.fragment.json
             ${{ matrix.component }}.spdx.json
+            ${{ matrix.component }}.cosign.pub
           if-no-files-found: error
           retention-days: 90
 
@@ -112,5 +119,6 @@ jobs:
           path: |
             build-manifest.json
             release-fragments/*.spdx.json
+            release-fragments/*.cosign.pub
           if-no-files-found: error
           retention-days: 90

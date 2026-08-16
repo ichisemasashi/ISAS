@@ -8,7 +8,7 @@ const SHA = /^[0-9a-f]{40}$/;
 
 export function validateCiPolicy(files) {
   const errors = [];
-  const workflows = [files.ci, files.release];
+  const workflows = [files.ci, files.release, ...(files.additionalWorkflows || [])];
   for (const [index, workflow] of workflows.entries()) {
     if (/\bpull_request_target\s*:/.test(workflow)) errors.push(`workflow ${index} must not use pull_request_target`);
     for (const match of workflow.matchAll(/\buses:\s*[^\s@]+@([^\s#]+)/g)) {
@@ -26,6 +26,10 @@ export function validateCiPolicy(files) {
   for (const required of ["provenance: mode=max", "sbom: true", "cosign sign", "cosign attest", "environment: staging", "steps.build.outputs.digest"]) {
     if (!files.release.includes(required)) errors.push(`release build is missing supply-chain control: ${required}`);
   }
+  const delivery = (files.additionalWorkflows || []).join("\n");
+  for (const required of ["progressive-deploy.sh 5", "progressive-deploy.sh 25", "progressive-deploy.sh 100", "monitor-progressive-delivery.sh", "environment: production-canary", "environment: production", "FINALIZE_MIN_AGE_SECONDS: \"86400\""]) {
+    if (!delivery.includes(required)) errors.push(`delivery workflows are missing progressive control: ${required}`);
+  }
   for (const required of ["/apps/bff/migrations/", "/infra/", "/.github/"]) {
     if (!files.codeowners.includes(required)) errors.push(`CODEOWNERS is missing sensitive path: ${required}`);
   }
@@ -37,6 +41,11 @@ export async function loadPolicyFiles(root = ".") {
   return {
     ci: await read(".github/workflows/ci.yml"),
     release: await read(".github/workflows/build-release.yml"),
+    additionalWorkflows: await Promise.all([
+      read(".github/workflows/deploy-staging.yml"),
+      read(".github/workflows/promote-production.yml"),
+      read(".github/workflows/finalize-production.yml"),
+    ]),
     codeowners: await read(".github/CODEOWNERS"),
     dockerfiles: {
       bff: await read("apps/bff/Dockerfile"),

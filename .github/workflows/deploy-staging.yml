@@ -1,0 +1,73 @@
+name: Deploy build to staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id: { description: Build release once workflow run ID, required: true, type: string }
+      release_manifest_s3_uri: { description: Ready release manifest in the staging evidence bucket, required: true, type: string }
+      deployment_manifest_s3_uri: { description: OpenTofu staging deployment manifest S3 URI, required: true, type: string }
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Staging deployment
+    runs-on: ubuntu-24.04
+    environment: staging
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: build
+          pattern: build-manifest-*
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with: { role-to-assume: "${{ vars.AWS_DEPLOY_ROLE_ARN }}", aws-region: ap-northeast-1 }
+      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+      - name: Load reviewed manifests
+        run: |
+          case "${{ inputs.release_manifest_s3_uri }}" in s3://*/releases/*.json) ;; *) exit 64 ;; esac
+          case "${{ inputs.deployment_manifest_s3_uri }}" in s3://*/*.json) ;; *) exit 64 ;; esac
+          aws s3 cp "${{ inputs.release_manifest_s3_uri }}" release-manifest.json --only-show-errors
+          aws s3 cp "${{ inputs.deployment_manifest_s3_uri }}" deployment-manifest.json --only-show-errors
+      - name: Verify readiness and build identity
+        run: |
+          node ops/check-release-readiness.mjs release-manifest.json
+          node ops/check-build-promotion.mjs build/build-manifest.json release-manifest.json
+          jq -e '.environment == "staging" and .jurisdiction == "JP"' deployment-manifest.json
+      - name: Verify signatures and SBOM attestations
+        env: { KMS_KEY_ARN: "${{ vars.ARTIFACT_SIGNING_KEY_ARN }}" }
+        run: |
+          jq -r '.artifacts[] | [.reference,.public_key,.public_key_sha256] | @tsv' build/build-manifest.json | while IFS="$(printf '\t')" read -r image public_key expected_key_sha; do
+            actual_key_sha="sha256:$(sha256sum "build/$public_key" | awk '{print $1}')"
+            test "$actual_key_sha" = "$expected_key_sha"
+            cosign verify --key "awskms:///$KMS_KEY_ARN" "$image"
+            cosign verify-attestation --key "awskms:///$KMS_KEY_ARN" --type spdxjson "$image"
+          done
+      - name: Run forward migrations and deploy the same digests
+        env:
+          AWS_REGION: ap-northeast-1
+          ISAS_ENVIRONMENT: staging
+        run: |
+          evidence_bucket=$(jq -er '.storage.ops_evidence_bucket' deployment-manifest.json)
+          artifact_set=$(jq -er '.artifact_set_digest | sub("^sha256:";"")' build/build-manifest.json)
+          export STATE_URI="s3://$evidence_bucket/releases/$artifact_set.delivery.json"
+          ops/progressive-deploy.sh staging deployment-manifest.json build/build-manifest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: staging-deployment-${{ inputs.build_run_id }}
+          path: |
+            build/build-manifest.json
+            release-manifest.json
+            deployment-manifest.json
+          if-no-files-found: error
+          retention-days: 30

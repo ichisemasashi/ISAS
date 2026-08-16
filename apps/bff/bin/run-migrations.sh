@@ -17,9 +17,26 @@ psql_db() {
 first=/isas/migrations/0000_auth_context_v1.sql
 [ "$(basename "$first")" = "$MIGRATION_REQUIRED_FIRST" ] || { echo "required first migration mismatch" >&2; exit 78; }
 
+psql_db -c "CREATE TABLE IF NOT EXISTS public.isas_schema_migration (
+  version text PRIMARY KEY,
+  checksum_sha256 text NOT NULL CHECK (checksum_sha256 ~ '^[0-9a-f]{64}$'),
+  status text NOT NULL CHECK (status IN ('applying','applied')),
+  applied_at timestamptz
+); REVOKE ALL ON public.isas_schema_migration FROM PUBLIC;"
+
 for migration in /isas/migrations/[0-9][0-9][0-9][0-9]_*.sql; do
-  echo "applying $(basename "$migration")"
+  version=$(basename "$migration")
+  checksum=$(sha256sum "$migration" | awk '{print $1}')
+  recorded=$(psql_db -At -v migration_version="$version" -c "SELECT checksum_sha256 || ':' || status FROM public.isas_schema_migration WHERE version = :'migration_version'")
+  if [ "$recorded" = "$checksum:applied" ]; then
+    echo "already applied $version"
+    continue
+  fi
+  [ -z "$recorded" ] || { echo "migration $version has checksum drift or an incomplete prior attempt: $recorded" >&2; exit 78; }
+  psql_db -v migration_version="$version" -v migration_checksum="$checksum" -c "INSERT INTO public.isas_schema_migration(version,checksum_sha256,status) VALUES (:'migration_version',:'migration_checksum','applying')"
+  echo "applying $version"
   psql_db -f "$migration"
+  psql_db -v migration_version="$version" -v migration_checksum="$checksum" -c "UPDATE public.isas_schema_migration SET status='applied', applied_at=clock_timestamp() WHERE version=:'migration_version' AND checksum_sha256=:'migration_checksum' AND status='applying'"
 done
 
 actual_postgis=$(psql_db -Atc "SELECT extversion FROM pg_extension WHERE extname='postgis'")

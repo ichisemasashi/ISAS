@@ -1,0 +1,43 @@
+name: Finalize production after bake
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id: { description: Build release once workflow run ID, required: true, type: string }
+      production_deployment_manifest_s3_uri: { description: OpenTofu production deployment manifest S3 URI, required: true, type: string }
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-progressive-delivery
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    name: Finalize stable slot
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: build-manifest-*
+          path: build
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with: { role-to-assume: "${{ vars.AWS_DEPLOY_ROLE_ARN }}", aws-region: ap-northeast-1 }
+      - name: Finalize only after 24-hour 100-percent bake
+        env: { AWS_REGION: ap-northeast-1, ISAS_ENVIRONMENT: production, FINALIZE_MIN_AGE_SECONDS: "86400" }
+        run: |
+          aws s3 cp "${{ inputs.production_deployment_manifest_s3_uri }}" deployment-manifest.json --only-show-errors
+          jq -e '.environment == "production" and .jurisdiction == "JP"' deployment-manifest.json
+          evidence_bucket=$(jq -er '.storage.ops_evidence_bucket' deployment-manifest.json)
+          artifact_set=$(jq -er '.artifact_set_digest | sub("^sha256:";"")' build/build-manifest.json)
+          export STATE_URI="s3://$evidence_bucket/releases/$artifact_set.delivery.json"
+          POLL_SECONDS=1 MAX_MONITOR_SECONDS=60 ops/monitor-progressive-delivery.sh 100 0 0 deployment-manifest.json build/build-manifest.json
+          ops/progressive-deploy.sh finalize deployment-manifest.json build/build-manifest.json

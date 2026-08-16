@@ -25,8 +25,42 @@ resource "aws_lb_target_group" "web" {
   }
 }
 
+resource "aws_lb_target_group" "web_canary" {
+  name                 = "${local.name}-web-canary"
+  port                 = 8080
+  protocol             = "HTTP"
+  target_type          = "ip"
+  vpc_id               = aws_vpc.main.id
+  deregistration_delay = 30
+
+  health_check {
+    enabled             = true
+    path                = "/healthz"
+    matcher             = "200"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+}
+
 resource "aws_lb_target_group" "bff" {
   name                 = "${local.name}-bff"
+  port                 = 3000
+  protocol             = "HTTP"
+  target_type          = "ip"
+  vpc_id               = aws_vpc.main.id
+  deregistration_delay = 30
+
+  health_check {
+    enabled             = true
+    path                = "/health/ready"
+    matcher             = "200"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+}
+
+resource "aws_lb_target_group" "bff_canary" {
+  name                 = "${local.name}-bff-canary"
   port                 = 3000
   protocol             = "HTTP"
   target_type          = "ip"
@@ -66,9 +100,25 @@ resource "aws_lb_listener" "https" {
   certificate_arn   = var.certificate_arn
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.web.arn
+    type = "forward"
+
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.web.arn
+        weight = 100
+      }
+      target_group {
+        arn    = aws_lb_target_group.web_canary.arn
+        weight = 0
+      }
+      stickiness {
+        enabled  = false
+        duration = 1
+      }
+    }
   }
+
+  lifecycle { ignore_changes = [default_action] }
 }
 
 resource "aws_lb_listener_rule" "bff" {
@@ -76,9 +126,25 @@ resource "aws_lb_listener_rule" "bff" {
   priority     = 10
 
   action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.bff.arn
+    type = "forward"
+
+    forward {
+      target_group {
+        arn    = aws_lb_target_group.bff.arn
+        weight = 100
+      }
+      target_group {
+        arn    = aws_lb_target_group.bff_canary.arn
+        weight = 0
+      }
+      stickiness {
+        enabled  = false
+        duration = 1
+      }
+    }
   }
+
+  lifecycle { ignore_changes = [action] }
 
   condition {
     path_pattern {

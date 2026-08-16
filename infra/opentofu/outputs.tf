@@ -27,12 +27,36 @@ output "deployment_manifest" {
         worker = 3
       }
       services = {
-        web     = aws_ecs_service.web.name
-        bff     = aws_ecs_service.bff.name
-        worker  = aws_ecs_service.worker.name
-        poolers = { for key, service in aws_ecs_service.pooler : key => service.name }
+        web        = aws_ecs_service.web.name
+        bff        = aws_ecs_service.bff.name
+        web_canary = aws_ecs_service.web_canary.name
+        bff_canary = aws_ecs_service.bff_canary.name
+        worker     = aws_ecs_service.worker.name
+        poolers    = { for key, service in aws_ecs_service.pooler : key => service.name }
       }
       migration_task_definition = aws_ecs_task_definition.migration.arn
+      progressive_delivery = {
+        listener_arn             = aws_lb_listener.https.arn
+        bff_rule_arn             = aws_lb_listener_rule.bff.arn
+        web_stable_tg            = aws_lb_target_group.web.arn
+        web_canary_tg            = aws_lb_target_group.web_canary.arn
+        bff_stable_tg            = aws_lb_target_group.bff.arn
+        bff_canary_tg            = aws_lb_target_group.bff_canary.arn
+        fast_burn_alarm          = aws_cloudwatch_composite_alarm.availability_fast_burn.alarm_name
+        slow_burn_alarm          = aws_cloudwatch_composite_alarm.availability_slow_burn.alarm_name
+        load_balancer_arn_suffix = aws_lb.main.arn_suffix
+        blocking_alarms = concat(
+          [
+            aws_cloudwatch_composite_alarm.availability_fast_burn.alarm_name,
+            aws_cloudwatch_composite_alarm.availability_slow_burn.alarm_name,
+            aws_cloudwatch_metric_alarm.rds_wal_disk.alarm_name,
+            aws_cloudwatch_metric_alarm.sync_queue_age.alarm_name,
+          ],
+          [for alarm in aws_cloudwatch_metric_alarm.dlq : alarm.alarm_name],
+          [for alarm in aws_cloudwatch_metric_alarm.dlq_age : alarm.alarm_name],
+          [for alarm in aws_cloudwatch_metric_alarm.operational : alarm.alarm_name],
+        )
+      }
       migration_network = {
         subnet_ids        = aws_subnet.app[*].id
         security_group_id = aws_security_group.pooler.id
