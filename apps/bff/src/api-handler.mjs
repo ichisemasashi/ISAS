@@ -187,7 +187,7 @@ async function readAttachment(request) {
   };
 }
 
-export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, attachmentStorage, mapStorage, clock = () => Date.now(), logger = {} }) {
+export function createMvpApiHandler({ origin, resolveContext, database, repository, securityAdministration, testUserAdministration, attachmentStorage, mapStorage, clock = () => Date.now(), logger = {} }) {
   if (!origin || new URL(origin).origin !== origin) throw new Error("origin must be an exact URL origin");
   if (!attachmentStorage) throw new Error("attachmentStorage is required");
   if (!mapStorage) throw new Error("mapStorage is required");
@@ -214,7 +214,14 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
 
       if (request.method === "GET" && url.pathname === "/api/v1/security-admin") {
         if (!securityAdministration) return problem(503, "service_unavailable", "Security administration unavailable", requestId);
-        return json(200, await securityAdministration.snapshot(trusted), requestId);
+        return json(200, { ...await securityAdministration.snapshot(trusted), localTestUserRegistration: Boolean(testUserAdministration) }, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/security-admin/local-test-users") {
+        if (!testUserAdministration) return problem(404, "not_found", "Not found", requestId);
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(201, await testUserAdministration.provision(trusted, body), requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/api/v1/security-admin/change-requests") {
@@ -552,6 +559,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (error instanceof SyntaxError || error instanceof TypeError) return problem(400, "invalid_request", "Invalid request", requestId);
       if (error instanceof RangeError) return problem(413, "request_too_large", "Request too large", requestId);
       if (error?.code === "scope_revoked") return problem(409, "scope_revoked", "Scope was revoked", requestId, undefined, { purgeScope: error.scope });
+      if (error?.code === "username_conflict") return problem(409, "username_conflict", "Username already exists", requestId);
       if (error?.code === "invalid_range") return problem(416, "invalid_range", "A valid byte range is required", requestId);
       if (error?.code === "offline_tileset_changed") return problem(409, "offline_tileset_changed", "Offline tileset changed", requestId);
       if (error?.code === "forbidden") return problem(403, "forbidden", "Forbidden", requestId);

@@ -8,5 +8,7 @@ BEGIN
   IF missing <> 0 THEN RAISE EXCEPTION 'local_support owner mismatch: %', missing; END IF;
   IF has_schema_privilege('app_user','local_support','USAGE') OR has_schema_privilege('auth_role','local_support','USAGE') THEN RAISE EXCEPTION 'business/auth role can use local_support'; END IF;
   IF NOT has_function_privilege('ops_user','local_support.put_session(text,uuid,bigint,bytea,timestamp with time zone,timestamp with time zone)','EXECUTE') THEN RAISE EXCEPTION 'ops_user fixed function grant missing'; END IF;
+  IF NOT has_function_privilege('auth_role','app_private.local_register_test_user(uuid,uuid,uuid,text,text,text,uuid[])','EXECUTE') THEN RAISE EXCEPTION 'local web test-user function grant missing'; END IF;
+  IF (SELECT pg_get_userbyid(p.proowner) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app_private' AND p.proname='local_register_test_user') <> 'auth_context_owner' THEN RAISE EXCEPTION 'local web test-user function owner mismatch'; END IF;
 END $$;
 SELECT 'local support ownership and grants: PASS' AS result;

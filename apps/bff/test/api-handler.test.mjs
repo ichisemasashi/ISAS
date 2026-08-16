@@ -33,6 +33,7 @@ function fixture(capabilities = ["journal:write"], options = {}) {
     resolveContext: async (request) => request.headers.get("Cookie") ? trusted : null,
     clock: () => Date.parse("2026-08-14T00:05:00.000Z"),
     securityAdministration,
+    testUserAdministration: options.testUserAdministration,
     logger: options.logger,
     ...memory,
     ...(options.database ? { database: options.database } : {}),
@@ -92,6 +93,26 @@ describe("MVP REST and synchronization API", () => {
     }));
     assert.equal(reconciliation.status, 200);
     assert.deepEqual(await reconciliation.json(), { scanned: 0, taggedOrphans: 0, finalized: 0, quarantined: 0 });
+  });
+
+  test("exposes local web test-user registration only through its mounted adapter", async () => {
+    const calls = [];
+    const testUserAdministration = { async provision(trusted, input) { calls.push({ trusted, input }); return { userId: "33333333-3333-7333-8333-333333333333", username: input.username, temporaryPassword: "one-time", status: "ready_for_first_login" }; } };
+    const local = fixture(["security:manage"], { testUserAdministration });
+    const snapshot = await local.handle(local.request("/api/v1/security-admin"));
+    assert.equal((await snapshot.json()).localTestUserRegistration, true);
+    const created = await local.handle(local.request("/api/v1/security-admin/local-test-users", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ username: "web-worker", displayName: "Web作業者", roleKey: "worker" }),
+    }));
+    assert.equal(created.status, 201);
+    assert.equal((await created.json()).temporaryPassword, "one-time");
+    assert.equal(calls.length, 1);
+
+    const production = fixture(["security:manage"]);
+    assert.equal((await production.handle(production.request("/api/v1/security-admin/local-test-users", {
+      method: "POST", headers: { Origin: ORIGIN, "X-CSRF-Token": "csrf-1" }, body: "{}",
+    }))).status, 404);
   });
 
   test("requires a different pesticide master reviewer before publication", async () => {

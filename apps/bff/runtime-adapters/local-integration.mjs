@@ -3,6 +3,7 @@ import { createLocalEnvelopeCrypto, readLocalKey } from "../src/local-envelope-c
 import { createLocalMapStorage } from "../src/local-map-storage.mjs";
 import { createLocalObjectStorage } from "../src/local-object-storage.mjs";
 import { createLocalRevocationService } from "../src/local-revocation-service.mjs";
+import { createLocalTestUserAdministration } from "../src/local-test-user-administration.mjs";
 import { createPostgresIdentityAdapters } from "../src/postgres-identity.mjs";
 import { createPostgresLocalStores } from "../src/postgres-local-stores.mjs";
 import { createPostgresSecurityAdministration } from "../src/security-administration.mjs";
@@ -30,6 +31,8 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
   const stores = createPostgresLocalStores({ pool: pools.ops, crypto: sessionCrypto });
   const postgres = createPostgresIdentityAdapters({ pool: pools.authP1, jurisdiction: "jp", shardId: config.deploymentId, pseudonymKey: required(env, "ACTOR_PSEUDONYM_KEY") });
   const securityAdministration = createPostgresSecurityAdministration({ pool: pools.authP1 });
+  const testUserAdministration = createLocalTestUserAdministration({ pool: pools.authP1, issuer: env.KEYCLOAK_ISSUER,
+    adminUsername: required(env, "KEYCLOAK_ADMIN"), adminPassword: required(env, "KEYCLOAK_ADMIN_PASSWORD") });
   const attachmentStorage = createLocalObjectStorage({ root: env.LOCAL_OBJECT_ROOT, crypto: objectCrypto, origin: config.origin });
   const mapStorage = createLocalMapStorage({ root: env.LOCAL_OBJECT_ROOT });
   const identityProvider = createKeycloakOidc({ issuer: env.KEYCLOAK_ISSUER, clientId: required(env, "KEYCLOAK_CLIENT_ID"), clientSecret: required(env, "KEYCLOAK_CLIENT_SECRET"), crypto: sessionCrypto, logger });
@@ -45,6 +48,7 @@ export async function createRuntimeAdapters({ config, pools, logger, env = proce
     users: postgres.users,
     authorization: postgres.authorization,
     securityAdministration,
+    testUserAdministration,
     attachmentStorage,
     mapStorage,
     revocations,
