@@ -141,6 +141,7 @@ test("TLS ingress serves the web and APIs with one hardened origin", async ({ pa
   expect(response.headers()["strict-transport-security"]).toBe("max-age=31536000");
   expect(response.headers()["content-security-policy"]).toContain("default-src 'self'");
   expect(response.headers()["content-security-policy"]).toContain("connect-src 'self'");
+  expect(response.headers()["content-security-policy"]).toContain("https://cyberjapandata.gsi.go.jp");
   expect(response.headers()["cross-origin-resource-policy"]).toBe("same-origin");
   expect(response.headers()["access-control-allow-origin"]).toBeUndefined();
 

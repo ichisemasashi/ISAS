@@ -45,4 +45,10 @@ test("registered non-administrator signs in with email and password only and rec
   expect(result.context.capabilities).not.toContain("instruction:manage");
   expect(result.fields).toMatchObject({ status: 200, body: { features: [expect.objectContaining({ properties: expect.objectContaining({ name: "ローカル実証圃場" }) })] } });
   expect(result.instructions).toMatchObject({ status: 200, body: { instructions: [expect.objectContaining({ title: "実証圃場の生育確認" })] } });
+
+  const tile = page.waitForResponse((response) => response.url().startsWith("https://cyberjapandata.gsi.go.jp/xyz/std/") && response.ok());
+  await page.locator(".side-nav").getByRole("button", { name: "圃場" }).click();
+  await expect(page.locator(".field-map canvas")).toBeVisible();
+  await expect(page.getByText("ローカル実証圃場").first()).toBeVisible();
+  expect((await tile).headers()["content-type"]).toContain("image/png");
 });
