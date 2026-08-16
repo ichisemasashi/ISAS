@@ -13,11 +13,16 @@ const REQUIRED_GATES = [
   "supply_chain",
   "performance_slo",
   "device_encryption",
+  "staging_acceptance",
+  "data_migration",
   "user_acceptance",
+  "operational_acceptance",
 ];
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
+const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const EVIDENCE_URI = /^(?:artifact|https|s3):\/\/.+/;
 
 function nonPlaceholder(value) {
   return typeof value === "string" && value.trim() !== "" && !/replace-me|example/i.test(value);
@@ -25,6 +30,16 @@ function nonPlaceholder(value) {
 
 function validDate(value) {
   return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function evidenceUri(value) {
+  return nonPlaceholder(value) && EVIDENCE_URI.test(value);
+}
+
+function recentDate(value, now, days) {
+  if (!validDate(value)) return false;
+  const age = now.getTime() - Date.parse(value);
+  return age >= 0 && age <= days * 24 * 60 * 60 * 1000;
 }
 
 export function validateReleaseManifest(manifest, now = new Date()) {
@@ -35,7 +50,7 @@ export function validateReleaseManifest(manifest, now = new Date()) {
   if (manifest.schema_version !== 1) add("schema_version must be 1");
 
   const release = manifest.release ?? {};
-  if (!nonPlaceholder(release.version)) add("release.version is required and must not be a placeholder");
+  if (!VERSION.test(release.version ?? "")) add("release.version must be a semantic version without a v prefix");
   if (!COMMIT.test(release.source_commit ?? "") || /^0+$/.test(release.source_commit ?? "")) add("release.source_commit must be a non-zero 40-character lowercase hex commit");
   if (!validDate(release.created_at)) add("release.created_at must be an ISO date");
   if (release.status !== "READY") add("release.status must be READY");
@@ -58,14 +73,16 @@ export function validateReleaseManifest(manifest, now = new Date()) {
       if (!DIGEST.test(artifact?.digest ?? "")) add(`${prefix}.digest must be sha256:<64 lowercase hex>`);
       if (artifact?.signature_verified !== true) add(`${prefix}.signature_verified must be true`);
       if (artifact?.provenance_verified !== true) add(`${prefix}.provenance_verified must be true`);
-      if (!nonPlaceholder(artifact?.sbom)) add(`${prefix}.sbom is required`);
+      if (!evidenceUri(artifact?.sbom)) add(`${prefix}.sbom must be an evidence URI`);
     });
   }
 
   const gates = manifest.gates ?? {};
   for (const gate of REQUIRED_GATES) {
     if (gates[gate]?.status !== "pass") add(`gates.${gate}.status must be pass`);
-    if (!nonPlaceholder(gates[gate]?.evidence)) add(`gates.${gate}.evidence is required and must not be a placeholder`);
+    if (!evidenceUri(gates[gate]?.evidence)) add(`gates.${gate}.evidence must be an evidence URI`);
+    if (gates[gate]?.source_commit !== release.source_commit) add(`gates.${gate}.source_commit must match release.source_commit`);
+    if (!recentDate(gates[gate]?.collected_at, now, 31)) add(`gates.${gate}.collected_at must be within 31 days and not in the future`);
   }
 
   const quality = manifest.quality ?? {};
@@ -86,7 +103,7 @@ export function validateReleaseManifest(manifest, now = new Date()) {
   if (typeof dr.rpo_minutes !== "number" || dr.rpo_minutes < 0 || dr.rpo_minutes > 15) add("dr.rpo_minutes must be between 0 and 15");
   if (typeof dr.rto_minutes !== "number" || dr.rto_minutes < 0 || dr.rto_minutes > 240) add("dr.rto_minutes must be between 0 and 240");
   if (!nonPlaceholder(dr.recovery_set_id)) add("dr.recovery_set_id is required and must not be a placeholder");
-  if (!nonPlaceholder(dr.evidence)) add("dr.evidence is required and must not be a placeholder");
+  if (!evidenceUri(dr.evidence)) add("dr.evidence must be an evidence URI");
 
   if (!Array.isArray(manifest.approvals) || manifest.approvals.length < 2) add("approvals must contain at least two approvals");
   else {
@@ -97,8 +114,12 @@ export function validateReleaseManifest(manifest, now = new Date()) {
       else approvers.add(approval.actor);
       if (!nonPlaceholder(approval?.role)) add(`${prefix}.role is required`);
       if (!validDate(approval?.approved_at)) add(`${prefix}.approved_at must be an ISO date`);
+      else if (Date.parse(approval.approved_at) < Date.parse(release.created_at) || Date.parse(approval.approved_at) > now.getTime()) add(`${prefix}.approved_at must be after manifest creation and not in the future`);
+      if (!evidenceUri(approval?.evidence)) add(`${prefix}.evidence must be an evidence URI`);
     });
     if (approvers.size < 2) add("approvals must contain at least two distinct actors");
+    const roles = new Set(manifest.approvals.map(({ role }) => role));
+    if (!roles.has("release_manager") || !roles.has("independent_verifier")) add("approvals must include release_manager and independent_verifier roles");
   }
 
   return errors;

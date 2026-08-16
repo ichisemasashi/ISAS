@@ -22,7 +22,10 @@
     "supply_chain": { "status": "blocked", "evidence": "replace-me" },
     "performance_slo": { "status": "blocked", "evidence": "replace-me" },
     "device_encryption": { "status": "blocked", "evidence": "replace-me" },
-    "user_acceptance": { "status": "blocked", "evidence": "replace-me" }
+    "staging_acceptance": { "status": "blocked", "evidence": "replace-me" },
+    "data_migration": { "status": "blocked", "evidence": "replace-me" },
+    "user_acceptance": { "status": "blocked", "evidence": "replace-me" },
+    "operational_acceptance": { "status": "blocked", "evidence": "replace-me" }
   },
   "quality": {
     "no_data_count": 1,
