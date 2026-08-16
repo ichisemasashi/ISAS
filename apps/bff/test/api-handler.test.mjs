@@ -114,6 +114,27 @@ describe("MVP REST and synchronization API", () => {
     assert.equal((await response.json()).tasks[0].id, "task-1");
   });
 
+  test("collects location only with localized consent, preference, and active non-break punch", async () => {
+    const hash = "a".repeat(64);
+    const fx = fixture(["punch:write"], { locationPolicies: [{ tenantId: "tenant-1", policyVersion: "location-v1",
+      purpose: "work_evidence", locale: "ja", title: "位置情報の利用", body: "作業実績のために利用します。", contentSha256: hash }] });
+    const write = (path, body, method = "POST") => fx.handle(fx.request(path, { method,
+      headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" }, body: JSON.stringify(body) }));
+    assert.equal((await write("/api/v1/location/consents", { eventUuid: crypto.randomUUID(), action: "granted",
+      policyVersion: "location-v1", consentTextSha256: hash, locale: "ja" })).status, 201);
+    assert.equal((await write("/api/v1/location/preference", { enabled: true, punchLinked: true, retentionDays: 7, locale: "ja" }, "PUT")).status, 200);
+    await fx.handle(pushRequest(fx, [{ bundleId: "punch-start", events: [event({ eventUuid: "punch-event-1", kind: "punch",
+      occurredAt: "2026-08-14T00:00:00Z", payload: { action: "start" } })] }]));
+    const point = await write("/api/v1/location/points", { collectionSessionId: crypto.randomUUID(), points: [{
+      eventUuid: crypto.randomUUID(), longitude: 140.305, latitude: 38.205, accuracyM: 8, recordedAt: "2026-08-14T00:01:00Z",
+    }] });
+    assert.equal(point.status, 202);
+    const tracks = await fx.handle(fx.request(`/api/v1/location/tracks?from=2026-08-14T00:00:00Z&to=2026-08-15T00:00:00Z&purpose=${encodeURIComponent("本人による作業実績確認")}`));
+    assert.equal(tracks.status, 200);
+    assert.equal((await tracks.json()).points.length, 1);
+    assert.equal(fx.state.locationAccessAudits.length, 1);
+  });
+
   test("requires a recent MFA authentication for exports and adjudication", async () => {
     const fx = fixture(["export:read"], { trusted: { authenticatedAt: "2026-08-13T23:00:00.000Z" } });
     const response = await fx.handle(fx.request("/api/v1/exports/fields.csv"));

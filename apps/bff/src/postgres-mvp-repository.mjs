@@ -260,6 +260,115 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return { tasks: result.rows, serverTime: new Date().toISOString() };
     },
 
+    async getLocationBootstrap(client, _trusted, { locale }) {
+      if (!/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(locale)) throw new TypeError("invalid locale");
+      const [policies, consent, preference] = await Promise.all([
+        client.query(`SELECT policy_version, purpose, locale, title, body, content_sha256, effective_from, effective_until
+          FROM app.location_consent_policy WHERE tenant_id = app.current_tenant_id() AND purpose = 'work_evidence'
+            AND locale IN ($1, 'ja') AND effective_from <= statement_timestamp()
+            AND (effective_until IS NULL OR effective_until > statement_timestamp())
+          ORDER BY (locale = $1) DESC, effective_from DESC`, [locale]),
+        client.query(`SELECT consent_event_id::text AS id, action, purpose, policy_version, consent_text_sha256,
+            locale, effective_at, expires_at FROM app.location_consent_current
+          WHERE tenant_id = app.current_tenant_id() AND subject_user_id = app.current_user_id() AND purpose = 'work_evidence'`),
+        client.query(`SELECT enabled, punch_linked, retention_days, locale, version, updated_at
+          FROM app.location_tracking_preference WHERE tenant_id = app.current_tenant_id()
+            AND user_id = app.current_user_id() AND purpose = 'work_evidence'`),
+      ]);
+      const mapTime = (row) => ({ ...row, effective_from: iso(row.effective_from), effective_until: iso(row.effective_until),
+        effective_at: iso(row.effective_at), expires_at: iso(row.expires_at), updated_at: iso(row.updated_at) });
+      return { policies: policies.rows.map(mapTime), consent: consent.rows[0] ? mapTime(consent.rows[0]) : null,
+        preference: preference.rows[0] ? { enabled: preference.rows[0].enabled, punchLinked: preference.rows[0].punch_linked,
+          retentionDays: Number(preference.rows[0].retention_days), locale: preference.rows[0].locale,
+          version: Number(preference.rows[0].version), updatedAt: iso(preference.rows[0].updated_at) }
+          : { enabled: false, punchLinked: true, retentionDays: 14, locale, version: 0 } };
+    },
+
+    async recordLocationConsent(client, _trusted, input) {
+      if (!isUuid(input?.eventUuid) || !["granted", "withdrawn"].includes(input?.action)
+        || typeof input.policyVersion !== "string" || !/^[0-9a-f]{64}$/.test(input.consentTextSha256 || "")
+        || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.locale || "")
+        || (input.expiresAt != null && !Number.isFinite(Date.parse(input.expiresAt)))) throw new TypeError("invalid location consent");
+      if (input.action === "granted") {
+        const policy = await client.query(`SELECT 1 FROM app.location_consent_policy
+          WHERE tenant_id = app.current_tenant_id() AND policy_version = $1 AND purpose = 'work_evidence'
+            AND locale = $2 AND content_sha256 = $3 AND effective_from <= statement_timestamp()
+            AND (effective_until IS NULL OR effective_until > statement_timestamp())`,
+        [input.policyVersion, input.locale, input.consentTextSha256]);
+        if (!policy.rows[0]) throw new TypeError("unknown consent policy");
+      }
+      const consentId = uuid();
+      const result = await client.query(`INSERT INTO app.location_consent_event
+          (tenant_id, consent_event_id, event_uuid, subject_user_id, action, purpose, policy_version,
+           consent_text_sha256, locale, expires_at, actor_user_id)
+        VALUES (app.current_tenant_id(), $1::uuid, $2::uuid, app.current_user_id(), $3, 'work_evidence',
+          $4, $5, $6, $7::timestamptz, app.current_user_id())
+        RETURNING consent_event_id::text AS id, action, purpose, policy_version, consent_text_sha256,
+          locale, effective_at, expires_at`,
+      [consentId, input.eventUuid, input.action, input.policyVersion, input.consentTextSha256, input.locale, input.expiresAt || null]);
+      const row = result.rows[0]; return { ...row, effective_at: iso(row.effective_at), expires_at: iso(row.expires_at) };
+    },
+
+    async saveLocationPreference(client, _trusted, input) {
+      if (typeof input?.enabled !== "boolean" || typeof input.punchLinked !== "boolean"
+        || !Number.isInteger(input.retentionDays) || input.retentionDays < 1 || input.retentionDays > 30
+        || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.locale || "")) throw new TypeError("invalid location preference");
+      const result = await client.query(`INSERT INTO app.location_tracking_preference
+          (tenant_id, user_id, purpose, enabled, punch_linked, retention_days, locale, updated_by)
+        VALUES (app.current_tenant_id(), app.current_user_id(), 'work_evidence', $1, $2, $3, $4, app.current_user_id())
+        ON CONFLICT (tenant_id, user_id, purpose) DO UPDATE SET enabled = EXCLUDED.enabled,
+          punch_linked = EXCLUDED.punch_linked, retention_days = EXCLUDED.retention_days, locale = EXCLUDED.locale,
+          version = app.location_tracking_preference.version + 1, updated_by = app.current_user_id(), updated_at = clock_timestamp()
+        RETURNING enabled, punch_linked, retention_days, locale, version, updated_at`,
+      [input.enabled, input.punchLinked, input.retentionDays, input.locale]);
+      const row = result.rows[0]; return { enabled: row.enabled, punchLinked: row.punch_linked,
+        retentionDays: Number(row.retention_days), locale: row.locale, version: Number(row.version), updatedAt: iso(row.updated_at) };
+    },
+
+    async appendLocationPoints(client, _trusted, input) {
+      if (!isUuid(input?.collectionSessionId) || !Array.isArray(input.points) || input.points.length < 1 || input.points.length > 200) throw new TypeError("invalid location points");
+      const consent = await client.query(`SELECT consent_event_id::text AS id FROM app.location_consent_current
+        WHERE tenant_id = app.current_tenant_id() AND subject_user_id = app.current_user_id()
+          AND purpose = 'work_evidence' AND action = 'granted'
+          AND (expires_at IS NULL OR expires_at > statement_timestamp())`);
+      if (!consent.rows[0]) throw new TypeError("valid location consent required");
+      const accepted = [];
+      for (const point of input.points) {
+        if (!isUuid(point.eventUuid) || !Number.isFinite(point.longitude) || point.longitude < -180 || point.longitude > 180
+          || !Number.isFinite(point.latitude) || point.latitude < -90 || point.latitude > 90
+          || !Number.isFinite(point.accuracyM) || point.accuracyM <= 0 || !Number.isFinite(Date.parse(point.recordedAt))
+          || (point.instructionId != null && !isUuid(point.instructionId)) || (point.fieldGroupId != null && !isUuid(point.fieldGroupId))) throw new TypeError("invalid location point");
+        const inserted = await client.query(`INSERT INTO app.location_track_point
+            (tenant_id, track_point_id, event_uuid, subject_user_id, instruction_id, field_group_id,
+             collection_session_id, consent_event_id, geom, accuracy_m, recorded_at, expires_at)
+          VALUES (app.current_tenant_id(), $1::uuid, $2::uuid, app.current_user_id(), $3::uuid, $4::uuid,
+            $5::uuid, $6::uuid, ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography, $9, $10::timestamptz,
+            statement_timestamp() + interval '1 day') ON CONFLICT (tenant_id, event_uuid) DO NOTHING
+          RETURNING event_uuid::text`, [uuid(), point.eventUuid, point.instructionId || null, point.fieldGroupId || null,
+          input.collectionSessionId, consent.rows[0].id, point.longitude, point.latitude, point.accuracyM, point.recordedAt]);
+        if (inserted.rows[0]) accepted.push(inserted.rows[0].event_uuid);
+      }
+      return { accepted: accepted.length, eventUuids: accepted };
+    },
+
+    async readLocationTracks(client, _trusted, input) {
+      if (!isUuid(input?.subjectUserId) || !Number.isFinite(Date.parse(input?.from))
+        || !Number.isFinite(Date.parse(input?.to)) || typeof input?.purpose !== "string") throw new TypeError("invalid location access");
+      const result = await client.query(`SELECT * FROM app.read_location_tracks($1::uuid, $2::timestamptz, $3::timestamptz, $4)`,
+        [input.subjectUserId, input.from, input.to, input.purpose]);
+      return { points: result.rows.map((row) => ({ trackPointId: row.track_point_id, instructionId: row.instruction_id,
+        fieldGroupId: row.field_group_id, longitude: row.longitude, latitude: row.latitude,
+        accuracyM: Number(row.accuracy_m), recordedAt: iso(row.recorded_at), expiresAt: iso(row.expires_at) })) };
+    },
+
+    async getWorkActuals(client, _trusted, { from, to }) {
+      if (!Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to))) throw new TypeError("invalid actual range");
+      const result = await client.query(`SELECT * FROM app.read_own_work_actuals($1::timestamptz, $2::timestamptz)`, [from, to]);
+      return { actuals: result.rows.map((row) => ({ type: row.actual_type, instructionId: row.instruction_id,
+        fieldId: row.field_id, fieldGroupId: row.field_group_id, date: row.actual_date,
+        seconds: Number(row.seconds) })) };
+    },
+
     async searchFields(client, trusted, { bbox, query, limit, cursor }) {
       const result = await client.query(`
         SELECT field_id::text AS id, field_group_id::text AS field_group_id,

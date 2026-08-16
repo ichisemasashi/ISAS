@@ -9,7 +9,7 @@ function clone(value) {
   return structuredClone(value);
 }
 
-export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [], pesticideRelease = null, agrochemicals = [], stockEvents = [], planningTemplates = [], planningResources = [], purchaseOrders = [], stockLots = [], inventoryCounts = [], inventoryPolicies = [] } = {}) {
+export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [], pesticideRelease = null, agrochemicals = [], stockEvents = [], planningTemplates = [], planningResources = [], purchaseOrders = [], stockLots = [], inventoryCounts = [], inventoryPolicies = [], locationPolicies = [] } = {}) {
   const receipts = new Map();
   const changes = [];
   const rejections = [];
@@ -34,6 +34,11 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   const pesticideReviews = [];
   const stockAlerts = [];
   const migrationJobs = [];
+  const locationConsents = [];
+  const locationPreferences = [];
+  const locationPoints = [];
+  const locationAccessAudits = [];
+  const punches = [];
 
   const database = {
     async transaction(_trusted, operation) { return operation({}); },
@@ -42,6 +47,80 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   const repository = {
     async getToday(_client, trusted) {
       return { tasks: clone(tasks.filter((task) => !task.tenantId || task.tenantId === trusted.authContext.tenantId)), serverTime: new Date().toISOString() };
+    },
+
+    async getLocationBootstrap(_client, trusted, { locale }) {
+      const tenantId = trusted.authContext.tenantId;
+      const policies = locationPolicies.filter((item) => (!item.tenantId || item.tenantId === tenantId)
+        && item.purpose === "work_evidence" && (item.locale === locale || item.locale === "ja"));
+      const consent = locationConsents.filter((item) => item.tenantId === tenantId && item.subjectUserId === trusted.userId)
+        .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt))[0] || null;
+      const preference = locationPreferences.find((item) => item.tenantId === tenantId && item.userId === trusted.userId) || {
+        enabled: false, punchLinked: true, retentionDays: 14, locale, version: 0,
+      };
+      return { policies: clone(policies), consent: clone(consent), preference: clone(preference) };
+    },
+
+    async recordLocationConsent(_client, trusted, input) {
+      if (!["granted", "withdrawn"].includes(input?.action) || typeof input.policyVersion !== "string"
+        || typeof input.consentTextSha256 !== "string" || !/^[0-9a-f]{64}$/.test(input.consentTextSha256)
+        || typeof input.locale !== "string") throw new TypeError("invalid location consent");
+      if (input.action === "granted" && !locationPolicies.some((item) => (!item.tenantId || item.tenantId === trusted.authContext.tenantId)
+        && item.policyVersion === input.policyVersion && item.locale === input.locale && item.contentSha256 === input.consentTextSha256)) throw new TypeError("unknown consent policy");
+      const result = { id: input.eventUuid || crypto.randomUUID(), tenantId: trusted.authContext.tenantId,
+        subjectUserId: trusted.userId, action: input.action, purpose: "work_evidence", policyVersion: input.policyVersion,
+        consentTextSha256: input.consentTextSha256, locale: input.locale, effectiveAt: new Date().toISOString(), expiresAt: input.expiresAt || null };
+      locationConsents.push(result); return clone(result);
+    },
+
+    async saveLocationPreference(_client, trusted, input) {
+      if (typeof input?.enabled !== "boolean" || typeof input.punchLinked !== "boolean"
+        || !Number.isInteger(input.retentionDays) || input.retentionDays < 1 || input.retentionDays > 30
+        || typeof input.locale !== "string") throw new TypeError("invalid location preference");
+      let current = locationPreferences.find((item) => item.tenantId === trusted.authContext.tenantId && item.userId === trusted.userId);
+      if (!current) { current = { tenantId: trusted.authContext.tenantId, userId: trusted.userId, purpose: "work_evidence", version: 0 }; locationPreferences.push(current); }
+      Object.assign(current, { enabled: input.enabled, punchLinked: input.punchLinked, retentionDays: input.retentionDays,
+        locale: input.locale, version: current.version + 1, updatedAt: new Date().toISOString() });
+      return clone(current);
+    },
+
+    async appendLocationPoints(_client, trusted, input) {
+      if (!Array.isArray(input?.points) || input.points.length < 1 || input.points.length > 200 || typeof input.collectionSessionId !== "string") throw new TypeError("invalid location points");
+      const preference = locationPreferences.find((item) => item.tenantId === trusted.authContext.tenantId && item.userId === trusted.userId);
+      const consent = locationConsents.filter((item) => item.tenantId === trusted.authContext.tenantId && item.subjectUserId === trusted.userId).at(-1);
+      if (!preference?.enabled || consent?.action !== "granted") throw new TypeError("location collection disabled");
+      if (preference.punchLinked && !["start", "resume"].includes(punches.filter((item) => item.tenantId === trusted.authContext.tenantId && item.userId === trusted.userId).at(-1)?.action)) throw new TypeError("location collection paused");
+      const accepted = [];
+      for (const point of input.points) {
+        if (!Number.isFinite(point.longitude) || point.longitude < -180 || point.longitude > 180
+          || !Number.isFinite(point.latitude) || point.latitude < -90 || point.latitude > 90
+          || !Number.isFinite(point.accuracyM) || point.accuracyM <= 0 || !Number.isFinite(Date.parse(point.recordedAt))) throw new TypeError("invalid location point");
+        if (locationPoints.some((item) => item.eventUuid === point.eventUuid && item.tenantId === trusted.authContext.tenantId)) continue;
+        locationPoints.push({ ...clone(point), tenantId: trusted.authContext.tenantId, subjectUserId: trusted.userId,
+          collectionSessionId: input.collectionSessionId, consentEventId: consent.id,
+          expiresAt: new Date(Date.now() + preference.retentionDays * 86400000).toISOString() }); accepted.push(point.eventUuid);
+      }
+      return { accepted: accepted.length, eventUuids: accepted };
+    },
+
+    async readLocationTracks(_client, trusted, input) {
+      if (!input.from || !input.to || !input.purpose || !Number.isFinite(Date.parse(input.from)) || !Number.isFinite(Date.parse(input.to))) throw new TypeError("invalid location access");
+      if (input.subjectUserId !== trusted.userId && !trusted.authContext.capabilities.includes("view_others_tracks")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const points = locationPoints.filter((item) => item.tenantId === trusted.authContext.tenantId && item.subjectUserId === input.subjectUserId
+        && item.recordedAt >= input.from && item.recordedAt < input.to && item.expiresAt > new Date().toISOString());
+      locationAccessAudits.push({ tenantId: trusted.authContext.tenantId, viewerUserId: trusted.userId, subjectUserId: input.subjectUserId,
+        purpose: input.purpose, from: input.from, to: input.to, returnedCount: points.length, viewedAt: new Date().toISOString() });
+      return { points: clone(points) };
+    },
+
+    async getWorkActuals(_client, trusted, { from, to }) {
+      const visible = punches.filter((item) => item.tenantId === trusted.authContext.tenantId && item.userId === trusted.userId
+        && (!from || item.occurredAt >= from) && (!to || item.occurredAt < to));
+      let workedSeconds = 0;
+      for (let index = 0; index + 1 < visible.length; index += 1) if (["start", "resume"].includes(visible[index].action)) {
+        workedSeconds += Math.max(0, (Date.parse(visible[index + 1].occurredAt) - Date.parse(visible[index].occurredAt)) / 1000);
+      }
+      return { workTime: [{ userId: trusted.userId, workedSeconds }], fieldPresence: [] };
     },
 
     async searchFields(_client, trusted, { query, limit, cursor }) {
@@ -380,6 +459,8 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
           }
         }
         if (event.kind === "pesticide") pesticideUsages.push({ ...clone(event.payload), eventUuid: event.eventUuid, tenantId });
+        if (event.kind === "punch") punches.push({ ...clone(event.payload), eventUuid: event.eventUuid, tenantId,
+          userId: trusted.userId, occurredAt: event.occurredAt });
         if (event.kind === "stock") {
           const delta = event.payload.eventType === "withdrawal" ? -Math.abs(event.payload.quantity)
             : event.payload.eventType === "receipt" ? Math.abs(event.payload.quantity) : event.payload.quantity;
@@ -470,5 +551,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, attachmentStorage, mapStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs, orders, lots, countSessions, policies } };
+  return { database, repository, attachmentStorage, mapStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs, orders, lots, countSessions, policies, locationConsents, locationPreferences, locationPoints, locationAccessAudits, punches } };
 }

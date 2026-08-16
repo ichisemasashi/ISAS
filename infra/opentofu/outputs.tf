@@ -34,7 +34,8 @@ output "deployment_manifest" {
         worker     = aws_ecs_service.worker.name
         poolers    = { for key, service in aws_ecs_service.pooler : key => service.name }
       }
-      migration_task_definition = aws_ecs_task_definition.migration.arn
+      migration_task_definition          = aws_ecs_task_definition.migration.arn
+      location_retention_task_definition = aws_ecs_task_definition.location_retention.arn
       progressive_delivery = {
         listener_arn             = aws_lb_listener.https.arn
         bff_rule_arn             = aws_lb_listener_rule.bff.arn

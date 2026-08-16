@@ -13,7 +13,7 @@ export function createApplicationRouter({ bffHandler, apiHandler }) {
     const secured = new Response(response.body, response);
     secured.headers.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     secured.headers.set("Cross-Origin-Resource-Policy", "same-origin");
-    secured.headers.set("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
+    secured.headers.set("Permissions-Policy", "camera=(), geolocation=(self), microphone=()");
     secured.headers.set("Referrer-Policy", "no-referrer");
     secured.headers.set("X-Content-Type-Options", "nosniff");
     secured.headers.set("X-Frame-Options", "DENY");

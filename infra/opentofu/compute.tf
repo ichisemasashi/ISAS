@@ -451,6 +451,82 @@ resource "aws_ecs_task_definition" "migration" {
   }])
 }
 
+resource "aws_ecs_task_definition" "location_retention" {
+  family                   = "${local.name}-location-retention"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.migration.arn
+
+  container_definitions = jsonencode([{
+    name        = "location-retention"
+    image       = var.container_images.migration
+    essential   = true
+    entryPoint  = ["/isas/purge-location.sh"]
+    environment = [{ name = "DB_NAME", value = aws_rds_cluster.core.database_name }]
+    secrets = [
+      { name = "DB_HOST", valueFrom = "${aws_rds_cluster.core.master_user_secret[0].secret_arn}:host::" },
+      { name = "DB_PORT", valueFrom = "${aws_rds_cluster.core.master_user_secret[0].secret_arn}:port::" },
+      { name = "DB_USER", valueFrom = "${aws_rds_cluster.core.master_user_secret[0].secret_arn}:username::" },
+      { name = "DB_PASSWORD", valueFrom = "${aws_rds_cluster.core.master_user_secret[0].secret_arn}:password::" },
+    ]
+    readonlyRootFilesystem = true
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.service["migration"].name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "location-retention"
+      }
+    }
+  }])
+}
+
+resource "aws_cloudwatch_event_rule" "location_retention" {
+  name                = "${local.name}-location-retention"
+  description         = "Delete expired short-lived location points every hour"
+  schedule_expression = "rate(1 hour)"
+}
+
+resource "aws_iam_role" "location_retention_scheduler" {
+  name = "${local.name}-location-retention-scheduler"
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Principal = { Service = "events.amazonaws.com" }, Action = "sts:AssumeRole" }]
+  })
+}
+
+resource "aws_iam_role_policy" "location_retention_scheduler" {
+  name = "run-location-retention-task"
+  role = aws_iam_role.location_retention_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      { Effect = "Allow", Action = ["ecs:RunTask"], Resource = [aws_ecs_task_definition.location_retention.arn] },
+      { Effect = "Allow", Action = ["iam:PassRole"], Resource = [aws_iam_role.ecs_execution.arn, aws_iam_role.migration.arn] },
+    ]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "location_retention" {
+  rule     = aws_cloudwatch_event_rule.location_retention.name
+  arn      = aws_ecs_cluster.main.arn
+  role_arn = aws_iam_role.location_retention_scheduler.arn
+
+  ecs_target {
+    task_definition_arn = aws_ecs_task_definition.location_retention.arn
+    launch_type         = "FARGATE"
+    task_count          = 1
+    network_configuration {
+      subnets          = aws_subnet.app[*].id
+      security_groups  = [aws_security_group.pooler.id]
+      assign_public_ip = false
+    }
+  }
+}
+
 resource "aws_ecs_service" "web" {
   name                               = "web"
   cluster                            = aws_ecs_cluster.main.id

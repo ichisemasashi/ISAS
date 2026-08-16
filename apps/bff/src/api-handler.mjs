@@ -256,6 +256,48 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         return json(200, result, requestId);
       }
 
+      if (request.method === "GET" && url.pathname === "/api/v1/location") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.getLocationBootstrap(client, canonical ? { ...trusted, authContext: canonical } : trusted, {
+          locale: url.searchParams.get("locale") || "ja",
+        }), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/location/consents") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(201, await database.transaction(trusted, (client, canonical) => repository.recordLocationConsent(client, canonical ? { ...trusted, authContext: canonical } : trusted, body)), requestId);
+      }
+
+      if (request.method === "PUT" && url.pathname === "/api/v1/location/preference") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(200, await database.transaction(trusted, (client, canonical) => repository.saveLocationPreference(client, canonical ? { ...trusted, authContext: canonical } : trusted, body)), requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/location/points") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(202, await database.transaction(trusted, (client, canonical) => repository.appendLocationPoints(client, canonical ? { ...trusted, authContext: canonical } : trusted, body)), requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/location/tracks") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.readLocationTracks(client, canonical ? { ...trusted, authContext: canonical } : trusted, {
+          subjectUserId: url.searchParams.get("subjectUserId") || trusted.userId,
+          from: url.searchParams.get("from"), to: url.searchParams.get("to"), purpose: url.searchParams.get("purpose"),
+        }));
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/work-actuals") {
+        const defaultTo = new Date(clock()).toISOString();
+        const defaultFrom = new Date(clock() - 30 * 86400000).toISOString();
+        const result = await database.transaction(trusted, (client, canonical) => repository.getWorkActuals(client, canonical ? { ...trusted, authContext: canonical } : trusted, {
+          from: url.searchParams.get("from") || defaultFrom, to: url.searchParams.get("to") || defaultTo,
+        }));
+        return json(200, result, requestId);
+      }
+
       if (request.method === "GET" && url.pathname === "/api/v1/fields") {
         const search = fieldSearch(url);
         const result = await database.transaction(trusted, (client, canonical) => repository.searchFields(client, canonical ? { ...trusted, authContext: canonical } : trusted, search), { readOnly: true });
