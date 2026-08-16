@@ -163,8 +163,8 @@ S7は、ADR-0007/0008の同期契約を実行可能な参照状態機械にし�
 
 | 項目 | 次にやること |
 |---|---|
-| **S6（iOS／Android端末能力）** | 測定PWAとデスクトップ診断は完了。サポート下限／現行iPhoneとAndroid実機でbrowser／standalone、再起動、容量圧迫、背景遷移を測定する |
-| **S9（端末暗号化／失効／鍵交代）** | ADR-0017 v2のcache/outbox別鍵、offline recovery wrap、権限version付き失効収束、新旧鍵交代／backup復旧をPWA／ネイティブ／サーバ境界ごとに検証する |
+| **S6（iOS／Android端末能力）** | 測定PWA、desktop診断、8プロファイル×11試験の証跡gateは完了。サポート下限／現行iPhoneとAndroid実機でbrowser／standalone、再起動、容量圧迫、OS更新、共有端末を測定する |
+| **S9（端末暗号化／失効／鍵交代）** | PWAのcache/outbox別非抽出鍵、event content key二重wrap、rotation、暗号消去、quota、logout保護をChromiumでPASS。実iOS/Android、実KMS回復、実Cognito logoutは未実施 |
 
 ---
 

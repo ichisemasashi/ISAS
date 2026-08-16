@@ -153,18 +153,23 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
     }
     const id = eventId();
     const occurredAt = new Date().toISOString();
-    await storage.enqueue({
-      eventUuid: id,
-      bundleId: id,
-      kind,
-      payload,
-      createdAt: occurredAt,
-      occurredAt,
-      tenantId: authorization.context.tenantId,
-      authorizationSnapshotId: authorization.context.authorizationSnapshotId,
-      membershipVersion: authorization.context.membershipVersion,
-      scope,
-    });
+    try {
+      await storage.enqueue({
+        eventUuid: id,
+        bundleId: id,
+        kind,
+        payload,
+        createdAt: occurredAt,
+        occurredAt,
+        tenantId: authorization.context.tenantId,
+        authorizationSnapshotId: authorization.context.authorizationSnapshotId,
+        membershipVersion: authorization.context.membershipVersion,
+        scope,
+      });
+    } catch {
+      setNotice("端末の暗号化回復鍵を確認できないため保存しませんでした。オンラインのまま管理者へ連絡してください。");
+      return false;
+    }
     setPending((value) => value + 1);
     if (online) setSyncRevision((value) => value + 1);
     setNotice(online ? "端末に保存しました。まもなく同期します。" : "端末に保存しました。電波が戻ると自動で同期します。");

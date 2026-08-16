@@ -45,6 +45,14 @@ PCでは`http://127.0.0.1:18086/S6_device_capabilities.html`、同一LANの端�
 
 結果JSONは`spikes/results/S6_<device>_<date>.json`へ保存し、端末型番、OSビルド、ブラウザ版、browser/standalone、電源・空き容量、ネットワーク条件を併記する。位置座標は証跡へコミットする前に削除し、時刻・visibility・精度・間隔だけを残す。
 
+能力測定に加えて、各プロファイルで`offline_restart`、`vault_non_extractable`、`key_separation`、`key_rotation_interrupt`、`quota_pressure`、`os_update`、`browser_termination`、`device_loss_revocation`、`outbox_recovery`、`production_logout`、`shared_device`を実行する。結果は`results/S6_S9_DEVICE_ACCEPTANCE.template.json`を複製して記入し、次のgateを通す。
+
+```bash
+node ops/check-device-acceptance.mjs spikes/results/S6_S9_DEVICE_ACCEPTANCE.json
+```
+
+`PASS`にはiOS/Androidの下限・現行×browser/standaloneの8プロファイル、全11試験のartifact URI、端末試験責任者と独立security verifierの承認が必要である。Simulator、emulator、desktop診断、空欄、`BLOCKED`をgateは拒否する。
+
 ## 現時点の判定
 
 2026-08-14にデスクトップChromiumで、自動能力測定、32MiB IndexedDB書込、ページ再読込後のmarker生存、Service Worker登録までを動作確認した。証跡は`results/S6_DESKTOP_2026-08-14.json`に置く。この結果はハーネス診断に限り、S6の端末合否には使わない。

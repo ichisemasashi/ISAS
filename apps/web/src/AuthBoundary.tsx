@@ -57,7 +57,7 @@ export function AuthBoundary({ gateway, api }: { gateway: AuthGateway; api: MvpG
   };
 
   const logout = async () => {
-    const pending = await browserStorage.pendingCount(state.context.tenantId);
+    const pending = await browserStorage.pendingCount();
     if (pending > 0) throw new Error(`未同期${pending}件を同期してからログアウトしてください。端末紛失時は管理者へ回復を依頼してください。`);
     await revokeDeviceAccess(state.context.tenantId, []);
     await gateway.logout(state.bootstrap.csrfToken);

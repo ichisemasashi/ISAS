@@ -29,10 +29,15 @@ async function configureDeviceRecovery() {
     await configureRecoveryPublicKey("ut-ephemeral-recovery", await crypto.subtle.exportKey("jwk", pair.publicKey));
     return;
   }
-  const encoded = import.meta.env.VITE_DEVICE_RECOVERY_PUBLIC_JWK;
-  const keyId = import.meta.env.VITE_DEVICE_RECOVERY_KEY_ID;
-  if (!encoded || !keyId) return;
-  await configureRecoveryPublicKey(keyId, JSON.parse(encoded) as JsonWebKey);
+  try {
+    const response = await fetch("/device-security-config.json", { cache: "no-store", credentials: "same-origin" });
+    if (!response.ok) return;
+    const value = await response.json() as { keyId?: unknown; recoveryPublicJwk?: unknown };
+    if (typeof value.keyId !== "string" || !value.recoveryPublicJwk) return;
+    await configureRecoveryPublicKey(value.keyId, value.recoveryPublicJwk as JsonWebKey);
+  } catch {
+    // Read-only online use may continue; encrypted outbox creation remains fail-closed.
+  }
 }
 
 function UtModeBanner() {
