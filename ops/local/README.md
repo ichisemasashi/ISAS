@@ -87,12 +87,12 @@ Keycloakで利用者名とpasswordを送信し、次画面へ現在の6桁TOTP c
 
 1. 「その他」→「管理者向けセキュリティ操作」を開く。
 2. 「MFAで再認証」が表示された場合は押し、passwordとTOTPで再認証する。再認証後10分以内に以降を完了する。
-3. 「Macローカル・テスト利用者の登録」で、英小文字から始まるログインID、表示名、roleを入力する。
+3. 「Macローカル・テスト利用者の登録」で、英小文字から始まるログインID、重複しないメールアドレス、表示名、roleを入力する。
 4. 「テスト利用者を登録」を押す。
 5. 一度だけ表示される仮passwordを利用者へ安全に伝達し、画面を閉じる。スクリーンショット、ticket、chat、Gitへ保存しない。
-6. 新しいprivate browser windowで新規利用者としてログインする。初回ログイン時に仮passwordを変更し、本人のTOTP認証器を登録する。
+6. 新しいprivate browser windowで新規利用者としてログインし、仮passwordを変更する。`worker`、`field_supervisor`、`contractor`はメールアドレスまたはユーザー名＋passwordだけでloginする。`organization_admin`、`group_admin`は初回に本人のTOTP認証器も登録する。
 
-Web登録はKeycloakのcredentialと認可DBのuser、membership、実証圃場scopeを一括作成する。ログインIDが既に存在する場合は登録せず競合を表示する。画面が表示されない場合は`local-integration` profileでないか、`security:manage`がない。403の場合は「MFAで再認証」からやり直す。
+Web登録はKeycloakのcredentialと認可DBのuser、membership、実証圃場scopeを一括作成する。ログインIDまたはメールアドレスが既に存在する場合は登録せず競合を表示する。画面が表示されない場合は`local-integration` profileでないか、`security:manage`がない。403の場合は「MFAで再認証」からやり直す。
 
 この即時登録はMacローカル環境のsynthetic test user専用である。Production／AWS stagingでは公開されず、本番利用者は二人承認workflowで登録する。
 
@@ -104,16 +104,15 @@ Web登録はKeycloakのcredentialと認可DBのuser、membership、実証圃場s
 ops/local/register-test-user.sh
 ```
 
-このcommandは、実Keycloakへpassword＋TOTP利用者を作成し、認可DBへ同じsubjectのuser、`worker` membership、実証圃場scopeを登録して、合成作業指示を割り当てる。再実行しても同じ利用者と秘密値を使う。秘密値は`.local/secrets/test-users/test-worker.env`だけへ所有者限定で保存され、command出力には表示されない。
+このcommandは、実Keycloakへ非管理者用password利用者を作成し、認可DBへ同じsubjectのuser、`worker` membership、実証圃場scopeを登録して、合成作業指示を割り当てる。再実行しても同じ利用者と秘密値を使う。秘密値は`.local/secrets/test-users/test-worker.env`だけへ所有者限定で保存され、command出力には表示されない。
 
-ログイン時は、利用者名に`test-worker`を使う。本人がpasswordとTOTP登録キーを確認するcommandは次のとおりである。
+ログイン時は`test-worker`または`test-worker@invalid.example`を使う。本人がpasswordを確認するcommandは次のとおりである。
 
 ```bash
 sed -n 's/^PASSWORD=//p' .local/secrets/test-users/test-worker.env
-sed -n 's/^TOTP_SECRET=//p' .local/secrets/test-users/test-worker.env
 ```
 
-登録後の実ログイン、MFA、worker権限、圃場scope、担当作業は次で検証できる。
+登録後のメール＋password login、worker権限、圃場scope、担当作業、国土地理院背景地図は次で検証できる。
 
 ```bash
 npm --prefix apps/web run test:local-user
