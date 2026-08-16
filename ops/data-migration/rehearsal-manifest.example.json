@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "round_id": "replace-me",
+  "evidence_class": "real_anonymized",
+  "environment": "staging",
+  "tenant_id": "00000000-0000-0000-0000-000000000000",
+  "datasets": [
+    {"dataset": "fields", "file": "fields.csv", "mapping": {}, "expected": {"rows": 0, "valid": 0, "duplicates": 0, "errors": 0}, "expected_committed": 0},
+    {"dataset": "journals", "file": "journals.csv", "mapping": {}, "expected": {"rows": 0, "valid": 0, "duplicates": 0, "errors": 0}, "expected_committed": 0},
+    {"dataset": "pesticide_history", "file": "pesticide_history.csv", "mapping": {}, "expected": {"rows": 0, "valid": 0, "duplicates": 0, "errors": 0}, "expected_committed": 0}
+  ],
+  "expected_exports": {"fields": 0, "journals": 0, "pesticide-records": 0},
+  "restricted_scope_expected_exports": {"fields": 0, "journals": 0, "pesticide-records": 0}
+}
