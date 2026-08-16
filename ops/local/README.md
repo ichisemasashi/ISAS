@@ -73,6 +73,37 @@ TOTP seedと表示された6桁codeはpasswordと同じ秘密情報である。�
 
 この利用者とsynthetic tenantはlocal migrationでのみ作成される。本番の利用者・tenant・credentialを流用しない。
 
+## テスト利用者の登録
+
+起動済みの環境へ、既定の`test-worker`を作業者として登録する。
+
+```bash
+ops/local/register-test-user.sh
+```
+
+このcommandは、実Keycloakへpassword＋TOTP利用者を作成し、認可DBへ同じsubjectのuser、`worker` membership、実証圃場scopeを登録して、合成作業指示を割り当てる。再実行しても同じ利用者と秘密値を使う。秘密値は`.local/secrets/test-users/test-worker.env`だけへ所有者限定で保存され、command出力には表示されない。
+
+ログイン時は、利用者名に`test-worker`を使う。本人がpasswordとTOTP登録キーを確認するcommandは次のとおりである。
+
+```bash
+sed -n 's/^PASSWORD=//p' .local/secrets/test-users/test-worker.env
+sed -n 's/^TOTP_SECRET=//p' .local/secrets/test-users/test-worker.env
+```
+
+登録後の実ログイン、MFA、worker権限、圃場scope、担当作業は次で検証できる。
+
+```bash
+npm --prefix apps/web run test:local-user
+```
+
+別名や別roleのテスト利用者は明示して登録できる。roleは`worker`、`field_supervisor`、`organization_admin`、`group_admin`、`contractor`のいずれかに限定される。
+
+```bash
+ops/local/register-test-user.sh --username test-supervisor --display-name '試験責任者' --role field_supervisor
+```
+
+これはlocal synthetic fixtureの直接provisioningであり、本番の二人承認付き利用者登録を代替しない。秘密fileを共有せず、不要になった利用者の失効・削除は管理者workflowの試験として実施する。
+
 ## 受入検証
 
 stack起動後、次の1 commandでhost条件、Compose、公開port、全health、migration、PostGIS、owner、FORCE RLS、監査trigger、5 pool、TLS、BFF、OIDCを検証する。

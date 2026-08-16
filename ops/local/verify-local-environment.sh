@@ -58,6 +58,7 @@ printf '%s\n' 'local-integration foundation verification: PASS'
 
 if [ "$MODE" = "--full" ]; then
   [ -d "$REPO_ROOT/apps/web/node_modules/@playwright" ] || fail "Playwright dependencies are missing; run npm ci in apps/web"
+  "$OPS_DIR/reconcile-fixtures.sh"
   (
     cd "$REPO_ROOT/apps/web"
     npm run test:local-integration
