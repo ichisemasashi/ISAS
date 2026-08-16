@@ -13,6 +13,7 @@ const TENANT_ID = "20000000-0000-4000-8000-000000000001";
 const FIELD_GROUP_ID = "30000000-0000-4000-8000-000000000001";
 const SYNTHETIC_ASSIGNMENT_ID = "43000000-0000-4000-8000-000000000001";
 const ROLES = new Set(["worker", "field_supervisor", "organization_admin", "group_admin", "contractor"]);
+const MFA_ROLES = new Set(["organization_admin", "group_admin"]);
 
 export function parseArguments(argv) {
   const options = { username: "test-worker", displayName: "テスト作業者", role: "worker" };
@@ -80,29 +81,35 @@ async function provisionKeycloak(options, user, runtime) {
     ...init, headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}) },
   });
   let matches = await json(await admin(`/users?username=${encodeURIComponent(options.username)}&exact=true`), "find test user");
+  const email = `${options.username}@invalid.example`;
+  const requiresMfa = MFA_ROLES.has(options.role);
   if (matches.length === 0) {
     await json(await admin("/partialImport", { method: "POST", body: JSON.stringify({
       ifResourceExists: "FAIL",
       users: [{
         id: user.USER_ID, username: options.username, enabled: true,
-        email: `${options.username}@invalid.example`, emailVerified: true,
+        email, emailVerified: true,
         firstName: options.displayName, lastName: "Test",
-        credentials: [
-          { type: "password", value: user.PASSWORD, temporary: false },
-          { type: "otp", userLabel: "ISAS local TOTP", secretData: JSON.stringify({ value: user.TOTP_SECRET }), credentialData: JSON.stringify({ subType: "totp", digits: 6, counter: 0, period: 30, algorithm: "HmacSHA1", secretEncoding: "BASE32" }) },
-        ],
+        credentials: [{ type: "password", value: user.PASSWORD, temporary: false },
+          ...(requiresMfa ? [{ type: "otp", userLabel: "ISAS local TOTP", secretData: JSON.stringify({ value: user.TOTP_SECRET }), credentialData: JSON.stringify({ subType: "totp", digits: 6, counter: 0, period: 30, algorithm: "HmacSHA1", secretEncoding: "BASE32" }) }] : [])],
       }],
     }) }), "create Keycloak test user");
     matches = await json(await admin(`/users?username=${encodeURIComponent(options.username)}&exact=true`), "refresh test user");
   }
   if (matches.length !== 1 || matches[0].id !== user.USER_ID) throw new Error("Keycloak username conflicts with another local user; no database change was made");
   await json(await admin(`/users/${encodeURIComponent(user.USER_ID)}`, { method: "PUT", body: JSON.stringify({
-    ...matches[0], enabled: true, email: `${options.username}@invalid.example`, emailVerified: true,
+    ...matches[0], enabled: true, email, emailVerified: true,
     firstName: options.displayName, lastName: "Test",
   }) }), "update Keycloak test user");
-  const credentials = await json(await admin(`/users/${encodeURIComponent(user.USER_ID)}/credentials`), "verify test user credentials");
+  let credentials = await json(await admin(`/users/${encodeURIComponent(user.USER_ID)}/credentials`), "verify test user credentials");
+  if (!requiresMfa) {
+    for (const credential of credentials.filter(({ type }) => type === "otp")) {
+      await json(await admin(`/users/${encodeURIComponent(user.USER_ID)}/credentials/${encodeURIComponent(credential.id)}`, { method: "DELETE" }), "remove non-administrator OTP credential");
+    }
+    credentials = await json(await admin(`/users/${encodeURIComponent(user.USER_ID)}/credentials`), "verify password-only test user credentials");
+  }
   const types = new Set(credentials.map(({ type }) => type));
-  if (!types.has("password") || !types.has("otp")) throw new Error("test user is missing password or TOTP credentials");
+  if (!types.has("password") || (requiresMfa ? !types.has("otp") : types.has("otp"))) throw new Error("test user authentication policy does not match its role");
 }
 
 function provisionDatabase(options, user) {
@@ -153,7 +160,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (secrets.values.USERNAME !== options.username) throw new Error(`${secrets.path} belongs to another username`);
   await provisionKeycloak(options, secrets.values, runtime);
   provisionDatabase(options, secrets.values);
-  process.stdout.write(`test user ready: ${options.username} (${options.role})\ncredentials: ${secrets.path}\n`);
+  process.stdout.write(`test user ready: ${options.username} (${options.role}, ${MFA_ROLES.has(options.role) ? "password + TOTP" : "email/username + password"})\ncredentials: ${secrets.path}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((error) => { process.stderr.write(`register test user failed: ${error.message}\n`); process.exitCode = 1; });

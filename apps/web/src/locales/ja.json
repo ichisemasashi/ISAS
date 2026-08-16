@@ -602,6 +602,7 @@
   "securityadministrationpanel.local.title": "Macローカル用テスト利用者",
   "securityadministrationpanel.local.boundary": "local-integration専用です。本番の二人承認付き登録には使用できません。",
   "securityadministrationpanel.local.username": "ログインID",
+  "securityadministrationpanel.local.email": "メールアドレス",
   "securityadministrationpanel.local.display_name": "表示名",
   "securityadministrationpanel.local.role": "ロール",
   "securityadministrationpanel.local.submit": "テスト利用者を登録",
@@ -609,7 +610,8 @@
   "securityadministrationpanel.local.failed": "テスト利用者を登録できませんでした。",
   "securityadministrationpanel.local.once": "初回ログイン情報（今回だけ表示）",
   "securityadministrationpanel.local.temporary_password": "仮パスワード",
-  "securityadministrationpanel.local.first_login": "この画面を閉じると仮パスワードは再表示できません。初回ログインでパスワード変更とTOTP登録が必要です。",
+  "securityadministrationpanel.local.first_login_password": "この画面を閉じると仮パスワードは再表示できません。初回ログインでパスワードを変更してください。以後はメールアドレスまたはユーザー名とパスワードでログインできます。",
+  "securityadministrationpanel.local.first_login_admin": "この画面を閉じると仮パスワードは再表示できません。管理ロールのため、初回ログインでパスワード変更とTOTP登録が必要です。",
   "securityadministrationpanel.local.close": "表示を閉じる",
   "securityadministrationpanel.local.step_up_required": "利用者管理には直近10分以内のMFA再認証が必要です。",
   "securityadministrationpanel.local.step_up": "MFAで再認証"

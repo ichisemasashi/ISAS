@@ -51,6 +51,8 @@ await responseJson(await admin("", {
     ...realm,
     sslRequired: "external",
     registrationAllowed: false,
+    loginWithEmailAllowed: true,
+    duplicateEmailsAllowed: false,
     resetPasswordAllowed: false,
     rememberMe: false,
     bruteForceProtected: true,

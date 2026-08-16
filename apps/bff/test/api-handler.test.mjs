@@ -103,7 +103,7 @@ describe("MVP REST and synchronization API", () => {
     assert.equal((await snapshot.json()).localTestUserRegistration, true);
     const created = await local.handle(local.request("/api/v1/security-admin/local-test-users", {
       method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
-      body: JSON.stringify({ username: "web-worker", displayName: "Web作業者", roleKey: "worker" }),
+      body: JSON.stringify({ username: "web-worker", email: "worker@example.test", displayName: "Web作業者", roleKey: "worker" }),
     }));
     assert.equal(created.status, 201);
     assert.equal((await created.json()).temporaryPassword, "one-time");

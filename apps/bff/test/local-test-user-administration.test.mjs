@@ -11,6 +11,7 @@ test("local web registration provisions first-login Keycloak credentials then sc
   const responses = [
     new Response(JSON.stringify({ access_token: "admin-token" }), { status: 200 }),
     new Response("[]", { status: 200 }),
+    new Response("[]", { status: 200 }),
     new Response(null, { status: 200 }),
   ];
   const fetcher = async (url, init) => { requests.push({ url, init }); return responses.shift(); };
@@ -19,12 +20,14 @@ test("local web registration provisions first-login Keycloak credentials then sc
   const administration = createLocalTestUserAdministration({ pool, issuer: ISSUER, adminUsername: "admin", adminPassword: "admin-password",
     fetcher, uuid: () => USER_ID, password: () => "Temporary!Password9" });
   const result = await administration.provision({ userId: "10000000-0000-4000-8000-000000000001", authContext: { tenantId: TENANT_ID } },
-    { username: "web-worker", displayName: "Web作業者", roleKey: "worker" });
+    { username: "web-worker", email: "worker@example.test", displayName: "Web作業者", roleKey: "worker" });
   assert.equal(result.temporaryPassword, "Temporary!Password9");
-  assert.deepEqual(result.requiredActions, ["UPDATE_PASSWORD", "CONFIGURE_TOTP"]);
-  const imported = JSON.parse(requests[2].init.body);
+  assert.equal(result.email, "worker@example.test");
+  assert.deepEqual(result.requiredActions, ["UPDATE_PASSWORD"]);
+  const imported = JSON.parse(requests[3].init.body);
   assert.equal(imported.users[0].credentials[0].temporary, true);
-  assert.deepEqual(imported.users[0].requiredActions, ["UPDATE_PASSWORD", "CONFIGURE_TOTP"]);
+  assert.deepEqual(imported.users[0].requiredActions, ["UPDATE_PASSWORD"]);
+  assert.equal(imported.users[0].email, "worker@example.test");
   assert.match(calls[0].sql, /local_register_test_user/);
   assert.deepEqual(calls[0].values.slice(1, 4), [TENANT_ID, USER_ID, ISSUER]);
 });
@@ -34,7 +37,19 @@ test("local web registration rejects duplicates before changing the database", a
   const pool = { async query() { throw new Error("database must not be called"); } };
   const administration = createLocalTestUserAdministration({ pool, issuer: ISSUER, adminUsername: "admin", adminPassword: "admin-password", fetcher: async () => responses.shift() });
   await assert.rejects(() => administration.provision({ userId: USER_ID, authContext: { tenantId: TENANT_ID } },
-    { username: "web-worker", displayName: "Web作業者", roleKey: "worker" }), (error) => error.code === "username_conflict");
+    { username: "web-worker", email: "worker@example.test", displayName: "Web作業者", roleKey: "worker" }), (error) => error.code === "username_conflict");
+});
+
+test("local web registration keeps MFA enrollment for administrative roles", async () => {
+  const requests = [];
+  const responses = [new Response(JSON.stringify({ access_token: "admin-token" }), { status: 200 }), new Response("[]", { status: 200 }), new Response("[]", { status: 200 }), new Response(null, { status: 200 })];
+  const pool = { async query() { return { rows: [{ result: { status: "active" } }] }; } };
+  const administration = createLocalTestUserAdministration({ pool, issuer: ISSUER, adminUsername: "admin", adminPassword: "admin-password",
+    fetcher: async (url, init) => { requests.push({ url, init }); return responses.shift(); }, uuid: () => USER_ID, password: () => "Temporary!Password9" });
+  const result = await administration.provision({ userId: USER_ID, authContext: { tenantId: TENANT_ID } },
+    { username: "web-admin", email: "admin@example.test", displayName: "Web管理者", roleKey: "group_admin" });
+  assert.deepEqual(result.requiredActions, ["UPDATE_PASSWORD", "CONFIGURE_TOTP"]);
+  assert.deepEqual(JSON.parse(requests[3].init.body).users[0].requiredActions, ["UPDATE_PASSWORD", "CONFIGURE_TOTP"]);
 });
 
 test("local web registration validates its isolated profile", () => {

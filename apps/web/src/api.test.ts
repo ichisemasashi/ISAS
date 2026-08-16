@@ -36,8 +36,8 @@ describe("MVP REST gateway", () => {
   });
 
   test("registers a local test user without exposing a bearer token", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ userId: "user-1", username: "web-worker", temporaryPassword: "one-time", status: "ready_for_first_login" }), { status: 201, headers: { "Content-Type": "application/json" } }));
-    await createMvpGateway(fetcher).provisionLocalTestUser!("context-1", "csrf-1", { username: "web-worker", displayName: "Web作業者", roleKey: "worker" });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ userId: "user-1", username: "web-worker", email: "worker@example.test", temporaryPassword: "one-time", status: "ready_for_first_login" }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    await createMvpGateway(fetcher).provisionLocalTestUser!("context-1", "csrf-1", { username: "web-worker", email: "worker@example.test", displayName: "Web作業者", roleKey: "worker" });
     expect(fetcher).toHaveBeenCalledWith("/api/v1/security-admin/local-test-users", expect.objectContaining({ method: "POST", credentials: "include", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-1", "X-ISAS-Context": "context-1" }) }));
     expect(fetcher.mock.calls[0]?.[1]?.headers).not.toHaveProperty("Authorization");
   });

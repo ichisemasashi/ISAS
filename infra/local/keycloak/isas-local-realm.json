@@ -4,6 +4,8 @@
   "displayName": "ISAS local-integration",
   "sslRequired": "external",
   "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": false,
   "rememberMe": false,
   "bruteForceProtected": true,

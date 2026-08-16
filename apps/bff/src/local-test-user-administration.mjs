@@ -4,15 +4,18 @@ const LOCAL_TENANT_ID = "20000000-0000-4000-8000-000000000001";
 const LOCAL_FIELD_GROUP_ID = "30000000-0000-4000-8000-000000000001";
 const LOCAL_ISSUER = "https://isas.localhost:8443/oidc/realms/isas-local";
 const ALLOWED_ROLES = new Set(["worker", "field_supervisor", "organization_admin", "group_admin", "contractor"]);
+const MFA_ROLES = new Set(["organization_admin", "group_admin"]);
 
 function validate(input) {
   const username = typeof input?.username === "string" ? input.username.trim() : "";
+  const email = typeof input?.email === "string" ? input.email.trim().toLowerCase() : "";
   const displayName = typeof input?.displayName === "string" ? input.displayName.trim() : "";
   const roleKey = typeof input?.roleKey === "string" ? input.roleKey : "";
   if (!/^[a-z][a-z0-9._-]{2,63}$/.test(username) || username === "local-operator") throw new TypeError("invalid local username");
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || /[\u0000-\u001f\u007f]/.test(email)) throw new TypeError("invalid email address");
   if (!displayName || displayName.length > 200 || /[\u0000-\u001f\u007f]/.test(displayName)) throw new TypeError("invalid display name");
   if (!ALLOWED_ROLES.has(roleKey)) throw new TypeError("invalid local role");
-  return { username, displayName, roleKey };
+  return { username, email, displayName, roleKey };
 }
 
 async function responseJson(response, label) {
@@ -41,13 +44,17 @@ export function createLocalTestUserAdministration({ pool, issuer, adminUsername,
       });
       const existing = await responseJson(await admin(`/users?username=${encodeURIComponent(profile.username)}&exact=true`), "find local test user");
       if (existing.length) throw Object.assign(new Error("local username already exists"), { code: "username_conflict" });
+      const existingEmail = await responseJson(await admin(`/users?email=${encodeURIComponent(profile.email)}&exact=true`), "find local test user email");
+      if (existingEmail.length) throw Object.assign(new Error("local email already exists"), { code: "email_conflict" });
+
+      const requiredActions = MFA_ROLES.has(profile.roleKey) ? ["UPDATE_PASSWORD", "CONFIGURE_TOTP"] : ["UPDATE_PASSWORD"];
 
       await responseJson(await admin("/partialImport", { method: "POST", body: JSON.stringify({
         ifResourceExists: "FAIL",
         users: [{ id: userId, username: profile.username, enabled: true,
-          email: `${profile.username}@invalid.example`, emailVerified: true,
+          email: profile.email, emailVerified: true,
           firstName: profile.displayName, lastName: "Test",
-          requiredActions: ["UPDATE_PASSWORD", "CONFIGURE_TOTP"],
+          requiredActions,
           credentials: [{ type: "password", value: temporaryPassword, temporary: true }],
         }],
       }) }), "create local test user");
@@ -63,8 +70,8 @@ export function createLocalTestUserAdministration({ pool, issuer, adminUsername,
         throw error;
       }
 
-      return { userId, username: profile.username, displayName: profile.displayName, roleKey: profile.roleKey,
-        fieldGroupIds: [LOCAL_FIELD_GROUP_ID], temporaryPassword, requiredActions: ["UPDATE_PASSWORD", "CONFIGURE_TOTP"], status: "ready_for_first_login" };
+      return { userId, username: profile.username, email: profile.email, displayName: profile.displayName, roleKey: profile.roleKey,
+        fieldGroupIds: [LOCAL_FIELD_GROUP_ID], temporaryPassword, requiredActions, status: "ready_for_first_login" };
     },
   });
 }

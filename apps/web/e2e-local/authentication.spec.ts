@@ -118,7 +118,7 @@ test("authorization code PKCE login requires TOTP and step-up preserves same sub
     const securityResponse = await fetch("/api/v1/security-admin", { credentials: "include", cache: "no-store", headers: { "X-ISAS-Context": context.contextId } });
     const duplicateResponse = await fetch("/api/v1/security-admin/local-test-users", { method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, "X-ISAS-Context": context.contextId },
-      body: JSON.stringify({ username: "test-worker", displayName: "重複確認", roleKey: "worker" }) });
+      body: JSON.stringify({ username: "test-worker", email: "duplicate@example.test", displayName: "重複確認", roleKey: "worker" }) });
     return { security: { status: securityResponse.status, body: await securityResponse.json() },
       duplicate: { status: duplicateResponse.status, body: await duplicateResponse.json() } };
   }, { csrfToken: steppedUp.csrfToken, tenantId: steppedUp.tenants[0].id });

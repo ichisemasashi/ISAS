@@ -48,17 +48,18 @@ test("runs the step-up protected attachment reconciliation from the administrato
   expect(setNotice).toHaveBeenCalledWith(expect.stringContaining("孤立候補 1"));
 });
 
-test("registers a local test user and shows the one-time password", async () => {
-  const provisionLocalTestUser = vi.fn(async () => ({ userId: "33333333-3333-4333-8333-333333333333", username: "web-worker", displayName: "Web作業者", roleKey: "worker", fieldGroupIds: ["field-group-1"], temporaryPassword: "Temporary!Password9", requiredActions: ["UPDATE_PASSWORD", "CONFIGURE_TOTP"], status: "ready_for_first_login" as const }));
+test("registers a password-only local worker with email login and shows the one-time password", async () => {
+  const provisionLocalTestUser = vi.fn(async () => ({ userId: "33333333-3333-4333-8333-333333333333", username: "web-worker", email: "worker@example.test", displayName: "Web作業者", roleKey: "worker", fieldGroupIds: ["field-group-1"], temporaryPassword: "Temporary!Password9", requiredActions: ["UPDATE_PASSWORD"], status: "ready_for_first_login" as const }));
   const api = { getSecurityAdministration: vi.fn(async () => ({ ...snapshot, localTestUserRegistration: true, changeRequests: [] })), getPesticideMasterReviews: vi.fn(async () => ({ reviews: [] })), provisionLocalTestUser } as unknown as MvpGateway;
   render(<SecurityAdministrationPanel api={api} contextId="context-1" csrfToken="csrf-1" actorUserId={actor} capabilities={["security:manage"]} online setNotice={vi.fn()}/>);
   const user = userEvent.setup();
   await user.type(await screen.findByLabelText("ログインID"), "web-worker");
+  await user.type(screen.getByLabelText("メールアドレス"), "worker@example.test");
   await user.type(screen.getAllByLabelText("表示名")[0], "Web作業者");
   await user.click(screen.getByRole("button", { name: "テスト利用者を登録" }));
-  await waitFor(() => expect(provisionLocalTestUser).toHaveBeenCalledWith("context-1", "csrf-1", { username: "web-worker", displayName: "Web作業者", roleKey: "worker" }));
+  await waitFor(() => expect(provisionLocalTestUser).toHaveBeenCalledWith("context-1", "csrf-1", { username: "web-worker", email: "worker@example.test", displayName: "Web作業者", roleKey: "worker" }));
   expect(screen.getByText("Temporary!Password9")).toBeInTheDocument();
-  expect(screen.getByText(/この画面を閉じると仮パスワードは再表示できません/)).toBeInTheDocument();
+  expect(screen.getByText(/メールアドレスまたはユーザー名とパスワード/)).toBeInTheDocument();
 });
 
 test("offers MFA step-up when the administrator session is no longer recent", async () => {

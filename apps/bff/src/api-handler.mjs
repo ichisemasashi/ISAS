@@ -560,6 +560,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
       if (error instanceof RangeError) return problem(413, "request_too_large", "Request too large", requestId);
       if (error?.code === "scope_revoked") return problem(409, "scope_revoked", "Scope was revoked", requestId, undefined, { purgeScope: error.scope });
       if (error?.code === "username_conflict") return problem(409, "username_conflict", "Username already exists", requestId);
+      if (error?.code === "email_conflict") return problem(409, "email_conflict", "Email address already exists", requestId);
       if (error?.code === "invalid_range") return problem(416, "invalid_range", "A valid byte range is required", requestId);
       if (error?.code === "offline_tileset_changed") return problem(409, "offline_tileset_changed", "Offline tileset changed", requestId);
       if (error?.code === "forbidden") return problem(403, "forbidden", "Forbidden", requestId);

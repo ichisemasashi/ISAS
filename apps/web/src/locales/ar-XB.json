@@ -602,6 +602,7 @@
   "securityadministrationpanel.local.title": "اختبار Mac local test user",
   "securityadministrationpanel.local.boundary": "اختبار local-integration only; not production registration.",
   "securityadministrationpanel.local.username": "اختبار Login ID",
+  "securityadministrationpanel.local.email": "اختبار Email address",
   "securityadministrationpanel.local.display_name": "اختبار Display name",
   "securityadministrationpanel.local.role": "اختبار Role",
   "securityadministrationpanel.local.submit": "اختبار Register test user",
@@ -609,7 +610,8 @@
   "securityadministrationpanel.local.failed": "اختبار Test user registration failed.",
   "securityadministrationpanel.local.once": "اختبار First-login details",
   "securityadministrationpanel.local.temporary_password": "اختبار Temporary password",
-  "securityadministrationpanel.local.first_login": "اختبار Password is shown once; change it and register TOTP at first login.",
+  "securityadministrationpanel.local.first_login_password": "اختبار Password is shown once; change it at first login, then use email or username and password.",
+  "securityadministrationpanel.local.first_login_admin": "اختبار Administrative role: change password and register TOTP at first login.",
   "securityadministrationpanel.local.close": "اختبار Close details",
   "securityadministrationpanel.local.step_up_required": "اختبار MFA reauthentication is required.",
   "securityadministrationpanel.local.step_up": "اختبار Reauthenticate with MFA"

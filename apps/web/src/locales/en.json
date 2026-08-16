@@ -602,6 +602,7 @@
   "securityadministrationpanel.local.title": "Mac local test user",
   "securityadministrationpanel.local.boundary": "Available only in local-integration. It does not replace two-person production registration.",
   "securityadministrationpanel.local.username": "Login ID",
+  "securityadministrationpanel.local.email": "Email address",
   "securityadministrationpanel.local.display_name": "Display name",
   "securityadministrationpanel.local.role": "Role",
   "securityadministrationpanel.local.submit": "Register test user",
@@ -609,7 +610,8 @@
   "securityadministrationpanel.local.failed": "Could not register the test user.",
   "securityadministrationpanel.local.once": "First-login details (shown once)",
   "securityadministrationpanel.local.temporary_password": "Temporary password",
-  "securityadministrationpanel.local.first_login": "The temporary password cannot be shown again after closing this panel. The user must change it and register TOTP at first login.",
+  "securityadministrationpanel.local.first_login_password": "The temporary password cannot be shown again after closing this panel. Change it at first login; subsequent sign-in accepts email or username and password.",
+  "securityadministrationpanel.local.first_login_admin": "The temporary password cannot be shown again after closing this panel. This administrative role must change it and register TOTP at first login.",
   "securityadministrationpanel.local.close": "Close details",
   "securityadministrationpanel.local.step_up_required": "User administration requires MFA reauthentication within the last 10 minutes.",
   "securityadministrationpanel.local.step_up": "Reauthenticate with MFA"

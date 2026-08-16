@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -10,38 +9,15 @@ function credentials() {
     const separator = line.indexOf("=");
     if (separator > 0) values[line.slice(0, separator)] = line.slice(separator + 1);
   }
-  for (const key of ["USERNAME", "PASSWORD", "TOTP_SECRET"]) if (!values[key]) throw new Error(`test-worker credential is missing ${key}`);
+  for (const key of ["USERNAME", "PASSWORD"]) if (!values[key]) throw new Error(`test-worker credential is missing ${key}`);
   return values;
 }
 
-function decodeBase32(value: string) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = "";
-  for (const character of value.replace(/=+$/, "").toUpperCase()) {
-    const index = alphabet.indexOf(character);
-    if (index < 0) throw new Error("invalid test-worker TOTP secret");
-    bits += index.toString(2).padStart(5, "0");
-  }
-  const bytes = [];
-  for (let offset = 0; offset + 8 <= bits.length; offset += 8) bytes.push(Number.parseInt(bits.slice(offset, offset + 8), 2));
-  return Buffer.from(bytes);
-}
-
-function totp(secret: string) {
-  const message = Buffer.alloc(8);
-  message.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
-  const digest = createHmac("sha1", decodeBase32(secret)).update(message).digest();
-  const offset = digest[digest.length - 1] & 0x0f;
-  return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, "0");
-}
-
-test("registered test worker authenticates with MFA and receives only assigned scope", async ({ page }) => {
+test("registered non-administrator signs in with email and password only and receives assigned scope", async ({ page }) => {
   const user = credentials();
   await page.goto("/api/bff/login?return_to=%2F");
-  await page.locator("#username").fill(user.USERNAME);
+  await page.locator("#username").fill(`${user.USERNAME}@invalid.example`);
   await page.locator("#password").fill(user.PASSWORD);
-  await page.locator("#kc-login").click();
-  await page.locator("#otp").fill(totp(user.TOTP_SECRET));
   await page.locator("#kc-login").click();
   await page.waitForURL("https://isas.localhost:8443/");
 
@@ -63,7 +39,7 @@ test("registered test worker authenticates with MFA and receives only assigned s
   });
 
   expect(result.sessionStatus).toBe(200);
-  expect(result.session.user.authenticationLevel).toBe("mfa");
+  expect(result.session.user.authenticationLevel).toBe("single-factor");
   expect(result.contextStatus).toBe(201);
   expect(result.context.capabilities).toEqual(expect.arrayContaining(["journal:write", "pesticide:write", "inventory:write"]));
   expect(result.context.capabilities).not.toContain("instruction:manage");
