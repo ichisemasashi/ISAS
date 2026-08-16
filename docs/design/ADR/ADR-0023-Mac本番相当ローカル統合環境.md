@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ） v1**（敵対的レビュー14件＝High 3／Medium 9／Low 2を全件処置。関連ADR 6本への波及を含め、残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0023.md)） |
+| ステータス | **採用（クローズ） v2**（v1の構成判断を維持し、技術スパイクでPgBouncerをsecurity修正済み1.25.2へ更新。敵対的レビュー14件を全件処置し、残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0023.md)／[技術スパイク](../Mac本番相当ローカル環境_技術スパイク.md)） |
 | 日付 | 2026-08-16 |
 | 由来 | [要求仕様書 v1.1 §5.6](../../農業営農支援システム_要求仕様書.md#56-mac本番相当ローカル統合環境) |
 | 関連 | [ADR-0004 DB](ADR-0004-DB-PostgreSQL-PostGIS.md)、[ADR-0009 認証](ADR-0009-認証-セッション-MFA.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md)、[ADR-0019 インフラ・運用](ADR-0019-インフラ・運用.md)、[ADR-0020 監視・SLO](ADR-0020-監視・SLO.md)、[ADR-0021 テスト・リリース](ADR-0021-テスト・リリース方式.md)、[ADR-0022 配布ライセンス](ADR-0022-配布ライセンス.md)、[責任境界設計](../Mac本番相当ローカル環境_責任境界設計.md) |
@@ -41,7 +41,7 @@
 | BFF | Node.js 22系の既存Production BFF runtime＋local adapter | graceful shutdown、body／timeout／drain、health、AuthContext、RLS、同期domainをproductionと共有する |
 | OIDC／MFA | [Keycloak](https://www.keycloak.org/docs/latest/server_admin/)のサポート対象releaseをdigest固定 | authorization code＋PKCE、issuer／audience／nonce、TOTP／WebAuthn、step-up、logout／back-channel logoutを実IdPで検証する。realmはversion管理し、test userのsecret値は生成する |
 | 権威DB | PostgreSQL 16＋PostGIS 3.4系 | production採用majorと揃え、正式migration、RLS／FORCE、owner、trigger、`security_invoker`、GISを同じSQLで検証する |
-| DB pool | PgBouncer 1.24系を**5独立instance** | P0／Auth-P1／P1／P2／Opsごとにcontainer、port、DB role、connection上限、timeoutを分ける。単一processの別portは障害・上限分離を偽装するため不採用 |
+| DB pool | PgBouncer **1.25.2**を5独立instance | P0／Auth-P1／P1／P2／Opsごとにcontainer、port、DB role、connection上限、timeoutを分ける。1.25.2未満は既知security修正を欠くため禁止し、単一processの別portは障害・上限分離を偽装するため不採用 |
 | Session／context | `local_support` schemaのPostgreSQL永続store | encrypted token、opaque session、AuthContext、TTL、`authorization_version`、logout tombstoneを再起動後も保持。DynamoDBのAPIではなくBFF store contractを検証する |
 | 失効queue／DLQ | `local_support` schemaのPostgreSQL durable queue | `FOR UPDATE SKIP LOCKED`相当、attempt、visibility時刻、idempotency key、DLQ／quarantine、最古年齢を持つ。SQS固有IAM／可用性はstagingへ残す |
 | Object | local adapter管理のprivate filesystem volume＋DB metadata | content hash、tenant／用途binding、AES-256-GCM、MIME／signature、size、短期BFF URL、pending→accepted、孤立照合を検証。S3互換を装わずS3 contractはstagingへ残す |

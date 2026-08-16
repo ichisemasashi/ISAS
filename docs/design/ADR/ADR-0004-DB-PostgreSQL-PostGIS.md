@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（再クローズ） v10**（v9のDB決定を維持し、ADR-0023の`local-integration`へPG16＋PostGIS 3.4と5独立PgBouncer、正式migration、support schema分離を波及。波及レビュー残存High 0／Medium 0。[レビュー記録](レビュー記録_ADR-0004.md)／[ADR-0023レビュー](レビュー記録_ADR-0023.md)／[PG検証](../PostgreSQL実挙動検証記録.md)） |
+| ステータス | **採用（再クローズ） v11**（v10のDB決定を維持し、技術スパイクでPgBouncerをsecurity修正済み1.25.2へ更新。波及レビュー残存High 0／Medium 0。[レビュー記録](レビュー記録_ADR-0004.md)／[ADR-0023レビュー](レビュー記録_ADR-0023.md)／[技術スパイク](../Mac本番相当ローカル環境_技術スパイク.md)） |
 | 由来 | 確定済み（要求仕様7章の方向性をADRとして正式記録） |
 | 関連 | 要求仕様 [7章／5.2](../../農業営農支援システム_要求仕様書.md)、[ADR-0001 RLS](ADR-0001-マルチテナント分離-行レベル-RLS.md)、[ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0003 データライフサイクル](ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)、[ADR-0007 オフライン同期]、[ADR-0010 地図/GIS]、[ADR-0023 Mac local integration](ADR-0023-Mac本番相当ローカル統合環境.md) |
 
@@ -58,7 +58,7 @@
     - **代償**：チェーン数とアンカ署名数が `(テナント数 × 期間数)` に増える。**署名のバッチ化・保管・検証手順は ADR-0017**、**並行性の実測は S5** で扱う。
     - **配備モデルの決定がストレージ設計を拘束する例**であり、ADR-0002（シャード化）→ ADR-0004（チェーン単位）という依存を明記する。
 - **1DB＝1国（ADR-0002）**：各国システムがそれぞれPostgreSQLインスタンス（プライマリ＋レプリカ）を持つ。周辺（バックアップ・レプリカ）も対象国内（ADR-0002 A2-H1）。
-- **接続**：トランザクションプーリングを用いる（ADR-0001 A1b-L1のSET LOCAL前提）。日本初期配備はPgBouncer 1.24.xを採用し、P0／Auth-P1／P1／P2／Opsを別service・role・接続予算へ分ける。
+- **接続**：トランザクションプーリングを用いる（ADR-0001 A1b-L1のSET LOCAL前提）。日本初期配備はPgBouncer 1.25.2以上のreview済み固定版を採用し、P0／Auth-P1／P1／P2／Opsを別service・role・接続予算へ分ける。
 
 ### 2.5 【v7】最低要求 PostgreSQL バージョン（PG-H4／PG-L4／PG検証の所見）
 
@@ -75,7 +75,7 @@
   | パーティション親への BEFORE ROW トリガ | PG13+ | 「BEFORE はルーティング後」という結論の前提 |
   | パーティション表への UNIQUE 索引（キー包含） | PG11+ | 冪等一意の前提 |
   | `gen_random_uuid()` 組込み | PG13+ | `DEFAULT` に使用 |
-  | PgBouncer のトランザクションプーリング＋prepared statements | **PgBouncer 1.21+** | 日本初期配備は1.24.x。ただし正しさをprepared statement対応へ依存させず、transaction終了時のGUC消去と接続再利用を統合試験する |
+  | PgBouncer のトランザクションプーリング＋prepared statements | **PgBouncer 1.21+** | 日本初期配備はsecurity修正済み1.25.2以上をdigest固定。ただし正しさをprepared statement対応へ依存させず、transaction終了時のGUC消去と接続再利用を統合試験する |
   | PostGIS 関数の volatility／leakproof | PostGIS 版依存 | 生成列（`ST_Area(geography)`）／`gist(tenant_id, geom)` の索引利用（PG-M2） |
 
 - **アップグレード時の注意**：**生成列・CHECK・索引が PostGIS 関数に依存する**ため、PostGIS のメジャーアップグレードで依存関係が問題になり得る（要確認）。**アップグレード手順の検証を ADR-0019 の運用項目に含める。**
@@ -83,7 +83,7 @@
 ### 2.6 【v10】Mac本番相当ローカル統合環境
 
 - `local-integration`はproduction採用majorと同じPostgreSQL 16＋PostGIS 3.4系を使い、empty DBへ正式migrationを適用する。spike用DDLや別schemaだけでPASSにしない。
-- P0／Auth-P1／P1／P2／OpsはPgBouncer 1.24系の5独立instance、別login role、別接続上限で構成する。単一Mac上の論理分離であり、failure domain分離とは表示しない。
+- P0／Auth-P1／P1／P2／OpsはPgBouncer 1.25.2以上の5独立instance、別login role、別接続上限で構成する。単一Mac上の論理分離であり、failure domain分離とは表示しない。
 - local session/context／失効queueは`local_support` schemaへ置くが、業務schemaとowner、role、migration履歴を分離し、business roleの任意queryを許さない。
 - S1／S2／S5／S7と、全poolでの`SET LOCAL`消去、ROLLBACK失敗時の接続破棄をlocal acceptanceへ含める。単一Macの性能値をproduction capacity証跡へ転用しない。
 
