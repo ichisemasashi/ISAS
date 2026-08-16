@@ -49,9 +49,11 @@ ops/local/local-status.sh
 docker compose --project-directory . --env-file .local/secrets/runtime.env -f compose.local.yml logs --tail=100 database keycloak bff caddy
 ```
 
-## ローカル利用者でログイン
+## 管理者アカウントでログイン
 
-ブラウザで`https://isas.localhost:8443`を開き、次を使用する。
+`local-operator`は`local-integration`専用の管理者であり、AWS staging／Productionの管理者ではない。まず`ops/local/local-status.sh`で`database`、`keycloak`、`bff`、`web`、`caddy`が`healthy`であることを確認し、ブラウザで`https://isas.localhost:8443`を開いて「ログイン」を押す。
+
+Keycloak画面では次を使用する。
 
 - 利用者名：`local-operator`
 - password：`.local/secrets/runtime.env`の`LOCAL_OPERATOR_PASSWORD`
@@ -70,6 +72,10 @@ sed -n 's/^LOCAL_OPERATOR_TOTP_SECRET=//p' .local/secrets/runtime.env
 ```
 
 TOTP seedと表示された6桁codeはpasswordと同じ秘密情報である。画面収録、shell履歴への転記、ticket添付を禁止し、共有認証器へ登録しない。
+
+Keycloakで利用者名とpasswordを送信し、次画面へ現在の6桁TOTP codeを入力する。ISASへ戻ったら表示名`Local Operator`とローカル実証tenantを確認する。「MFAで再認証」が表示された管理操作は、同じpasswordと新しいTOTP codeで再認証してから10分以内に完了する。作業終了時は画面の「ログアウト」を押す。
+
+証明書警告は`mkcert -install`後にbrowserを再起動する。TOTPが拒否された場合はMacの時刻自動設定を確認し、次に表示されたcodeを使う。502の場合は`ops/local/local-status.sh`で全serviceを確認してから`ops/local/local-restart.sh`を実行する。
 
 この利用者とsynthetic tenantはlocal migrationでのみ作成される。本番の利用者・tenant・credentialを流用しない。
 
