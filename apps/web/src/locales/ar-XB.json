@@ -598,5 +598,19 @@
   "ut_fixture.l84.31": "اختبار UT fixtureでは管理者操作を行いません",
   "ut_fixture.l94.32": "اختبار 別タブのISASを閉じてからリセットしてください",
   "app.duration_minutes": "اختبار {0} min",
-  "datamigrationpanel.unknown_key": "اختبار キー不明"
+  "datamigrationpanel.unknown_key": "اختبار キー不明",
+  "securityadministrationpanel.local.title": "اختبار Mac local test user",
+  "securityadministrationpanel.local.boundary": "اختبار local-integration only; not production registration.",
+  "securityadministrationpanel.local.username": "اختبار Login ID",
+  "securityadministrationpanel.local.display_name": "اختبار Display name",
+  "securityadministrationpanel.local.role": "اختبار Role",
+  "securityadministrationpanel.local.submit": "اختبار Register test user",
+  "securityadministrationpanel.local.created": "اختبار Test user registered.",
+  "securityadministrationpanel.local.failed": "اختبار Test user registration failed.",
+  "securityadministrationpanel.local.once": "اختبار First-login details",
+  "securityadministrationpanel.local.temporary_password": "اختبار Temporary password",
+  "securityadministrationpanel.local.first_login": "اختبار Password is shown once; change it and register TOTP at first login.",
+  "securityadministrationpanel.local.close": "اختبار Close details",
+  "securityadministrationpanel.local.step_up_required": "اختبار MFA reauthentication is required.",
+  "securityadministrationpanel.local.step_up": "اختبار Reauthenticate with MFA"
 }

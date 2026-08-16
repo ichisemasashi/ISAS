@@ -598,5 +598,19 @@
   "ut_fixture.l84.31": "UT fixtureでは管理者操作を行いません",
   "ut_fixture.l94.32": "別タブのISASを閉じてからリセットしてください",
   "app.duration_minutes": "{0} min",
-  "datamigrationpanel.unknown_key": "キー不明"
+  "datamigrationpanel.unknown_key": "キー不明",
+  "securityadministrationpanel.local.title": "Mac local test user",
+  "securityadministrationpanel.local.boundary": "Available only in local-integration. It does not replace two-person production registration.",
+  "securityadministrationpanel.local.username": "Login ID",
+  "securityadministrationpanel.local.display_name": "Display name",
+  "securityadministrationpanel.local.role": "Role",
+  "securityadministrationpanel.local.submit": "Register test user",
+  "securityadministrationpanel.local.created": "Test user registered. Transfer the temporary password securely.",
+  "securityadministrationpanel.local.failed": "Could not register the test user.",
+  "securityadministrationpanel.local.once": "First-login details (shown once)",
+  "securityadministrationpanel.local.temporary_password": "Temporary password",
+  "securityadministrationpanel.local.first_login": "The temporary password cannot be shown again after closing this panel. The user must change it and register TOTP at first login.",
+  "securityadministrationpanel.local.close": "Close details",
+  "securityadministrationpanel.local.step_up_required": "User administration requires MFA reauthentication within the last 10 minutes.",
+  "securityadministrationpanel.local.step_up": "Reauthenticate with MFA"
 }

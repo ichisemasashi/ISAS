@@ -75,6 +75,23 @@ TOTP seedと表示された6桁codeはpasswordと同じ秘密情報である。�
 
 ## テスト利用者の登録
 
+### Web画面から登録する
+
+`local-operator`でログインし、対象tenantを選択してから次の順に操作する。
+
+1. 「その他」→「管理者向けセキュリティ操作」を開く。
+2. 「MFAで再認証」が表示された場合は押し、passwordとTOTPで再認証する。再認証後10分以内に以降を完了する。
+3. 「Macローカル・テスト利用者の登録」で、英小文字から始まるログインID、表示名、roleを入力する。
+4. 「テスト利用者を登録」を押す。
+5. 一度だけ表示される仮passwordを利用者へ安全に伝達し、画面を閉じる。スクリーンショット、ticket、chat、Gitへ保存しない。
+6. 新しいprivate browser windowで新規利用者としてログインする。初回ログイン時に仮passwordを変更し、本人のTOTP認証器を登録する。
+
+Web登録はKeycloakのcredentialと認可DBのuser、membership、実証圃場scopeを一括作成する。ログインIDが既に存在する場合は登録せず競合を表示する。画面が表示されない場合は`local-integration` profileでないか、`security:manage`がない。403の場合は「MFAで再認証」からやり直す。
+
+この即時登録はMacローカル環境のsynthetic test user専用である。Production／AWS stagingでは公開されず、本番利用者は二人承認workflowで登録する。
+
+### Commandから既定利用者を登録する
+
 起動済みの環境へ、既定の`test-worker`を作業者として登録する。
 
 ```bash

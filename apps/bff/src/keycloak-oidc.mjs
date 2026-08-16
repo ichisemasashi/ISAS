@@ -70,7 +70,7 @@ export function createKeycloakOidc({ issuer, clientId, clientSecret, crypto, fet
         issuer,
         subject: claims.sub,
         authenticationLevel,
-        authenticatedAt: Number(claims.auth_time || claims.iat) * 1000,
+        authenticatedAt: new Date(Number(claims.auth_time || claims.iat) * 1000).toISOString(),
         tokenSetCiphertext: crypto.sealString(tokenSet, "oidc-token-set", "keycloak")
       };
     },

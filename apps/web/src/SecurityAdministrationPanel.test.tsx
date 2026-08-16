@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
-import type { MvpGateway, SecuritySnapshot } from "./api";
+import { ApiProblem, type MvpGateway, type SecuritySnapshot } from "./api";
 import { SecurityAdministrationPanel } from "./SecurityAdministrationPanel";
 
 const actor = "22222222-2222-7222-8222-222222222222";
@@ -46,4 +46,23 @@ test("runs the step-up protected attachment reconciliation from the administrato
   await userEvent.click(await screen.findByRole("button", { name: "写真ストレージを照合" }));
   await waitFor(() => expect(reconcileAttachmentStorage).toHaveBeenCalledWith("context-1", "csrf-1"));
   expect(setNotice).toHaveBeenCalledWith(expect.stringContaining("孤立候補 1"));
+});
+
+test("registers a local test user and shows the one-time password", async () => {
+  const provisionLocalTestUser = vi.fn(async () => ({ userId: "33333333-3333-4333-8333-333333333333", username: "web-worker", displayName: "Web作業者", roleKey: "worker", fieldGroupIds: ["field-group-1"], temporaryPassword: "Temporary!Password9", requiredActions: ["UPDATE_PASSWORD", "CONFIGURE_TOTP"], status: "ready_for_first_login" as const }));
+  const api = { getSecurityAdministration: vi.fn(async () => ({ ...snapshot, localTestUserRegistration: true, changeRequests: [] })), getPesticideMasterReviews: vi.fn(async () => ({ reviews: [] })), provisionLocalTestUser } as unknown as MvpGateway;
+  render(<SecurityAdministrationPanel api={api} contextId="context-1" csrfToken="csrf-1" actorUserId={actor} capabilities={["security:manage"]} online setNotice={vi.fn()}/>);
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText("ログインID"), "web-worker");
+  await user.type(screen.getAllByLabelText("表示名")[0], "Web作業者");
+  await user.click(screen.getByRole("button", { name: "テスト利用者を登録" }));
+  await waitFor(() => expect(provisionLocalTestUser).toHaveBeenCalledWith("context-1", "csrf-1", { username: "web-worker", displayName: "Web作業者", roleKey: "worker" }));
+  expect(screen.getByText("Temporary!Password9")).toBeInTheDocument();
+  expect(screen.getByText(/この画面を閉じると仮パスワードは再表示できません/)).toBeInTheDocument();
+});
+
+test("offers MFA step-up when the administrator session is no longer recent", async () => {
+  const api = { getSecurityAdministration: vi.fn(async () => { throw new ApiProblem(403, "step_up_required", { stepUpUrl: "/api/bff/login?step_up=1&return_to=%2F" }); }), getPesticideMasterReviews: vi.fn(async () => ({ reviews: [] })) } as unknown as MvpGateway;
+  render(<SecurityAdministrationPanel api={api} contextId="context-1" csrfToken="csrf-1" actorUserId={actor} capabilities={["security:manage"]} online setNotice={vi.fn()}/>);
+  expect(await screen.findByRole("link", { name: "MFAで再認証" })).toHaveAttribute("href", "/api/bff/login?step_up=1&return_to=%2F");
 });

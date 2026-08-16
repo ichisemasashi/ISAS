@@ -137,6 +137,7 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
           expectedUserId: current?.session.user.id,
           previousSessionHash: current?.sessionHash,
           requiredAuthenticationLevel: stepUp ? "mfa" : "single-factor",
+          freshAuthenticationRequested: stepUp,
           expiresAt: clock() + LOGIN_TTL_MS,
         });
         const location = await identityProvider.authorizationUrl({
@@ -173,7 +174,11 @@ export function createBffHandler({ origin, redirectUri, stores, identityProvider
           await stores.sessions.put(sessionHash, {
             user,
             authenticationLevel: authenticationLevel(identity.authenticationLevel),
-            authenticatedAt: identity.authenticatedAt,
+            // Some IdPs retain the original SSO auth_time even after honoring
+            // prompt=login/max_age=0. A successful, nonce-bound MFA step-up is
+            // fresh at this callback boundary; ordinary logins keep the
+            // provider-issued authentication time.
+            authenticatedAt: attempt.freshAuthenticationRequested ? new Date(now).toISOString() : identity.authenticatedAt,
             csrfToken: opaque(),
             tokenSetCiphertext: identity.tokenSetCiphertext,
             createdAt: now,

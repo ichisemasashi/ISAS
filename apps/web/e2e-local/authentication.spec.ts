@@ -84,12 +84,13 @@ test("authorization code PKCE login requires TOTP and step-up preserves same sub
     const journal = await get(`/api/v1/journal-bootstrap?instructionId=${encodeURIComponent(instruction.id)}`);
     const pesticide = await get(`/api/v1/pesticide-bootstrap?fieldId=${encodeURIComponent(field.id)}`);
     const inventory = await get("/api/v1/inventory");
+    const security = await get("/api/v1/security-admin");
     const progressResponse = await fetch(`/api/v1/work-instructions/${encodeURIComponent(instruction.id)}/progress`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, "X-ISAS-Context": requestContext.contextId },
       body: JSON.stringify({ eventUuid: "49000000-0000-4000-8000-000000000001", progressPercent: 10, expectedVersion: instruction.version, note: "local integration E2E", occurredAt: new Date().toISOString() }),
     });
-    return { contextStatus: contextResponse.status, requestContext, today, fields, instructions, journal, pesticide, inventory,
+    return { contextStatus: contextResponse.status, requestContext, today, fields, instructions, journal, pesticide, inventory, security,
       progress: { status: progressResponse.status, body: await progressResponse.json() } };
   }, { csrfToken: session.body.csrfToken, tenantId: session.body.tenants[0].id });
   expect(business.contextStatus).toBe(201);
@@ -100,6 +101,7 @@ test("authorization code PKCE login requires TOTP and step-up preserves same sub
   expect(business.journal).toMatchObject({ status: 200, body: { templates: [expect.objectContaining({ name: "巡回確認" })] } });
   expect(business.pesticide).toMatchObject({ status: 200, body: { chemicals: [expect.objectContaining({ name: "ローカル確認剤" })] } });
   expect(business.inventory).toMatchObject({ status: 200, body: { balances: [expect.objectContaining({ name: "ローカル確認剤", quantity: 25 })] } });
+  expect(business.security).toMatchObject({ status: 200, body: { localTestUserRegistration: true } });
   expect(business.progress).toMatchObject({ status: 200, body: { progressPercent: 10 } });
   await expect(page.getByText("ローカル実証圃場").first()).toBeVisible();
 
@@ -108,6 +110,20 @@ test("authorization code PKCE login requires TOTP and step-up preserves same sub
   const steppedUp = await page.evaluate(async () => (await fetch("/api/bff/session", { cache: "no-store" })).json());
   expect(steppedUp.user.id).toBe(session.body.user.id);
   expect(steppedUp.user.authenticationLevel).toBe("mfa");
+
+  const privileged = await page.evaluate(async ({ csrfToken, tenantId }) => {
+    const contextResponse = await fetch("/api/bff/contexts", { method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }, body: JSON.stringify({ tenantId }) });
+    const context = await contextResponse.json();
+    const securityResponse = await fetch("/api/v1/security-admin", { credentials: "include", cache: "no-store", headers: { "X-ISAS-Context": context.contextId } });
+    const duplicateResponse = await fetch("/api/v1/security-admin/local-test-users", { method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, "X-ISAS-Context": context.contextId },
+      body: JSON.stringify({ username: "test-worker", displayName: "重複確認", roleKey: "worker" }) });
+    return { security: { status: securityResponse.status, body: await securityResponse.json() },
+      duplicate: { status: duplicateResponse.status, body: await duplicateResponse.json() } };
+  }, { csrfToken: steppedUp.csrfToken, tenantId: steppedUp.tenants[0].id });
+  expect(privileged.security).toMatchObject({ status: 200, body: { localTestUserRegistration: true } });
+  expect(privileged.duplicate).toMatchObject({ status: 409, body: { type: "username_conflict" } });
 
   const logout = await page.evaluate(async (csrfToken) => {
     const response = await fetch("/api/bff/logout", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }, body: "{}" });

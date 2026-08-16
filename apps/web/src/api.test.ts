@@ -35,6 +35,13 @@ describe("MVP REST gateway", () => {
     expect(fetcher).toHaveBeenCalledWith("/api/v1/security-admin/change-requests", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-1", "X-ISAS-Context": "context-1" }) }));
   });
 
+  test("registers a local test user without exposing a bearer token", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ userId: "user-1", username: "web-worker", temporaryPassword: "one-time", status: "ready_for_first_login" }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    await createMvpGateway(fetcher).provisionLocalTestUser!("context-1", "csrf-1", { username: "web-worker", displayName: "Web作業者", roleKey: "worker" });
+    expect(fetcher).toHaveBeenCalledWith("/api/v1/security-admin/local-test-users", expect.objectContaining({ method: "POST", credentials: "include", headers: expect.objectContaining({ "X-CSRF-Token": "csrf-1", "X-ISAS-Context": "context-1" }) }));
+    expect(fetcher.mock.calls[0]?.[1]?.headers).not.toHaveProperty("Authorization");
+  });
+
   test("reconciles private attachment storage with CSRF and AuthContext", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ scanned: 3, taggedOrphans: 1, finalized: 1, quarantined: 0 }), { status: 200, headers: { "Content-Type": "application/json" } }));
     const api = createMvpGateway(fetcher);

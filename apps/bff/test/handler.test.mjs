@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { describe, test } from "node:test";
 import { createBffHandler, createContextResolver } from "../src/handler.mjs";
 import { createMemoryStores } from "../src/memory-stores.mjs";
@@ -6,7 +7,7 @@ import { createMemoryStores } from "../src/memory-stores.mjs";
 const ORIGIN = "https://isas.example";
 const REDIRECT_URI = `${ORIGIN}/api/bff/callback`;
 
-function fixture({ authenticationLevel = "phishing-resistant" } = {}) {
+function fixture({ authenticationLevel = "phishing-resistant", authenticationAgeMs = 0 } = {}) {
   let now = Date.parse("2026-08-14T00:00:00Z");
   const stores = createMemoryStores();
   const calls = { authorize: [], exchange: [], revoke: [] };
@@ -21,7 +22,7 @@ function fixture({ authenticationLevel = "phishing-resistant" } = {}) {
         issuer: "https://idp.example",
         subject: "subject-1",
         authenticationLevel,
-        authenticatedAt: new Date(now).toISOString(),
+        authenticatedAt: new Date(now - authenticationAgeMs).toISOString(),
         tokenSetCiphertext: "encrypted-token-set",
       };
     },
@@ -58,7 +59,7 @@ function fixture({ authenticationLevel = "phishing-resistant" } = {}) {
   };
   const handle = createBffHandler({ origin: ORIGIN, redirectUri: REDIRECT_URI, stores, identityProvider, users, authorization, clock: () => now });
   const resolveContext = createContextResolver({ stores, authorization, clock: () => now });
-  return { handle, resolveContext, calls, advance: (milliseconds) => { now += milliseconds; } };
+  return { handle, resolveContext, stores, calls, now: () => now, advance: (milliseconds) => { now += milliseconds; } };
 }
 
 async function login(fx, returnTo = "/today") {
@@ -114,6 +115,23 @@ describe("BFF OIDC and session boundary", () => {
     assert.equal(callback.status, 302);
     assert.equal(callback.headers.get("Location"), "/exports");
     assert.equal((await fx.handle(new Request(`${ORIGIN}/api/bff/session`, { headers: { Cookie: oldCookie } }))).status, 401);
+  });
+
+  test("records an explicit MFA step-up as fresh when the IdP retains an older SSO auth_time", async () => {
+    const fx = fixture({ authenticationAgeMs: 60 * 60 * 1000 });
+    const oldCookie = await login(fx);
+    const start = await fx.handle(new Request(`${ORIGIN}/api/bff/login?step_up=1&return_to=%2F`, {
+      headers: { Cookie: oldCookie },
+    }));
+    const state = new URL(start.headers.get("Location")).searchParams.get("state");
+    const callback = await fx.handle(new Request(`${REDIRECT_URI}?code=step-up&state=${state}`));
+    const newCookie = callback.headers.get("Set-Cookie").split(";")[0];
+    const rawSessionId = newCookie.split("=")[1];
+    const sessionHash = createHash("sha256").update(rawSessionId).digest("base64url");
+    const stored = await fx.stores.sessions.get(sessionHash);
+
+    assert.equal(callback.status, 302);
+    assert.equal(stored.authenticatedAt, new Date(fx.now()).toISOString());
   });
 
   test("rejects step-up when the identity provider returns only one factor", async () => {

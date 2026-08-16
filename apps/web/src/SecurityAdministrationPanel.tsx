@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { MvpGateway, PesticideMasterReview, PrivacyRequest, SecuritySnapshot } from "./api";
+import { ApiProblem, type LocalTestUserCredential, type MvpGateway, type PesticideMasterReview, type PrivacyRequest, type SecuritySnapshot } from "./api";
 import { tr } from "./i18n";
 
 type Props = { api: MvpGateway; contextId: string; csrfToken: string; actorUserId: string; capabilities: string[]; online: boolean; setNotice: (message: string) => void };
@@ -15,15 +15,20 @@ export function SecurityAdministrationPanel({ api, contextId, csrfToken, actorUs
   const [snapshot, setSnapshot] = useState(emptySnapshot);
   const [reviews, setReviews] = useState<PesticideMasterReview[]>([]);
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+  const [localCredential, setLocalCredential] = useState<LocalTestUserCredential | null>(null);
+  const [stepUpUrl, setStepUpUrl] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const [security, pesticide] = await Promise.all([
       canSecurity || canPrivacy || canBreakGlass ? api.getSecurityAdministration(contextId) : Promise.resolve(emptySnapshot),
       canPesticide ? api.getPesticideMasterReviews(contextId) : Promise.resolve({ reviews: [] }),
     ]);
-    setSnapshot(security); setReviews(pesticide.reviews);
+    setSnapshot(security); setReviews(pesticide.reviews); setStepUpUrl(null);
   }, [api, contextId, canSecurity, canPrivacy, canBreakGlass, canPesticide]);
-  useEffect(() => { if (online) void refresh().catch(() => setNotice(tr("securityadministrationpanel.l25.1"))); }, [online, refresh, setNotice]);
+  useEffect(() => { if (online) void refresh().catch((error) => {
+    if (error instanceof ApiProblem && error.type === "step_up_required" && typeof error.body.stepUpUrl === "string") setStepUpUrl(error.body.stepUpUrl);
+    setNotice(tr("securityadministrationpanel.l25.1"));
+  }); }, [online, refresh, setNotice]);
 
   const requestUserChange = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
@@ -35,6 +40,19 @@ export function SecurityAdministrationPanel({ api, contextId, csrfToken, actorUs
     };
     await api.requestSecurityChange(contextId, csrfToken, { changeType, targetUserId: data.get("targetUserId"), reason: data.get("reason"), ticketRef: data.get("ticketRef"), proposedState });
     form.reset(); await refresh(); setNotice(tr("securityadministrationpanel.l36.2"));
+  };
+
+  const provisionLocalTestUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    if (!api.provisionLocalTestUser) return;
+    try {
+      const credential = await api.provisionLocalTestUser(contextId, csrfToken, {
+        username: String(data.get("username") || ""), displayName: String(data.get("displayName") || ""), roleKey: String(data.get("roleKey") || "worker"),
+      });
+      setLocalCredential(credential); form.reset(); await refresh(); setNotice(tr("securityadministrationpanel.local.created"));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : tr("securityadministrationpanel.local.failed"));
+    }
   };
 
   const requestBreakGlass = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -78,7 +96,8 @@ export function SecurityAdministrationPanel({ api, contextId, csrfToken, actorUs
 
   return <section className="security-admin" aria-labelledby="security-admin-title"><div className="panel-heading"><span className="section-kicker">SECURITY ADMIN</span><h2 id="security-admin-title">{tr("securityadministrationpanel.l78.17")}</h2><p>{tr("securityadministrationpanel.l78.18")}</p></div>
     {!online && <p role="status" className="warning-box">{tr("securityadministrationpanel.l79.19")}</p>}
-    {canSecurity && <section className="admin-subpanel"><h3>{tr("securityadministrationpanel.l80.20")}</h3><form className="record-form compact-form" onSubmit={(event) => void requestUserChange(event)}><div className="form-grid"><label>{tr("securityadministrationpanel.l80.21")}<select name="changeType" defaultValue="user_change"><option value="user_register">{tr("securityadministrationpanel.l80.22")}</option><option value="user_change">{tr("securityadministrationpanel.l80.23")}</option><option value="user_revoke">{tr("securityadministrationpanel.l80.24")}</option></select></label><label>{tr("securityadministrationpanel.l80.25")}<input name="targetUserId" required placeholder="UUID"/></label><label>OIDC issuer<input name="issuer" placeholder={tr("securityadministrationpanel.l80.26")}/></label><label>OIDC subject<input name="subject" placeholder={tr("securityadministrationpanel.l80.27")}/></label><label>{tr("securityadministrationpanel.l80.28")}<input name="displayName"/></label><label>role<select name="roleKey">{snapshot.roles.map((role) => <option key={role.roleKey} value={role.roleKey}>{role.roleLabel} ({role.roleKey})</option>)}</select></label><label>field-group scope<input name="fieldGroupIds" placeholder={tr("securityadministrationpanel.l80.29")}/></label><label>{tr("securityadministrationpanel.l80.30")}<input name="validFrom" type="datetime-local"/></label><label>{tr("securityadministrationpanel.l80.31")}<input name="validUntil" type="datetime-local"/></label><label>ticket<input name="ticketRef" required placeholder="SEC-123"/></label><label className="wide-field">{tr("securityadministrationpanel.l80.32")}<input name="reason" minLength={10} required/></label></div><button className="primary-action" disabled={!online}>{tr("securityadministrationpanel.l80.33")}</button></form>
+    {stepUpUrl && <p role="status" className="warning-box">{tr("securityadministrationpanel.local.step_up_required")} <a className="primary-action" href={stepUpUrl}>{tr("securityadministrationpanel.local.step_up")}</a></p>}
+    {canSecurity && <section className="admin-subpanel"><h3>{tr("securityadministrationpanel.l80.20")}</h3>{snapshot.localTestUserRegistration && api.provisionLocalTestUser && <div className="local-test-user-registration"><h4>{tr("securityadministrationpanel.local.title")}</h4><p className="warning-box">{tr("securityadministrationpanel.local.boundary")}</p><form className="record-form compact-form" onSubmit={(event) => void provisionLocalTestUser(event)}><div className="form-grid"><label>{tr("securityadministrationpanel.local.username")}<input name="username" required pattern="[a-z][a-z0-9._-]{2,63}" placeholder="web-test-worker" autoComplete="off"/></label><label>{tr("securityadministrationpanel.local.display_name")}<input name="displayName" required maxLength={200}/></label><label>{tr("securityadministrationpanel.local.role")}<select name="roleKey" defaultValue="worker">{snapshot.roles.map((role) => <option key={role.roleKey} value={role.roleKey}>{role.roleLabel} ({role.roleKey})</option>)}</select></label></div><button className="primary-action" disabled={!online}>{tr("securityadministrationpanel.local.submit")}</button></form>{localCredential && <div role="status" className="success-box local-credential"><h4>{tr("securityadministrationpanel.local.once")}</h4><dl><dt>{tr("securityadministrationpanel.local.username")}</dt><dd><code>{localCredential.username}</code></dd><dt>{tr("securityadministrationpanel.local.temporary_password")}</dt><dd><code>{localCredential.temporaryPassword}</code></dd></dl><p>{tr("securityadministrationpanel.local.first_login")}</p><button type="button" className="secondary-action" onClick={() => setLocalCredential(null)}>{tr("securityadministrationpanel.local.close")}</button></div>}</div>}<form className="record-form compact-form" onSubmit={(event) => void requestUserChange(event)}><div className="form-grid"><label>{tr("securityadministrationpanel.l80.21")}<select name="changeType" defaultValue="user_change"><option value="user_register">{tr("securityadministrationpanel.l80.22")}</option><option value="user_change">{tr("securityadministrationpanel.l80.23")}</option><option value="user_revoke">{tr("securityadministrationpanel.l80.24")}</option></select></label><label>{tr("securityadministrationpanel.l80.25")}<input name="targetUserId" required placeholder="UUID"/></label><label>OIDC issuer<input name="issuer" placeholder={tr("securityadministrationpanel.l80.26")}/></label><label>OIDC subject<input name="subject" placeholder={tr("securityadministrationpanel.l80.27")}/></label><label>{tr("securityadministrationpanel.l80.28")}<input name="displayName"/></label><label>role<select name="roleKey">{snapshot.roles.map((role) => <option key={role.roleKey} value={role.roleKey}>{role.roleLabel} ({role.roleKey})</option>)}</select></label><label>field-group scope<input name="fieldGroupIds" placeholder={tr("securityadministrationpanel.l80.29")}/></label><label>{tr("securityadministrationpanel.l80.30")}<input name="validFrom" type="datetime-local"/></label><label>{tr("securityadministrationpanel.l80.31")}<input name="validUntil" type="datetime-local"/></label><label>ticket<input name="ticketRef" required placeholder="SEC-123"/></label><label className="wide-field">{tr("securityadministrationpanel.l80.32")}<input name="reason" minLength={10} required/></label></div><button className="primary-action" disabled={!online}>{tr("securityadministrationpanel.l80.33")}</button></form>
       <h4>{tr("securityadministrationpanel.l81.34")}</h4><p>{tr("securityadministrationpanel.l81.35")}</p><button className="secondary-action" disabled={!online} onClick={() => void reconcileAttachments()}>{tr("securityadministrationpanel.l81.36")}</button>
       <h4>{tr("securityadministrationpanel.l82.37")}</h4><div className="admin-table-wrap"><table><thead><tr><th>{tr("securityadministrationpanel.l82.38")}</th><th>role / scope</th><th>{tr("securityadministrationpanel.l82.39")}</th><th>{tr("securityadministrationpanel.l82.40")}</th></tr></thead><tbody>{snapshot.users.map((user) => <tr key={user.userId}><td><strong>{user.displayName}</strong><small>{user.userId}</small></td><td>{user.roleKey}<small>{user.fieldGroupIds.length ? user.fieldGroupIds.join(", ") : tr("securityadministrationpanel.l82.41")}</small></td><td>{user.membershipStatus}<small>{user.validUntil || tr("securityadministrationpanel.l82.42")}</small></td><td>{user.authorizationVersion}</td></tr>)}</tbody></table></div></section>}
     {canBreakGlass && <section className="admin-subpanel"><h3>{tr("securityadministrationpanel.l83.43")}</h3><p>{tr("securityadministrationpanel.l83.44")}</p><form className="record-form compact-form" onSubmit={(event) => void requestBreakGlass(event)}><div className="form-grid"><label>{tr("securityadministrationpanel.l83.45")}<input name="targetUserId" required/></label><label>{tr("securityadministrationpanel.l83.46")}<input name="capabilities" required placeholder="conflict:resolve, security:manage"/></label><label>{tr("securityadministrationpanel.l83.47")}<input name="validUntil" type="datetime-local" required/></label><label>incident ticket<input name="ticketRef" required/></label><label className="wide-field">{tr("securityadministrationpanel.l83.48")}<input name="reason" minLength={10} required/></label></div><button className="danger-action" disabled={!online}>{tr("securityadministrationpanel.l83.49")}</button></form></section>}
