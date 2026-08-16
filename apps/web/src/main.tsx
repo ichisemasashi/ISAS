@@ -6,6 +6,7 @@ import { createBffAuthGateway, demoAuthGateway } from "./auth";
 import { PwaUpdateGate } from "./pwa-update";
 import "./styles.css";
 import { configureRecoveryPublicKey } from "./device-security";
+import { tr } from "./i18n";
 
 const root = createRoot(document.getElementById("root")!);
 const search = new URLSearchParams(window.location.search);
@@ -47,7 +48,7 @@ function UtModeBanner() {
     setOffline(next);
     window.dispatchEvent(new Event(next ? "offline" : "online"));
   };
-  return <div className={`ut-mode-banner ${offline ? "is-offline" : ""}`} role="note"><span>ユーザビリティ試験用・架空データです。実際の農薬散布には使用しないでください。</span><button type="button" tabIndex={-1} onClick={toggle}>{offline ? "進行役：通信を戻す" : "進行役：圏外を模擬"}</button></div>;
+  return <div className={`ut-mode-banner ${offline ? "is-offline" : ""}`} role="note"><span>{tr("main.l50.1")}</span><button type="button" tabIndex={-1} onClick={toggle}>{offline ? tr("main.l50.2") : tr("main.l50.3")}</button></div>;
 }
 
 void renderApplication();

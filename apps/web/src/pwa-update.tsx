@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { browserStorage, type StorageGateway } from "./storage";
+import { tr } from "./i18n";
 
 export type PwaUpdateResult =
   | { status: "blocked"; pending: number }
@@ -15,7 +16,7 @@ export async function activateWaitingWorker(
   const pending = await storage.pendingCount();
   if (pending > 0) return { status: "blocked", pending };
   if (hasOpenForm()) return { status: "blocked-input", pending: 0 };
-  if (!registration.waiting) throw new Error("待機中の更新が見つかりません");
+  if (!registration.waiting) throw new Error(tr("pwa_update.l18.1"));
   beforeActivate();
   registration.waiting.postMessage({ type: "SKIP_WAITING" });
   return { status: "activating", pending: 0 };
@@ -58,12 +59,12 @@ export function PwaUpdateGate({ storage = browserStorage }: { storage?: Pick<Sto
     let detach: () => void = () => undefined;
     if (navigator.storage?.persist) {
       navigator.storage.persist().then((granted) => {
-        if (!granted) setError("端末による自動削除を防げません。未同期件数を確認し、早めにオンライン同期してください。");
-      }).catch(() => setError("端末保存の永続化を確認できませんでした。未同期件数を確認してください。"));
+        if (!granted) setError(tr("pwa_update.l61.2"));
+      }).catch(() => setError(tr("pwa_update.l62.3")));
     }
     navigator.serviceWorker.register("/sw.js").then((value) => {
       detach = observeWaitingWorker(value, setRegistration);
-    }).catch(() => setError("アプリ更新を確認できませんでした。通信状態を確認してください。"));
+    }).catch(() => setError(tr("pwa_update.l66.4")));
     return () => detach();
   }, []);
 
@@ -83,7 +84,7 @@ export function PwaUpdateGate({ storage = browserStorage }: { storage?: Pick<Sto
         return;
       }
     } catch {
-      setError("更新を適用できませんでした。時間をおいて再度お試しください。");
+      setError(tr("pwa_update.l86.5"));
     }
   };
 
@@ -91,9 +92,9 @@ export function PwaUpdateGate({ storage = browserStorage }: { storage?: Pick<Sto
   return (
     <aside className="pwa-update" role="status" aria-live="polite">
       {registration && <>
-        <strong>アプリの更新があります</strong>
-        <span>{blockedInput ? "入力中の画面があります。保存または記録して「今日」へ戻ってから更新してください。" : blocked === null ? "未同期データがないことを確認してから安全に更新します。" : `未同期${blocked}件を送信するまで更新を保留します。`}</span>
-        <button type="button" onClick={() => void update()}>更新する</button>
+        <strong>{tr("pwa_update.l94.6")}</strong>
+        <span>{blockedInput ? tr("pwa_update.l95.7") : blocked === null ? tr("pwa_update.l95.8") : tr("pwa_update.l95.9", [blocked])}</span>
+        <button type="button" onClick={() => void update()}>{tr("pwa_update.l96.10")}</button>
       </>}
       {error && <span>{error}</span>}
     </aside>

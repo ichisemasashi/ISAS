@@ -6,20 +6,21 @@ import type { AppAuthorization } from "./auth";
 import type { StorageGateway } from "./storage";
 import type { OfflineMapPackRecord } from "./storage";
 import { downloadOfflineMapPack, registerOfflineMapProtocol } from "./offline-map";
+import { formatDate, formatNumber, tr } from "./i18n";
 
 const OFFLINE_STYLE: StyleSpecification = {
   version: 8,
   sources: {},
   layers: [{ id: "background", type: "background", paint: { "background-color": "#e8eee7" } }],
 };
-const GSI_STYLE: StyleSpecification = {
+function gsiStyle(): StyleSpecification { return {
   version: 8,
-  sources: { gsi: { type: "raster", tiles: ["https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"], tileSize: 256, attribution: "地理院タイル" } },
+  sources: { gsi: { type: "raster", tiles: ["https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"], tileSize: 256, attribution: tr("fieldspage.l17.1") } },
   layers: [
     { id: "background", type: "background", paint: { "background-color": "#e8eee7" } },
     { id: "gsi-standard", type: "raster", source: "gsi" },
   ],
-};
+}; }
 
 function offlinePackStyle(pack: OfflineMapPackRecord): StyleSpecification {
   return {
@@ -88,7 +89,7 @@ function FieldMap({ fields, selectedId, onSelect, onBounds, backgroundStyle }: {
     for (const field of fields) value.setFeatureState({ source: "assigned-fields", id: field.id }, { selected: field.id === selectedId });
   }, [fields, selectedId]);
 
-  return <div ref={container} className="field-map" role="img" aria-label="担当圃場の地図" />;
+  return <div ref={container} className="field-map" role="img" aria-label={tr("fieldspage.l91.2")} />;
 }
 
 export function FieldsPage({ api, storage, authorization, online }: { api: MvpGateway; storage: StorageGateway; authorization: AppAuthorization; online: boolean }) {
@@ -97,7 +98,7 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
   const [mapFields, setMapFields] = useState<FieldFeature[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("担当圃場を読み込んでいます。");
+  const [status, setStatus] = useState(tr("fieldspage.l100.3"));
   const [offlinePack, setOfflinePack] = useState<OfflineMapPackRecord | null>(null);
   const [preferOffline, setPreferOffline] = useState(false);
   const [mapDownload, setMapDownload] = useState("");
@@ -113,13 +114,13 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
 
   useEffect(() => {
     const controller = new AbortController();
-    storage.getFields(tenantId).then((cached) => { if (!controller.signal.aborted) { setFields(cached); setMapFields(cached); setStatus(cached.length ? "端末保存済みの担当圃場を表示しています。" : "保存済みの圃場はありません。"); } }).catch(() => setStatus("端末の圃場保存を確認できませんでした。"));
+    storage.getFields(tenantId).then((cached) => { if (!controller.signal.aborted) { setFields(cached); setMapFields(cached); setStatus(cached.length ? tr("fieldspage.l116.4") : tr("fieldspage.l116.5")); } }).catch(() => setStatus(tr("fieldspage.l116.6")));
     if (online) (async () => {
       const all: FieldFeature[] = []; let cursor: string | null = null;
       do { const page = await api.getFields(authorization.context.contextId, { limit: 500, cursor }, controller.signal); all.push(...page.features); cursor = page.nextCursor; } while (cursor && !controller.signal.aborted);
       await storage.saveFields(tenantId, all);
-      if (!controller.signal.aborted) { setFields(all); setMapFields(all); setStatus(`担当圃場${all.length}件を更新しました。`); }
-    })().catch(() => { if (!controller.signal.aborted) setStatus("APIを利用できないため、端末保存済みの圃場を表示しています。"); });
+      if (!controller.signal.aborted) { setFields(all); setMapFields(all); setStatus(tr("fieldspage.l121.7", [all.length])); }
+    })().catch(() => { if (!controller.signal.aborted) setStatus(tr("fieldspage.l122.8")); });
     return () => controller.abort();
   }, [api, authorization.context.contextId, online, storage, tenantId]);
 
@@ -128,17 +129,17 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
   const useOffline = Boolean(offlinePack && (!online || preferOffline));
   const backgroundStyle: string | StyleSpecification = useOffline && offlinePack
     ? offlinePackStyle(offlinePack)
-    : (online ? GSI_STYLE : OFFLINE_STYLE);
+    : (online ? gsiStyle() : OFFLINE_STYLE);
   const cacheSelectedScope = async () => {
     if (!selected || !online) return;
-    setMapDownload("担当圃場周辺の背景を取得しています。Wi-Fi利用を推奨します。");
+    setMapDownload(tr("fieldspage.l134.9"));
     try {
       const pack = await downloadOfflineMapPack({ api, storage, authorization, fieldGroupId: selected.properties.fieldGroupId,
-        onProgress: (done, total, bytes) => { if (done % 25 === 0) setMapDownload(`${done}/${total}タイル・${Math.ceil(bytes / 1048576)} MiBを保存中です。`); } });
+        onProgress: (done, total, bytes) => { if (done % 25 === 0) setMapDownload(tr("fieldspage.l137.10", [done, total, Math.ceil(bytes / 1048576)])); } });
       setOfflinePack(pack); setPreferOffline(true);
-      setMapDownload(`${pack.tileCount}タイル・${Math.ceil(pack.byteSize / 1048576)} MiBを端末へ保存しました。`);
+      setMapDownload(tr("fieldspage.l139.11", [pack.tileCount, Math.ceil(pack.byteSize / 1048576)]));
     } catch (error) {
-      setMapDownload(error instanceof RangeError ? "250 MiB上限を超えるため背景を保存できません。対象圃場を分けてください。" : "背景の取得を完了できませんでした。圃場境界は引き続き利用できます。");
+      setMapDownload(error instanceof RangeError ? tr("fieldspage.l141.12") : tr("fieldspage.l141.13"));
     }
   };
   const searchBounds = (bbox: [number, number, number, number]) => {
@@ -149,23 +150,23 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
   };
 
   return <div className="page-content fields-page">
-    <div className="form-heading"><span className="section-kicker">FIELD GIS</span><h1>担当圃場</h1><p role="status">{status}</p></div>
-    <label className="field-search">圃場名・作物で絞り込み<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例：北圃場、つや姫" /></label>
+    <div className="form-heading"><span className="section-kicker">FIELD GIS</span><h1>{tr("fieldspage.l152.14")}</h1><p role="status">{status}</p></div>
+    <label className="field-search">{tr("fieldspage.l153.15")}<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr("fieldspage.l153.16")} /></label>
     <div className="field-gis-grid">
-      <section className="field-list" aria-label="担当圃場一覧">
-        <strong>{visible.length}件</strong>
-        {visible.map((field) => <button key={field.id} className={selectedId === field.id ? "selected" : ""} onClick={() => setSelectedId(field.id)}><span><b>{field.properties.name}</b><small>{field.properties.cropName || "作物未設定"}</small></span><span>{Math.round(field.properties.areaSqm).toLocaleString()}㎡</span></button>)}
-        {!visible.length && <p>条件に一致する担当圃場はありません。</p>}
+      <section className="field-list" aria-label={tr("fieldspage.l155.17")}>
+        <strong>{visible.length}{tr("fieldspage.l156.18")}</strong>
+        {visible.map((field) => <button key={field.id} className={selectedId === field.id ? "selected" : ""} onClick={() => setSelectedId(field.id)}><span><b>{field.properties.name}</b><small>{field.properties.cropName || tr("fieldspage.l157.19")}</small></span><span>{formatNumber(Math.round(field.properties.areaSqm))}㎡</span></button>)}
+        {!visible.length && <p>{tr("fieldspage.l158.20")}</p>}
       </section>
       <div className="map-panel">
         <div className="map-cache-controls">
-          <button type="button" onClick={cacheSelectedScope} disabled={!online || !selected}>選択圃場周辺をオフライン保存</button>
-          {offlinePack && <button type="button" onClick={() => setPreferOffline((value) => !value)}>{useOffline ? "オンライン背景へ切替" : "保存済み背景へ切替"}</button>}
+          <button type="button" onClick={cacheSelectedScope} disabled={!online || !selected}>{tr("fieldspage.l162.21")}</button>
+          {offlinePack && <button type="button" onClick={() => setPreferOffline((value) => !value)}>{useOffline ? tr("fieldspage.l163.22") : tr("fieldspage.l163.23")}</button>}
           <span role="status">{mapDownload}</span>
         </div>
         <FieldMap key={useOffline ? offlinePack?.packId : online ? "online" : "blank"} fields={mapFields} selectedId={selectedId} onSelect={setSelectedId} onBounds={searchBounds} backgroundStyle={backgroundStyle} />
-        <small className="map-attribution">{useOffline ? <><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>・保存期限 {offlinePack && new Date(offlinePack.expiresAt).toLocaleDateString("ja-JP")}</> : online ? <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noreferrer">地理院タイル</a> : "背景なし（圃場境界のみ）"}</small>
-        {selected && <div className="field-detail"><strong>{selected.properties.name}</strong><span>{selected.properties.cropName || "作物未設定"}・{Math.round(selected.properties.areaSqm).toLocaleString()}㎡</span></div>}
+        <small className="map-attribution">{useOffline ? <><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>{tr("fieldspage.l167.24")} {offlinePack && formatDate(offlinePack.expiresAt, { dateStyle: "medium" })}</> : online ? <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noreferrer">{tr("fieldspage.l167.25")}</a> : tr("fieldspage.l167.26")}</small>
+        {selected && <div className="field-detail"><strong>{selected.properties.name}</strong><span>{selected.properties.cropName || tr("fieldspage.l168.27")}{tr("fieldspage.l168.28")}{formatNumber(Math.round(selected.properties.areaSqm))}㎡</span></div>}
       </div>
     </div>
   </div>;

@@ -1,17 +1,20 @@
 import type { Agrochemical, PesticideBootstrap } from "./api";
+import { tr } from "./i18n";
 
 export type SafetyReason = "master_missing" | "master_stale" | "revoked" | "crop_not_applicable" | "dilution_out_of_range" | "maximum_uses_exceeded" | "preharvest_interval_short";
 export type SafetyDecision = { status: "safe" | "warning" | "blocked"; reasons: SafetyReason[]; checkedAt: string; cacheVersion: string | null; cacheValidUntil: string | null; requiresManagerOverride: boolean };
 
-export const safetyReasonLabel: Record<SafetyReason, string> = {
-  master_missing: "農薬マスタが端末にありません。オンラインで更新してください。",
-  master_stale: "農薬マスタの有効期限が切れています。責任者確認が必要です。",
-  revoked: "この農薬は失効済みです。使用できません。",
-  crop_not_applicable: "選択した作物は適用対象外です。",
-  dilution_out_of_range: "希釈倍率が登録範囲外です。",
-  maximum_uses_exceeded: "今作の使用回数が上限を超えます。",
-  preharvest_interval_short: "収穫予定日までの日数が不足しています。",
+const safetyReasonKeys: Record<SafetyReason, string> = {
+  master_missing: "pesticide_safety.l7.1",
+  master_stale: "pesticide_safety.l8.2",
+  revoked: "pesticide_safety.l9.3",
+  crop_not_applicable: "pesticide_safety.l10.4",
+  dilution_out_of_range: "pesticide_safety.l11.5",
+  maximum_uses_exceeded: "pesticide_safety.l12.6",
+  preharvest_interval_short: "pesticide_safety.l13.7",
 };
+
+export function safetyReasonLabel(reason: SafetyReason): string { return tr(safetyReasonKeys[reason]); }
 
 function calendarDays(from: string, to: string): number {
   return Math.floor((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);

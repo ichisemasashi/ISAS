@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { WorkInstruction } from "./api";
+import { formatDate, tr } from "./i18n";
 
 const WINDOW_DAYS = 14;
-const DAY = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" });
-const WEEKDAY = new Intl.DateTimeFormat("ja-JP", { weekday: "short" });
-const DATE_TIME = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
-const STATUS: Record<WorkInstruction["status"], string> = { issued: "未着手", in_progress: "進行中", completed: "完了", cancelled: "中止" };
+const dayLabel = (value: Date) => formatDate(value, { month: "numeric", day: "numeric" });
+const weekdayLabel = (value: Date) => formatDate(value, { weekday: "short" });
+const dateTimeLabel = (value: Date) => formatDate(value, { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
+const statusKeys: Record<WorkInstruction["status"], string> = { issued: "schedulepage.l8.1", in_progress: "schedulepage.l8.2", completed: "schedulepage.l8.3", cancelled: "schedulepage.l8.4" };
+const statusLabel = (status: WorkInstruction["status"]) => tr(statusKeys[status]);
 
 function startOfDay(value: Date): Date {
   const result = new Date(value);
@@ -54,27 +56,27 @@ export function SchedulePage({ instructions, selectedId, onSelect, recordInstruc
   const currentKey = dateKey(new Date());
 
   return <div className="page-content schedule-page">
-    <div className="schedule-heading"><div><span className="section-kicker">WORK SCHEDULE</span><h1>作業予定</h1><p>作業指示と同じ予定を、日付をまたぐタイムラインと現場用リストで確認できます。</p></div><div className="schedule-navigation" aria-label="表示期間"><button className="secondary-action" onClick={() => setWindowStart((current) => addDays(current, -WINDOW_DAYS))}>前の14日</button><button className="secondary-action" onClick={() => setWindowStart(startOfWeek(new Date()))}>今日</button><button className="secondary-action" onClick={() => setWindowStart((current) => addDays(current, WINDOW_DAYS))}>次の14日</button></div></div>
-    <p className="schedule-period">{DAY.format(days[0])}〜{DAY.format(days[days.length - 1])}・{visible.length}件</p>
+    <div className="schedule-heading"><div><span className="section-kicker">WORK SCHEDULE</span><h1>{tr("schedulepage.l57.5")}</h1><p>{tr("schedulepage.l57.6")}</p></div><div className="schedule-navigation" aria-label={tr("schedulepage.l57.7")}><button className="secondary-action" onClick={() => setWindowStart((current) => addDays(current, -WINDOW_DAYS))}>{tr("schedulepage.l57.8")}</button><button className="secondary-action" onClick={() => setWindowStart(startOfWeek(new Date()))}>{tr("schedulepage.l57.9")}</button><button className="secondary-action" onClick={() => setWindowStart((current) => addDays(current, WINDOW_DAYS))}>{tr("schedulepage.l57.10")}</button></div></div>
+    <p className="schedule-period">{dayLabel(days[0])}〜{dayLabel(days[days.length - 1])}{tr("schedulepage.l58.11")}{visible.length}{tr("schedulepage.l58.12")}</p>
 
-    <section className="gantt-panel" aria-label="作業予定タイムライン">
+    <section className="gantt-panel" aria-label={tr("schedulepage.l60.13")}>
       <div className="gantt-scroll"><div className="gantt-grid">
-        <div className="gantt-header"><strong>作業指示</strong>{days.map((day) => <span key={dateKey(day)} className={dateKey(day) === currentKey ? "today" : ""}><b>{DAY.format(day)}</b><small>{WEEKDAY.format(day)}</small></span>)}</div>
-        {visible.length === 0 && <p className="gantt-empty">この期間に作業指示はありません。</p>}
+        <div className="gantt-header"><strong>{tr("schedulepage.l62.14")}</strong>{days.map((day) => <span key={dateKey(day)} className={dateKey(day) === currentKey ? "today" : ""}><b>{dayLabel(day)}</b><small>{weekdayLabel(day)}</small></span>)}</div>
+        {visible.length === 0 && <p className="gantt-empty">{tr("schedulepage.l63.15")}</p>}
         {visible.map((instruction) => {
           const range = instructionDays(instruction, days)!;
           const selected = instruction.id === selectedId;
           return <div className={`gantt-row ${selected ? "selected" : ""}`} key={instruction.id}>
-            <button className="gantt-label" aria-pressed={selected} onClick={() => onSelect(instruction.id)}><strong>{instruction.title}</strong><small>{instruction.fieldName || "圃場未設定"}{instruction.resourceConflicts?.length ? `・resource競合 ${instruction.resourceConflicts.length}` : ""}</small></button>
+            <button className="gantt-label" aria-pressed={selected} onClick={() => onSelect(instruction.id)}><strong>{instruction.title}</strong><small>{instruction.fieldName || tr("schedulepage.l68.16")}{instruction.resourceConflicts?.length ? tr("schedulepage.l68.17", [instruction.resourceConflicts.length]) : ""}</small></button>
             {days.map((day) => <span aria-hidden="true" className={`gantt-cell ${dateKey(day) === currentKey ? "today" : ""}`} key={dateKey(day)}/>)}
-            <button className={`gantt-bar status-${instruction.status}`} style={{ gridColumn: `${range.start + 2} / ${range.end + 3}` }} aria-label={`${instruction.title}、${DATE_TIME.format(new Date(instruction.scheduledStart))}から${DATE_TIME.format(new Date(instruction.scheduledEnd))}、進捗${instruction.progressPercent || 0}%`} aria-pressed={selected} onClick={() => onSelect(instruction.id)}><span>{instruction.title} {instruction.progressPercent || 0}%</span></button>
+            <button className={`gantt-bar status-${instruction.status}`} style={{ gridColumn: `${range.start + 2} / ${range.end + 3}` }} aria-label={tr("schedulepage.l70.18", [instruction.title, dateTimeLabel(new Date(instruction.scheduledStart)), dateTimeLabel(new Date(instruction.scheduledEnd)), instruction.progressPercent || 0])} aria-pressed={selected} onClick={() => onSelect(instruction.id)}><span>{instruction.title} {instruction.progressPercent || 0}%</span></button>
           </div>;
         })}
       </div></div>
     </section>
 
-    <section className="mobile-schedule-list" aria-labelledby="mobile-schedule-title"><h2 id="mobile-schedule-title">作業リスト</h2>{visible.length === 0 && <p>この期間に作業指示はありません。</p>}{visible.map((instruction) => <button key={instruction.id} className={instruction.id === selectedId ? "selected" : ""} aria-pressed={instruction.id === selectedId} onClick={() => onSelect(instruction.id)}><span><strong>{instruction.title}</strong><small>{instruction.fieldName || "圃場未設定"}・{instruction.workType}{instruction.resourceConflicts?.length ? "・resource競合" : ""}</small></span><span><b>{DAY.format(new Date(instruction.scheduledStart))}</b><small>{STATUS[instruction.status]}・{instruction.progressPercent || 0}%</small></span></button>)}</section>
+    <section className="mobile-schedule-list" aria-labelledby="mobile-schedule-title"><h2 id="mobile-schedule-title">{tr("schedulepage.l76.19")}</h2>{visible.length === 0 && <p>{tr("schedulepage.l76.20")}</p>}{visible.map((instruction) => <button key={instruction.id} className={instruction.id === selectedId ? "selected" : ""} aria-pressed={instruction.id === selectedId} onClick={() => onSelect(instruction.id)}><span><strong>{instruction.title}</strong><small>{instruction.fieldName || tr("schedulepage.l76.21")}{tr("schedulepage.l76.22")}{instruction.workType}{instruction.resourceConflicts?.length ? tr("schedulepage.l76.23") : ""}</small></span><span><b>{dayLabel(new Date(instruction.scheduledStart))}</b><small>{statusLabel(instruction.status)}{tr("schedulepage.l76.24")}{instruction.progressPercent || 0}%</small></span></button>)}</section>
 
-    {selectedInstruction && <section className="schedule-detail" aria-live="polite"><div><span className={`status-pill status-${selectedInstruction.status}`}>{STATUS[selectedInstruction.status]}</span><h2>{selectedInstruction.title}</h2><p>{selectedInstruction.fieldName || "圃場未設定"}・{selectedInstruction.cropName || selectedInstruction.workType}{selectedInstruction.varietyName ? `（${selectedInstruction.varietyName}）` : ""}</p>{selectedInstruction.plannedAreaM2 != null && <small>計画面積 {selectedInstruction.plannedAreaM2}㎡・収量目標 {selectedInstruction.targetYieldKg ?? "未設定"}kg</small>}</div><dl><div><dt>予定開始</dt><dd>{DATE_TIME.format(new Date(selectedInstruction.scheduledStart))}</dd></div><div><dt>予定終了</dt><dd>{DATE_TIME.format(new Date(selectedInstruction.scheduledEnd))}</dd></div><div><dt>進捗</dt><dd>{selectedInstruction.progressPercent || 0}%</dd></div><div><dt>担当者</dt><dd>{selectedInstruction.assignment?.assigneeUserId || "未割当"}</dd></div><div><dt>先行作業</dt><dd>{selectedInstruction.dependencies?.length || 0}件</dd></div><div><dt>resource</dt><dd>{selectedInstruction.resources?.map((item) => item.name).join("、") || "未割当"}</dd></div></dl>{selectedInstruction.resourceConflicts?.length ? <p role="alert">resource競合が{selectedInstruction.resourceConflicts.length}件あります。</p> : null}<button className="primary-action" disabled={selectedInstruction.status === "cancelled"} onClick={() => recordInstruction(selectedInstruction.id)}>この作業の日誌をつける</button></section>}
+    {selectedInstruction && <section className="schedule-detail" aria-live="polite"><div><span className={`status-pill status-${selectedInstruction.status}`}>{statusLabel(selectedInstruction.status)}</span><h2>{selectedInstruction.title}</h2><p>{selectedInstruction.fieldName || tr("schedulepage.l78.25")}{tr("schedulepage.l78.26")}{selectedInstruction.cropName || selectedInstruction.workType}{selectedInstruction.varietyName ? `（${selectedInstruction.varietyName}）` : ""}</p>{selectedInstruction.plannedAreaM2 != null && <small>{tr("schedulepage.l78.27")} {selectedInstruction.plannedAreaM2}{tr("schedulepage.l78.28")} {selectedInstruction.targetYieldKg ?? tr("schedulepage.l78.29")}kg</small>}</div><dl><div><dt>{tr("schedulepage.l78.30")}</dt><dd>{dateTimeLabel(new Date(selectedInstruction.scheduledStart))}</dd></div><div><dt>{tr("schedulepage.l78.31")}</dt><dd>{dateTimeLabel(new Date(selectedInstruction.scheduledEnd))}</dd></div><div><dt>{tr("schedulepage.l78.32")}</dt><dd>{selectedInstruction.progressPercent || 0}%</dd></div><div><dt>{tr("schedulepage.l78.33")}</dt><dd>{selectedInstruction.assignment?.assigneeUserId || tr("schedulepage.l78.34")}</dd></div><div><dt>{tr("schedulepage.l78.35")}</dt><dd>{selectedInstruction.dependencies?.length || 0}{tr("schedulepage.l78.36")}</dd></div><div><dt>resource</dt><dd>{selectedInstruction.resources?.map((item) => item.name).join(", ") || tr("schedulepage.l78.37")}</dd></div></dl>{selectedInstruction.resourceConflicts?.length ? <p role="alert">{tr("schedulepage.l78.38")}{selectedInstruction.resourceConflicts.length}{tr("schedulepage.l78.39")}</p> : null}<button className="primary-action" disabled={selectedInstruction.status === "cancelled"} onClick={() => recordInstruction(selectedInstruction.id)}>{tr("schedulepage.l78.40")}</button></section>}
   </div>;
 }

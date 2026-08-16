@@ -6,6 +6,8 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const TRANSLATABLE = /[\u3040-\u30ff\u3400-\u9fff]/u;
+const L1_L2_PREFIXES = ["app.", "authboundary.", "fieldspage.", "locationtrackingpanel.", "main.", "pesticide_safety.", "pwa_update.", "schedulepage.", "tenantanalyticspanel."];
+const PLACEHOLDER = /\{\d+\}/gu;
 
 export function findHardcodedText(source) {
   return source.split(/\r?\n/u).flatMap((line, index) => TRANSLATABLE.test(line) && !line.includes("i18n-ignore") ? [{ line: index + 1, text: line.trim().slice(0, 240) }] : []);
@@ -27,7 +29,31 @@ export async function reviewCoverage(root) {
     const matches = findHardcodedText(await readFile(file, "utf8"));
     if (matches.length) findings.push({ file: relative(root, file), matches });
   }
-  return { status: findings.length ? "BLOCKED" : "PASS", files_with_findings: findings.length, lines_with_findings: findings.reduce((sum, item) => sum + item.matches.length, 0), findings };
+  const localeRoot = join(root, "locales");
+  const locales = Object.fromEntries(await Promise.all(["ja", "en", "ar-XB"].map(async (locale) => [locale, JSON.parse(await readFile(join(localeRoot, `${locale}.json`), "utf8"))])));
+  const referenceKeys = Object.keys(locales.ja).sort();
+  const catalogErrors = [];
+  for (const [locale, catalog] of Object.entries(locales)) {
+    const keys = Object.keys(catalog).sort();
+    if (JSON.stringify(keys) !== JSON.stringify(referenceKeys)) catalogErrors.push(`${locale}: catalog key set differs from ja`);
+    for (const key of referenceKeys) {
+      if (typeof catalog[key] !== "string") catalogErrors.push(`${locale}:${key}: message is missing`);
+      const expected = [...(locales.ja[key]?.matchAll(PLACEHOLDER) || [])].map(([value]) => value).sort();
+      const actual = [...(catalog[key]?.matchAll(PLACEHOLDER) || [])].map(([value]) => value).sort();
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) catalogErrors.push(`${locale}:${key}: placeholders differ from ja`);
+    }
+  }
+  const untranslatedL1L2 = referenceKeys.filter((key) => L1_L2_PREFIXES.some((prefix) => key.startsWith(prefix)) && TRANSLATABLE.test(locales.en[key]));
+  if (untranslatedL1L2.length) catalogErrors.push(`en: ${untranslatedL1L2.length} L1-L2 messages still contain Japanese text`);
+  return {
+    status: findings.length || catalogErrors.length ? "BLOCKED" : "PASS",
+    files_with_findings: findings.length,
+    lines_with_findings: findings.reduce((sum, item) => sum + item.matches.length, 0),
+    catalog_keys: referenceKeys.length,
+    untranslated_l1_l2: untranslatedL1L2.length,
+    catalog_errors: catalogErrors,
+    findings,
+  };
 }
 
 async function main(argv) {

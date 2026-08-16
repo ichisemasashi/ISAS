@@ -4,6 +4,7 @@ import type { MvpGateway } from "./api";
 import type { AppAuthorization, AuthBootstrap, AuthGateway, RequestContext } from "./auth";
 import { revokeDeviceAccess } from "./device-security";
 import { browserStorage } from "./storage";
+import { tr } from "./i18n";
 
 type BoundaryState =
   | { status: "loading" }
@@ -22,20 +23,20 @@ export function AuthBoundary({ gateway, api }: { gateway: AuthGateway; api: MvpG
         const bootstrap = await gateway.bootstrap(controller.signal);
         if (!bootstrap) return setState({ status: "anonymous" });
         const firstTenant = bootstrap.tenants[0];
-        if (!firstTenant) return setState({ status: "error", message: "利用できる組織がありません。管理者へ連絡してください。" });
+        if (!firstTenant) return setState({ status: "error", message: tr("authboundary.l25.1") });
         const context = await gateway.createContext(firstTenant.id, bootstrap.csrfToken, controller.signal);
         setState({ status: "ready", bootstrap, context });
       } catch (error) {
         if (controller.signal.aborted) return;
-        setState({ status: "error", message: error instanceof Error ? error.message : "認証状態を確認できませんでした。" });
+        setState({ status: "error", message: error instanceof Error ? error.message : tr("authboundary.l30.2") });
       }
     })();
     return () => controller.abort();
   }, [gateway]);
 
-  if (state.status === "loading") return <AuthScreen title="認証状態を確認しています" description="安全なセッションと所属組織を確認しています。" busy />;
-  if (state.status === "anonymous") return <AuthScreen title="ISASへログイン" description="組織の認証画面へ移動します。" actionLabel="ログインする" onAction={() => gateway.login(window.location.href)} />;
-  if (state.status === "error") return <AuthScreen title="ログイン状態を確認できません" description={state.message} actionLabel="再読み込み" onAction={() => window.location.reload()} />;
+  if (state.status === "loading") return <AuthScreen title={tr("authboundary.l36.3")} description={tr("authboundary.l36.4")} busy />;
+  if (state.status === "anonymous") return <AuthScreen title={tr("authboundary.l37.5")} description={tr("authboundary.l37.6")} actionLabel={tr("authboundary.l37.7")} onAction={() => gateway.login(window.location.href)} />;
+  if (state.status === "error") return <AuthScreen title={tr("authboundary.l38.8")} description={state.message} actionLabel={tr("authboundary.l38.9")} onAction={() => window.location.reload()} />;
 
   const authorization: AppAuthorization = {
     user: state.bootstrap.user,
@@ -52,13 +53,13 @@ export function AuthBoundary({ gateway, api }: { gateway: AuthGateway; api: MvpG
       setState({ ...state, context });
     } catch {
       if (requestId !== contextRequest.current) return;
-      setState({ status: "error", message: "組織の切り替えに失敗しました。元の画面を再読み込みしてください。" });
+      setState({ status: "error", message: tr("authboundary.l55.10") });
     }
   };
 
   const logout = async () => {
     const pending = await browserStorage.pendingCount();
-    if (pending > 0) throw new Error(`未同期${pending}件を同期してからログアウトしてください。端末紛失時は管理者へ回復を依頼してください。`);
+    if (pending > 0) throw new Error(tr("authboundary.l61.11", [pending]));
     await revokeDeviceAccess(state.context.tenantId, []);
     await gateway.logout(state.bootstrap.csrfToken);
   };

@@ -1,4 +1,5 @@
-export type AccessMode = "online" | "offline-write" | "offline-read" | "locked";
+
+import { tr } from "./i18n";export type AccessMode = "online" | "offline-write" | "offline-read" | "locked";
 
 export type AuthenticatedUser = {
   id: string;
@@ -156,10 +157,10 @@ export function createBffAuthGateway(fetcher: FetchLike = fetch, navigation: Pic
   };
 }
 
-const demoTenant: TenantOption = { id: "tenant-yamagata-midori", name: "山形みどり農園", roleLabel: "現場チーム" };
+const demoTenant: TenantOption = { id: "tenant-yamagata-midori", name: tr("auth.l159.1"), roleLabel: tr("auth.l159.2") };
 
 export const demoAuthorization: AppAuthorization = {
-  user: { id: "user-sato", displayName: "佐藤 一郎", initials: "佐", authenticationLevel: "phishing-resistant" },
+  user: { id: "user-sato", displayName: tr("auth.l162.3"), initials: tr("auth.l162.4"), authenticationLevel: "phishing-resistant" },
   context: {
     contextId: "ctx-demo-current-tab",
     tenantId: demoTenant.id,
