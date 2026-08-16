@@ -12,6 +12,15 @@ mkcert -install
 node ops/local/doctor.mjs
 ```
 
+初回の完全受入を実行する場合は、ブラウザ試験依存も準備する。
+
+```bash
+cd apps/web
+npm ci
+npx playwright install chromium
+cd ../..
+```
+
 `mkcert -install`はmacOS管理者passwordを要求する。自動処理でpasswordを渡さず、利用者自身がTerminalで実行する。CA未登録でもcontainerは起動できるが、ブラウザは証明書警告を表示するため受入試験には使わない。
 
 Docker daemonを確認する。`Server`欄まで表示されなければDocker Desktopを起動し、readyになるまで待つ。
@@ -46,12 +55,21 @@ docker compose --project-directory . --env-file .local/secrets/runtime.env -f co
 
 - 利用者名：`local-operator`
 - password：`.local/secrets/runtime.env`の`LOCAL_OPERATOR_PASSWORD`
+- MFA：`.local/secrets/runtime.env`の`LOCAL_OPERATOR_TOTP_SECRET`を登録したTOTP認証器
 
 passwordを画面やlogへ貼らない。本人がTerminalで確認する場合だけ、repository rootで次を実行する。
 
 ```bash
 sed -n 's/^LOCAL_OPERATOR_PASSWORD=//p' .local/secrets/runtime.env
 ```
+
+初回だけ、認証器アプリの「セットアップキーを入力」から次を登録する。account名は`local-operator@isas.localhost`、種類は時間ベース、桁数6、期間30秒、algorithm SHA-1とし、キーには次のcommand結果を入力する。
+
+```bash
+sed -n 's/^LOCAL_OPERATOR_TOTP_SECRET=//p' .local/secrets/runtime.env
+```
+
+TOTP seedと表示された6桁codeはpasswordと同じ秘密情報である。画面収録、shell履歴への転記、ticket添付を禁止し、共有認証器へ登録しない。
 
 この利用者とsynthetic tenantはlocal migrationでのみ作成される。本番の利用者・tenant・credentialを流用しない。
 
@@ -64,6 +82,14 @@ ops/local/verify-local-environment.sh
 ```
 
 `local-integration foundation verification: PASS`になることを確認する。この検証は基盤とlocal BFF adapterの受入であり、実PMTiles、PWA offline E2E、MFA操作、負荷、端末実機、AWS staging、本番release gateを代替しない。
+
+OIDC authorization code＋PKCE、password＋TOTP、step-up、logout、同一origin HTTPS、RLS由来の業務データと進捗書込みまで含める完全受入は次で実行する。
+
+```bash
+ops/local/verify-local-environment.sh --full
+```
+
+末尾に`local-integration OIDC/MFA, same-origin HTTPS, and business workflow verification: PASS`と表示されれば合格である。試験はlocal専用の合成tenantに対して、本日の作業、圃場、作業指示、日誌template、農薬master、在庫を読み、作業進捗を冪等更新する。AWS staging、本番データ、Production release gateの証跡には使用しない。
 
 ## 起動失敗時
 

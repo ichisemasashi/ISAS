@@ -1,6 +1,13 @@
 #!/bin/sh
 set -eu
 
+[ "$#" -le 1 ] || { printf 'usage: %s [--full]\n' "$0" >&2; exit 64; }
+MODE=${1:-foundation}
+case "$MODE" in
+  foundation|--full) ;;
+  *) printf 'usage: %s [--full]\n' "$0" >&2; exit 64 ;;
+esac
+
 OPS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$OPS_DIR/../.." && pwd)
 . "$OPS_DIR/common.sh"
@@ -48,3 +55,12 @@ grep -q '"issuer":"https://isas.localhost:8443/oidc/realms/isas-local"' "$TMP_RO
 pass "TLS ingress, BFF readiness, unauthenticated boundary, and OIDC discovery"
 
 printf '%s\n' 'local-integration foundation verification: PASS'
+
+if [ "$MODE" = "--full" ]; then
+  [ -d "$REPO_ROOT/apps/web/node_modules/@playwright" ] || fail "Playwright dependencies are missing; run npm ci in apps/web"
+  (
+    cd "$REPO_ROOT/apps/web"
+    npm run test:local-integration
+  )
+  printf '%s\n' 'local-integration OIDC/MFA, same-origin HTTPS, and business workflow verification: PASS'
+fi
