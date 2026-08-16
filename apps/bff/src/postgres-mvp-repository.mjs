@@ -637,8 +637,8 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         (tenant_id, progress_event_id, event_uuid, instruction_id, field_group_id, progress_percent, note, actor_user_id, occurred_at)
         VALUES (app.current_tenant_id(), $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, app.current_user_id(), $7::timestamptz)`,
       [uuid(), input.eventUuid, instructionId, locked.rows[0].field_group_id, input.progressPercent, input.note, input.occurredAt || new Date().toISOString()]);
-      const updated = await client.query(`UPDATE app.work_instruction SET progress_percent = $2,
-          status = CASE WHEN $2 = 100 THEN 'completed' WHEN $2 > 0 THEN 'in_progress' ELSE 'issued' END,
+      const updated = await client.query(`UPDATE app.work_instruction SET progress_percent = $2::smallint,
+          status = CASE WHEN $2::smallint = 100 THEN 'completed' WHEN $2::smallint > 0 THEN 'in_progress' ELSE 'issued' END,
           progress_updated_at = clock_timestamp(), updated_at = clock_timestamp(), updated_by = app.current_user_id(), version = version + 1
         WHERE tenant_id = app.current_tenant_id() AND instruction_id = $1::uuid
         RETURNING progress_percent, status, version, updated_at`, [instructionId, input.progressPercent]);

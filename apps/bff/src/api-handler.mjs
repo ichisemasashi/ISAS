@@ -548,6 +548,7 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
 
       return problem(404, "not_found", "Not found", requestId);
     } catch (error) {
+      logger.error?.("api_request_failed", { path: url.pathname, code: error?.code || "unhandled", message: error instanceof Error ? error.message : "unknown" });
       if (error instanceof SyntaxError || error instanceof TypeError) return problem(400, "invalid_request", "Invalid request", requestId);
       if (error instanceof RangeError) return problem(413, "request_too_large", "Request too large", requestId);
       if (error?.code === "scope_revoked") return problem(409, "scope_revoked", "Scope was revoked", requestId, undefined, { purgeScope: error.scope });

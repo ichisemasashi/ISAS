@@ -93,6 +93,30 @@ test("work reassignment locks the instruction and rejects a stale expected versi
   assert.equal(calls.length, 2);
 });
 
+test("work progress uses an explicit smallint parameter across assignment and comparisons", async () => {
+  const calls = [];
+  const client = { async query(sql, values) {
+    calls.push({ sql, values });
+    if (sql.includes("FROM app.work_instruction") && sql.includes("FOR UPDATE")) return { rows: [{ instruction_id: E1, field_group_id: "f1111111-1111-7111-8111-111111111111", version: "1" }] };
+    if (sql.includes("FROM app.work_progress_event")) return { rows: [] };
+    if (sql.includes("INSERT INTO app.work_progress_event")) return { rows: [] };
+    if (sql.includes("UPDATE app.work_instruction")) return { rows: [{ progress_percent: 10, status: "in_progress", version: "2", updated_at: new Date("2026-08-14T00:00:00Z") }] };
+    throw new Error(`unexpected query: ${sql}`);
+  } };
+  const repository = createPostgresMvpRepository({ uuid: () => "aaaaaaaa-0000-7000-8000-000000000099" });
+  const result = await repository.updateWorkProgress(client, {}, E1, {
+    eventUuid: "0198a6c0-0000-7000-8000-000000000002",
+    progressPercent: 10,
+    expectedVersion: 1,
+    note: "現地確認",
+  });
+  const update = calls.find(({ sql }) => sql.includes("UPDATE app.work_instruction"));
+  assert.match(update.sql, /progress_percent = \$2::smallint/);
+  assert.match(update.sql, /WHEN \$2::smallint = 100/);
+  assert.equal(result.progressPercent, 10);
+  assert.equal(result.version, 2);
+});
+
 test("punch suggestion fills a journal and warns when a pair is incomplete", () => {
   const complete = postgresMvpContract.derivePunchSuggestion([
     { action: "start", occurred_at: "2026-08-14T00:12:00Z" },

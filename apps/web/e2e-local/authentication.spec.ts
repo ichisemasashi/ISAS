@@ -65,6 +65,44 @@ test("authorization code PKCE login requires TOTP and step-up preserves same sub
   const cookie = cookies.find((item) => item.name === "__Host-isas_session");
   expect(cookie).toMatchObject({ secure: true, httpOnly: true, sameSite: "Lax", path: "/" });
 
+  const business = await page.evaluate(async ({ csrfToken, tenantId }) => {
+    const contextResponse = await fetch("/api/bff/contexts", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+      body: JSON.stringify({ tenantId }),
+    });
+    const requestContext = await contextResponse.json();
+    const get = async (path: string) => {
+      const response = await fetch(path, { credentials: "include", cache: "no-store", headers: { "X-ISAS-Context": requestContext.contextId } });
+      return { status: response.status, body: await response.json() };
+    };
+    const today = await get("/api/v1/today");
+    const fields = await get("/api/v1/fields");
+    const instructions = await get("/api/v1/work-instructions");
+    const instruction = instructions.body.instructions[0];
+    const field = fields.body.features[0];
+    const journal = await get(`/api/v1/journal-bootstrap?instructionId=${encodeURIComponent(instruction.id)}`);
+    const pesticide = await get(`/api/v1/pesticide-bootstrap?fieldId=${encodeURIComponent(field.id)}`);
+    const inventory = await get("/api/v1/inventory");
+    const progressResponse = await fetch(`/api/v1/work-instructions/${encodeURIComponent(instruction.id)}/progress`, {
+      method: "PATCH", credentials: "include",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, "X-ISAS-Context": requestContext.contextId },
+      body: JSON.stringify({ eventUuid: "49000000-0000-4000-8000-000000000001", progressPercent: 10, expectedVersion: instruction.version, note: "local integration E2E", occurredAt: new Date().toISOString() }),
+    });
+    return { contextStatus: contextResponse.status, requestContext, today, fields, instructions, journal, pesticide, inventory,
+      progress: { status: progressResponse.status, body: await progressResponse.json() } };
+  }, { csrfToken: session.body.csrfToken, tenantId: session.body.tenants[0].id });
+  expect(business.contextStatus).toBe(201);
+  expect(business.requestContext.capabilities).toEqual(expect.arrayContaining(["instruction:manage", "journal:write", "pesticide:write", "inventory:write"]));
+  expect(business.today).toMatchObject({ status: 200, body: { tasks: [expect.objectContaining({ field: "ローカル実証圃場" })] } });
+  expect(business.fields).toMatchObject({ status: 200, body: { features: [expect.objectContaining({ properties: expect.objectContaining({ name: "ローカル実証圃場" }) })] } });
+  expect(business.instructions).toMatchObject({ status: 200, body: { instructions: [expect.objectContaining({ title: "実証圃場の生育確認" })] } });
+  expect(business.journal).toMatchObject({ status: 200, body: { templates: [expect.objectContaining({ name: "巡回確認" })] } });
+  expect(business.pesticide).toMatchObject({ status: 200, body: { chemicals: [expect.objectContaining({ name: "ローカル確認剤" })] } });
+  expect(business.inventory).toMatchObject({ status: 200, body: { balances: [expect.objectContaining({ name: "ローカル確認剤", quantity: 25 })] } });
+  expect(business.progress).toMatchObject({ status: 200, body: { progressPercent: 10 } });
+  await expect(page.getByText("ローカル実証圃場").first()).toBeVisible();
+
   await page.goto("/api/bff/login?step_up=1&return_to=%2F");
   await completeLogin(page, 30_000);
   const steppedUp = await page.evaluate(async () => (await fetch("/api/bff/session", { cache: "no-store" })).json());
