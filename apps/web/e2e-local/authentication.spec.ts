@@ -52,6 +52,8 @@ async function completeLogin(page: Page, totpOffsetMs = 0) {
 }
 
 test("authorization code PKCE login requires TOTP and step-up preserves same subject", async ({ page, context }) => {
+  const observedOrigins = new Set<string>();
+  page.on("request", (request) => observedOrigins.add(new URL(request.url()).origin));
   await page.goto("/api/bff/login?return_to=%2F");
   await completeLogin(page);
 
@@ -76,4 +78,24 @@ test("authorization code PKCE login requires TOTP and step-up preserves same sub
   expect(logout.status).toBe(204);
   expect(logout.location).toMatch(/^https:\/\/isas\.localhost:8443\/oidc\//);
   expect((await page.request.get("/api/bff/session")).status()).toBe(401);
+  expect([...observedOrigins]).toEqual(["https://isas.localhost:8443"]);
+});
+
+test("TLS ingress serves the web and APIs with one hardened origin", async ({ page, request }) => {
+  const response = await request.get("/");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["strict-transport-security"]).toBe("max-age=31536000");
+  expect(response.headers()["content-security-policy"]).toContain("default-src 'self'");
+  expect(response.headers()["content-security-policy"]).toContain("connect-src 'self'");
+  expect(response.headers()["cross-origin-resource-policy"]).toBe("same-origin");
+  expect(response.headers()["access-control-allow-origin"]).toBeUndefined();
+
+  await page.goto("/");
+  await expect(page.locator("#root")).not.toBeEmpty();
+
+  const plaintext = await request.get("http://isas.localhost:8443/", { failOnStatusCode: false }).catch(() => null);
+  if (plaintext) {
+    expect(plaintext.status()).toBeGreaterThanOrEqual(400);
+    expect(await plaintext.text()).not.toContain("<title>ISAS</title>");
+  }
 });
