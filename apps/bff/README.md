@@ -167,4 +167,4 @@ npm test
 npm run check
 ```
 
-2026-08-15時点でBFF 74テスト、Web 36テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群＋identity runtimeがPASSしている。backfill、安全条件付きrollback、production owner／FORCE RLS／監査trigger／runtime関数検査も実DBで確認済みである。Cognito／DynamoDB／KMS／SQS adapterは実装済みだが、実AWS stagingへのapplyと受入はcredential・DNS・署名済みimage・課金承認待ちである。
+2026-08-16時点でBFF 84テスト、Web 44テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群＋identity runtimeがPASSしている。backfill、安全条件付きrollback、production owner／FORCE RLS／監査trigger／runtime関数検査も実DBで確認済みである。Cognito／DynamoDB／KMS／SQS adapter、法域内OpenTelemetry、CI scan／署名、段階配備は実装済みだが、実AWS stagingへのapplyと受入はcredential・DNS・課金承認待ちである。

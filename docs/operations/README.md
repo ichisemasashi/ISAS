@@ -10,6 +10,7 @@
 | [バックアップ・復旧手順](バックアップ・復旧手順.md) | backup取得、月次restore、四半期DR、実障害からの復旧 |
 | [障害対応手順](障害対応手順.md) | Sev判定、役割、write freeze、法域内連絡、事後処置 |
 | [AWS staging受入手順](AWS-staging受入手順.md) | OpenTofu apply、AuthContext migration、写真／PMTilesを含む25項目の実AWS受入と現在のBLOCKED理由 |
+| [監視・セキュリティ・CI/CD自動化](監視・セキュリティ・CI-CD自動化.md) | GitHub保護、scan、SBOM／署名、dashboard／alert、staging→5%→25%→100%と自動rollbackの具体操作 |
 
 ## 共通原則
 

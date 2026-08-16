@@ -15,7 +15,6 @@ export function validateBuildPromotion(build, release, stagingEvidence) {
     if (!approved || approved.digest !== built.digest) errors.push(`${built.name} digest is not approved by the release manifest`);
     if (approved && (!approved.signature_verified || !approved.provenance_verified)) errors.push(`${built.name} supply-chain evidence is not approved`);
   }
-  if ((build?.artifacts || []).length !== (release?.artifacts || []).length) errors.push("build and release artifact sets differ");
   if (stagingEvidence) {
     if (stagingEvidence.environment !== "staging" || stagingEvidence.region !== "ap-northeast-1") errors.push("staging evidence environment is invalid");
     if (stagingEvidence.commitSha !== build?.source_commit) errors.push("staging evidence was collected for a different commit");

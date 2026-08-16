@@ -204,14 +204,24 @@ resource "aws_cloudwatch_metric_alarm" "availability_fast_burn" {
 
   metric_query {
     id          = "error_rate"
-    expression  = "IF(requests>0,errors/requests,0)"
+    expression  = "IF(requests>0,(target_errors+alb_errors)/requests,0)"
     label       = "Availability error rate"
     return_data = true
   }
   metric_query {
-    id = "errors"
+    id = "target_errors"
     metric {
       metric_name = "HTTPCode_Target_5XX_Count"
+      namespace   = "AWS/ApplicationELB"
+      period      = each.value.period
+      stat        = "Sum"
+      dimensions  = { LoadBalancer = aws_lb.main.arn_suffix }
+    }
+  }
+  metric_query {
+    id = "alb_errors"
+    metric {
+      metric_name = "HTTPCode_ELB_5XX_Count"
       namespace   = "AWS/ApplicationELB"
       period      = each.value.period
       stat        = "Sum"
@@ -248,13 +258,23 @@ resource "aws_cloudwatch_metric_alarm" "availability_slow_burn" {
   treat_missing_data  = "breaching"
   metric_query {
     id          = "error_rate"
-    expression  = "IF(requests>0,errors/requests,0)"
+    expression  = "IF(requests>0,(target_errors+alb_errors)/requests,0)"
     return_data = true
   }
   metric_query {
-    id = "errors"
+    id = "target_errors"
     metric {
       metric_name = "HTTPCode_Target_5XX_Count"
+      namespace   = "AWS/ApplicationELB"
+      period      = each.value.period
+      stat        = "Sum"
+      dimensions  = { LoadBalancer = aws_lb.main.arn_suffix }
+    }
+  }
+  metric_query {
+    id = "alb_errors"
+    metric {
+      metric_name = "HTTPCode_ELB_5XX_Count"
       namespace   = "AWS/ApplicationELB"
       period      = each.value.period
       stat        = "Sum"
@@ -343,6 +363,22 @@ resource "aws_cloudwatch_dashboard" "overview" {
             ["ISAS/${var.environment}", "DeploymentStage", "DeploymentId", var.deployment_id],
             [".", "DeploymentRollback", ".", "."],
             [".", "ErrorBudgetRemainingPercent", ".", "."],
+          ]
+        }
+      },
+      {
+        type = "metric", x = 0, y = 24, width = 24, height = 6,
+        properties = {
+          title  = "28-day availability error budget remaining (99.5% SLO)"
+          region = var.region
+          view   = "singleValue"
+          period = 2419200
+          start  = "-P28D"
+          metrics = [
+            [{ expression = "IF(requests>0,100*(1-(((target_errors+alb_errors)/requests)/0.005)),0)", label = "Error budget remaining %", id = "budget" }],
+            ["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", aws_lb.main.arn_suffix, { id = "target_errors", stat = "Sum", visible = false }],
+            [".", "HTTPCode_ELB_5XX_Count", ".", ".", { id = "alb_errors", stat = "Sum", visible = false }],
+            [".", "RequestCount", ".", ".", { id = "requests", stat = "Sum", visible = false }],
           ]
         }
       },
