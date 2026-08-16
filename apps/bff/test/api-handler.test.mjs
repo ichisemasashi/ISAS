@@ -135,6 +135,26 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(fx.state.locationAccessAudits.length, 1);
   });
 
+  test("serves tenant analytics from the operational database with missing and freshness metadata", async () => {
+    const fx = fixture(["analytics:read", "analytics:write"], { workInstructions: [{ id: "instruction-analytics-1",
+      tenantId: "tenant-1", cropPlanId: "crop-plan-1", cropName: "水稲", targetYieldKg: 600,
+      fieldGroupId: "field-group-1", scheduledStart: "2026-08-14T00:00:00Z", scheduledEnd: "2026-08-14T01:00:00Z",
+      status: "completed" }] });
+    const harvested = await fx.handle(fx.request("/api/v1/analytics/harvests", { method: "POST",
+      headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ eventUuid: crypto.randomUUID(), cropPlanId: "crop-plan-1", fieldId: "field-1",
+        fieldGroupId: "field-group-1", harvestedOn: "2026-08-14", quantityKg: 580, grade: "一等" }) }));
+    assert.equal(harvested.status, 201);
+    const response = await fx.handle(fx.request("/api/v1/analytics/overview"));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.source, "operational_db");
+    assert.equal(body.dwhRequired, false);
+    assert.equal(body.plans[0].actualYieldKg, 580);
+    assert.ok(body.plans[0].missingMetrics.includes("work_actual"));
+    assert.equal(body.freshness[0].status, "fresh");
+  });
+
   test("requires a recent MFA authentication for exports and adjudication", async () => {
     const fx = fixture(["export:read"], { trusted: { authenticatedAt: "2026-08-13T23:00:00.000Z" } });
     const response = await fx.handle(fx.request("/api/v1/exports/fields.csv"));

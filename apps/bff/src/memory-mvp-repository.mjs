@@ -39,6 +39,7 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
   const locationPoints = [];
   const locationAccessAudits = [];
   const punches = [];
+  const harvestActuals = [];
 
   const database = {
     async transaction(_trusted, operation) { return operation({}); },
@@ -121,6 +122,43 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
         workedSeconds += Math.max(0, (Date.parse(visible[index + 1].occurredAt) - Date.parse(visible[index].occurredAt)) / 1000);
       }
       return { workTime: [{ userId: trusted.userId, workedSeconds }], fieldPresence: [] };
+    },
+
+    async getTenantAnalytics(_client, trusted) {
+      if (!trusted.authContext.capabilities.includes("analytics:read")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const tenantId = trusted.authContext.tenantId;
+      const plans = instructions.filter((item) => item.tenantId === tenantId && item.cropPlanId).reduce((map, item) => {
+        const plan = map.get(item.cropPlanId) || { cropPlanId: item.cropPlanId, cropName: item.cropName || null,
+          targetYieldKg: item.targetYieldKg ?? null, plannedWorkSeconds: 0, actualWorkSeconds: 0, instructionCount: 0,
+          completedInstructionCount: 0, actualYieldKg: null, pesticideAmount: null, missingMetrics: [] };
+        plan.instructionCount += 1;
+        plan.completedInstructionCount += item.status === "completed" ? 1 : 0;
+        plan.plannedWorkSeconds += Math.max(0, (Date.parse(item.scheduledEnd) - Date.parse(item.scheduledStart)) / 1000);
+        map.set(item.cropPlanId, plan); return map;
+      }, new Map());
+      for (const harvest of harvestActuals.filter((item) => item.tenantId === tenantId)) {
+        const plan = plans.get(harvest.cropPlanId); if (plan) plan.actualYieldKg = (plan.actualYieldKg || 0) + harvest.quantityKg;
+      }
+      for (const plan of plans.values()) {
+        if (plan.targetYieldKg == null) plan.missingMetrics.push("target_yield");
+        if (plan.actualYieldKg == null) plan.missingMetrics.push("yield_actual");
+        if (plan.actualWorkSeconds === 0) plan.missingMetrics.push("work_actual");
+        if (plan.pesticideAmount == null) plan.missingMetrics.push("material_actual");
+      }
+      return { source: "operational_db", dwhRequired: false, generatedAt: new Date().toISOString(),
+        plans: clone([...plans.values()]), materials: [], freshness: [{ source: "plan", status: plans.size ? "fresh" : "missing", freshestAt: new Date().toISOString() }] };
+    },
+
+    async recordHarvestActual(_client, trusted, input) {
+      if (!trusted.authContext.capabilities.includes("analytics:write")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      if (typeof input?.eventUuid !== "string" || typeof input.cropPlanId !== "string" || typeof input.fieldId !== "string"
+        || typeof input.fieldGroupId !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(input.harvestedOn || "")
+        || !Number.isFinite(input.quantityKg) || input.quantityKg <= 0) throw new TypeError("invalid harvest actual");
+      if (!trusted.authContext.scopeFieldGroups.includes(input.fieldGroupId)) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const existing = harvestActuals.find((item) => item.tenantId === trusted.authContext.tenantId && item.eventUuid === input.eventUuid);
+      if (existing) return clone(existing);
+      const result = { id: crypto.randomUUID(), tenantId: trusted.authContext.tenantId, ...clone(input), eventTs: new Date().toISOString() };
+      harvestActuals.push(result); return clone(result);
     },
 
     async searchFields(_client, trusted, { query, limit, cursor }) {
@@ -551,5 +589,5 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     },
   };
 
-  return { database, repository, attachmentStorage, mapStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs, orders, lots, countSessions, policies, locationConsents, locationPreferences, locationPoints, locationAccessAudits, punches } };
+  return { database, repository, attachmentStorage, mapStorage, state: { receipts, changes, rejections, conflicts, instructions, attachments, attachmentObjects, journals, revisions, chemicals, pesticideReviews, pesticideUsages, pesticideAlerts, inventoryEvents, stockAlerts, migrationJobs, orders, lots, countSessions, policies, locationConsents, locationPreferences, locationPoints, locationAccessAudits, punches, harvestActuals } };
 }

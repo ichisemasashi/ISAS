@@ -298,6 +298,17 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         return json(200, result, requestId);
       }
 
+      if (request.method === "GET" && url.pathname === "/api/v1/analytics/overview") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.getTenantAnalytics(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/v1/analytics/harvests") {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        return json(201, await database.transaction(trusted, (client, canonical) => repository.recordHarvestActual(client, canonical ? { ...trusted, authContext: canonical } : trusted, body)), requestId);
+      }
+
       if (request.method === "GET" && url.pathname === "/api/v1/fields") {
         const search = fieldSearch(url);
         const result = await database.transaction(trusted, (client, canonical) => repository.searchFields(client, canonical ? { ...trusted, authContext: canonical } : trusted, search), { readOnly: true });

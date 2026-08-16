@@ -7,6 +7,8 @@ import { evaluatePesticideUse, safetyReasonLabel } from "./pesticide-safety";
 import { DataMigrationPanel } from "./DataMigrationPanel";
 import { SecurityAdministrationPanel } from "./SecurityAdministrationPanel";
 import { SchedulePage } from "./SchedulePage";
+import { TenantAnalyticsPanel } from "./TenantAnalyticsPanel";
+import { LocationTrackingPanel } from "./LocationTrackingPanel";
 import { applyDocumentLocale, localeProfiles, resolveLocale, translate, type Locale } from "./i18n";
 
 const FieldsPage = lazy(() => import("./FieldsPage").then((module) => ({ default: module.FieldsPage })));
@@ -205,7 +207,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
         <main id="main" tabIndex={-1}>
           {effectiveAccessMode !== "online" && <div className={`authorization-banner mode-${effectiveAccessMode}`} role="status"><strong>{effectiveAccessMode === "offline-write" ? "オフライン認証の猶予中" : effectiveAccessMode === "offline-read" ? "読取専用へ移行しました" : "認証の猶予が終了しました"}</strong><span>{effectiveAccessMode === "offline-write" ? "現場記録だけを端末へ保存できます。機微操作は利用できません。" : effectiveAccessMode === "offline-read" ? "下書きは保持されますが、再認証まで記録を確定できません。" : "未同期データを保持しています。オンライン復帰後に再認証してください。"}</span></div>}
           {reauthenticationRequired ? <section className="empty-page"><div className="empty-icon"><Icon name="warning"/></div><h1>再認証が必要です</h1><p>担当範囲または権限が変更されました。旧い参照データは端末から削除しました。未同期データは保持しています。</p><button className="primary-action" onClick={() => window.location.reload()}>再認証する</button></section> : <>
-          {route === "today" && <TodayPage tasks={tasks} instructions={instructions} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} openSchedule={(id) => { setSelectedScheduleInstructionId(id || undefined); navigate("schedule"); }} recordInstruction={(id) => { setSelectedJournalId(undefined); setSelectedInstructionId(id || undefined); navigate("journal"); }} />}
+          {route === "today" && <TodayPage api={api} csrfToken={csrfToken} authorization={authorization} online={online} locale={locale} setNotice={setNotice} tasks={tasks} instructions={instructions} userName={authorization.user.displayName} punch={punch} punchAction={punchAction} navigate={navigate} openSchedule={(id) => { setSelectedScheduleInstructionId(id || undefined); navigate("schedule"); }} recordInstruction={(id) => { setSelectedJournalId(undefined); setSelectedInstructionId(id || undefined); navigate("journal"); }} />}
           {route === "schedule" && <SchedulePage
             instructions={instructions}
             selectedId={selectedScheduleInstructionId}
@@ -249,7 +251,7 @@ function Nav({ route, locale, navigate }: { route: Route; locale: Locale; naviga
   return <div className="nav-items">{items.map((item) => <button key={item.route} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined} onClick={() => navigate(item.route)}><Icon name={item.icon}/><span>{item.label}</span></button>)}</div>;
 }
 
-function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate, openSchedule, recordInstruction }: { tasks: TodayTask[]; instructions: WorkInstruction[]; userName: string; punch: PunchState; punchAction: (state: PunchState) => Promise<void>; navigate: (route: Route) => void; openSchedule: (id: string) => void; recordInstruction: (id: string) => void }) {
+function TodayPage({ api, csrfToken, authorization, online, locale, setNotice, tasks, instructions, userName, punch, punchAction, navigate, openSchedule, recordInstruction }: { api: MvpGateway; csrfToken: string; authorization: AppAuthorization; online: boolean; locale: Locale; setNotice: (message: string) => void; tasks: TodayTask[]; instructions: WorkInstruction[]; userName: string; punch: PunchState; punchAction: (state: PunchState) => Promise<void>; navigate: (route: Route) => void; openSchedule: (id: string) => void; recordInstruction: (id: string) => void }) {
   const date = new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" }).format(new Date());
   return <div className="page-content">
     <section className="welcome-row">
@@ -266,6 +268,7 @@ function TodayPage({ tasks, instructions, userName, punch, punchAction, navigate
         {punch === "break" && <button className="punch-primary" onClick={() => punchAction("working")}>作業に戻る</button>}
       </div>
     </section>
+    <LocationTrackingPanel api={api} contextId={authorization.context.contextId} csrfToken={csrfToken} locale={locale} online={online} punch={punch} setNotice={setNotice}/>
 
     <div className="content-grid">
       <section className="task-section" aria-labelledby="tasks-title">
@@ -479,6 +482,7 @@ function MorePage({ api, csrfToken, authorization, online, instructions, setInst
   const reviewer = authorization.context.capabilities.includes("journal:review");
   const migrationManager = authorization.context.capabilities.includes("migration:manage");
   const exportReader = authorization.context.capabilities.includes("export:read");
+  const analyticsReader = authorization.context.capabilities.includes("analytics:read");
   const [returnReasons, setReturnReasons] = useState<Record<string, string>>({});
   const [assignees, setAssignees] = useState<Record<string, string>>({});
   const refreshJournals = async () => setJournals((await api.getJournals(authorization.context.contextId)).journals);
@@ -503,6 +507,7 @@ function MorePage({ api, csrfToken, authorization, online, instructions, setInst
     setNotice("担当者を変更しました。");
   };
   return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態、同期で判断が必要な項目を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{localeProfiles[locale].label}{!localeProfiles[locale].reviewed && "（翻訳レビュー未完了）"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div><div><span>差し戻しキュー</span><strong>{queueCounts.rejections}件</strong></div><div><span>競合キュー</span><strong>{queueCounts.conflicts}件</strong></div></div>
+    {analyticsReader && <TenantAnalyticsPanel api={api} contextId={authorization.context.contextId} online={online}/>}
     {onLogout && <section className="queue-panel"><h2>この端末の利用を終了</h2><p>同期済みcacheを暗号消去し、BFFとIdPのsessionを終了します。未同期記録がある間は安全のため実行できません。</p><button className="secondary-action" disabled={!online} onClick={() => void onLogout().catch((error) => setNotice(error instanceof Error ? error.message : "ログアウトできませんでした。"))}>ログアウト</button></section>}
     {manager && <section className="queue-panel"><h2>作業指示を発行</h2><form className="record-form compact-form" onSubmit={(event) => void createInstruction(event)}><div className="form-grid"><label>圃場ID<input name="fieldId" required/></label><label>担当者ID<input name="assigneeUserId" required/></label><label>指示名<input name="title" required/></label><label>作業種別<input name="workType" required/></label><label>開始予定<input name="scheduledStart" type="datetime-local" required/></label><label>終了予定<input name="scheduledEnd" type="datetime-local" required/></label><label>優先度<select name="priority" defaultValue="1"><option value="0">高</option><option value="1">通常</option><option value="2">低</option></select></label><label>詳細<textarea name="details" rows={2}/></label></div><button className="primary-action" disabled={!online}>オンラインで発行</button></form>
       <div>{instructions.map((instruction) => <article key={instruction.id}><strong>{instruction.title}</strong><p>{instruction.fieldName}・担当 {instruction.assignment?.assigneeUserId || "未割当"}・version {instruction.version}</p><div className="queue-actions"><label>新しい担当者ID<input value={assignees[instruction.id] || ""} onChange={(event) => setAssignees((current) => ({ ...current, [instruction.id]: event.target.value }))}/></label><button className="secondary-action" disabled={!online} onClick={() => void reassign(instruction)}>再割当</button></div></article>)}</div></section>}

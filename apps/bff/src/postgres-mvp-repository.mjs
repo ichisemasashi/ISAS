@@ -275,9 +275,13 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           FROM app.location_tracking_preference WHERE tenant_id = app.current_tenant_id()
             AND user_id = app.current_user_id() AND purpose = 'work_evidence'`),
       ]);
-      const mapTime = (row) => ({ ...row, effective_from: iso(row.effective_from), effective_until: iso(row.effective_until),
-        effective_at: iso(row.effective_at), expires_at: iso(row.expires_at), updated_at: iso(row.updated_at) });
-      return { policies: policies.rows.map(mapTime), consent: consent.rows[0] ? mapTime(consent.rows[0]) : null,
+      return { policies: policies.rows.map((row) => ({ policyVersion: row.policy_version, purpose: row.purpose,
+          locale: row.locale, title: row.title, body: row.body, contentSha256: row.content_sha256,
+          effectiveFrom: iso(row.effective_from), effectiveUntil: iso(row.effective_until) })),
+        consent: consent.rows[0] ? { id: consent.rows[0].id, action: consent.rows[0].action,
+          purpose: consent.rows[0].purpose, policyVersion: consent.rows[0].policy_version,
+          consentTextSha256: consent.rows[0].consent_text_sha256, locale: consent.rows[0].locale,
+          effectiveAt: iso(consent.rows[0].effective_at), expiresAt: iso(consent.rows[0].expires_at) } : null,
         preference: preference.rows[0] ? { enabled: preference.rows[0].enabled, punchLinked: preference.rows[0].punch_linked,
           retentionDays: Number(preference.rows[0].retention_days), locale: preference.rows[0].locale,
           version: Number(preference.rows[0].version), updatedAt: iso(preference.rows[0].updated_at) }
@@ -306,7 +310,9 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         RETURNING consent_event_id::text AS id, action, purpose, policy_version, consent_text_sha256,
           locale, effective_at, expires_at`,
       [consentId, input.eventUuid, input.action, input.policyVersion, input.consentTextSha256, input.locale, input.expiresAt || null]);
-      const row = result.rows[0]; return { ...row, effective_at: iso(row.effective_at), expires_at: iso(row.expires_at) };
+      const row = result.rows[0]; return { id: row.id, action: row.action, purpose: row.purpose,
+        policyVersion: row.policy_version, consentTextSha256: row.consent_text_sha256, locale: row.locale,
+        effectiveAt: iso(row.effective_at), expiresAt: iso(row.expires_at) };
     },
 
     async saveLocationPreference(client, _trusted, input) {
@@ -367,6 +373,66 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
       return { actuals: result.rows.map((row) => ({ type: row.actual_type, instructionId: row.instruction_id,
         fieldId: row.field_id, fieldGroupId: row.field_group_id, date: row.actual_date,
         seconds: Number(row.seconds) })) };
+    },
+
+    async getTenantAnalytics(client) {
+      await requireCapability(client, "analytics:read");
+      const [plans, materials, freshness] = await Promise.all([
+        client.query(`SELECT crop_plan_id::text, season_id::text, field_id::text, field_group_id::text,
+            crop_name, variety_name, planned_area_m2, target_yield_kg, progress_percent,
+            planned_work_seconds, actual_work_seconds, instruction_count, completed_instruction_count,
+            actual_yield_kg, pesticide_amount, pesticide_application_count, freshest_at, missing_metrics
+          FROM app.tenant_plan_actual ORDER BY crop_name, variety_name NULLS LAST, crop_plan_id`),
+        client.query(`SELECT usage_type, chemical_id::text, material_name, quantity, unit, event_count, freshest_at
+          FROM app.tenant_material_actual ORDER BY usage_type, material_name, chemical_id`),
+        client.query(`SELECT source, freshest_at, freshness_status, age_seconds
+          FROM app.tenant_analytics_freshness ORDER BY source`),
+      ]);
+      return { source: "operational_db", dwhRequired: false, generatedAt: new Date().toISOString(),
+        plans: plans.rows.map((row) => ({ cropPlanId: row.crop_plan_id, seasonId: row.season_id,
+          fieldId: row.field_id, fieldGroupId: row.field_group_id, cropName: row.crop_name,
+          varietyName: row.variety_name, plannedAreaM2: Number(row.planned_area_m2),
+          targetYieldKg: row.target_yield_kg == null ? null : Number(row.target_yield_kg),
+          progressPercent: Number(row.progress_percent), plannedWorkSeconds: Number(row.planned_work_seconds),
+          actualWorkSeconds: Number(row.actual_work_seconds), instructionCount: Number(row.instruction_count),
+          completedInstructionCount: Number(row.completed_instruction_count),
+          actualYieldKg: row.actual_yield_kg == null ? null : Number(row.actual_yield_kg),
+          pesticideAmount: row.pesticide_amount == null ? null : Number(row.pesticide_amount),
+          pesticideApplicationCount: Number(row.pesticide_application_count), freshestAt: iso(row.freshest_at),
+          missingMetrics: row.missing_metrics })),
+        materials: materials.rows.map((row) => ({ usageType: row.usage_type, chemicalId: row.chemical_id,
+          materialName: row.material_name, quantity: Number(row.quantity), unit: row.unit,
+          eventCount: Number(row.event_count), freshestAt: iso(row.freshest_at) })),
+        freshness: freshness.rows.map((row) => ({ source: row.source, freshestAt: iso(row.freshest_at),
+          status: row.freshness_status, ageSeconds: row.age_seconds == null ? null : Number(row.age_seconds) })) };
+    },
+
+    async recordHarvestActual(client, _trusted, input) {
+      if (!isUuid(input?.eventUuid) || !isUuid(input?.cropPlanId) || !isUuid(input?.fieldId)
+        || !isUuid(input?.fieldGroupId) || !/^\d{4}-\d{2}-\d{2}$/.test(input?.harvestedOn || "")
+        || !Number.isFinite(input?.quantityKg) || input.quantityKg <= 0
+        || (input.grade != null && (typeof input.grade !== "string" || !input.grade.length || input.grade.length > 80))
+        || (input.note != null && (typeof input.note !== "string" || input.note.length > 1000))) throw new TypeError("invalid harvest actual");
+      await requireCapability(client, "analytics:write");
+      const harvestId = uuid();
+      const result = await client.query(`WITH inserted AS (INSERT INTO app.harvest_actual_event
+          (tenant_id, harvest_event_id, event_uuid, crop_plan_id, field_id, field_group_id,
+           harvested_on, quantity_kg, grade, note, actor_user_id)
+        VALUES (app.current_tenant_id(), $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
+          $6::date, $7, $8, $9, app.current_user_id())
+        ON CONFLICT (tenant_id, event_uuid) DO NOTHING
+        RETURNING harvest_event_id::text AS id, event_uuid::text, crop_plan_id::text, field_id::text,
+          field_group_id::text, harvested_on, quantity_kg, grade, note, event_ts)
+        SELECT * FROM inserted UNION ALL
+        SELECT harvest_event_id::text, event_uuid::text, crop_plan_id::text, field_id::text,
+          field_group_id::text, harvested_on, quantity_kg, grade, note, event_ts
+        FROM app.harvest_actual_event WHERE tenant_id = app.current_tenant_id() AND event_uuid = $2::uuid
+        LIMIT 1`,
+      [harvestId, input.eventUuid, input.cropPlanId, input.fieldId, input.fieldGroupId,
+        input.harvestedOn, input.quantityKg, input.grade || null, input.note || ""]);
+      const row = result.rows[0]; return { id: row.id, eventUuid: row.event_uuid, cropPlanId: row.crop_plan_id,
+        fieldId: row.field_id, fieldGroupId: row.field_group_id, harvestedOn: row.harvested_on,
+        quantityKg: Number(row.quantity_kg), grade: row.grade, note: row.note, eventTs: iso(row.event_ts) };
     },
 
     async searchFields(client, trusted, { bbox, query, limit, cursor }) {
