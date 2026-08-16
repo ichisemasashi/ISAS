@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 |---|---|
 | 基準日 | 2026-08-16 |
-| 状態 | **計画・architecture確定。業務機能は未実装** |
+| 状態 | **Phase 2.0〜2.4とi18n L1〜L2を実装済み。実環境・実利用者gateは未完了** |
 | 前提 | Phase 1 production承認とはrelease trainを分離し、未承認MVPをPhase 2機能で覆い隠さない |
 | 関連ADR | [0012 農機](../design/ADR/ADR-0012-農機連携アーキテクチャ.md)、[0013 外部API／Webhook](../design/ADR/ADR-0013-外部API-Webhook.md)、[0014 DWH](../design/ADR/ADR-0014-横断分析-DWH.md)、[0015 国際化](../design/ADR/ADR-0015-国際化基盤-ICU-CLDR-UTC.md) |
 
@@ -23,9 +23,9 @@
 | 2.0 | 契約とmodel拡張 | **実装済み**：作期／作付計画、作業依存、resource、在庫policy、分析event、位置同意。正式`0013` migration、review付きbackfill、安全rollback、owner／FORCE RLS／監査、cycle／scope検査を追加。PG14代替検証とBFF N/N-1はPASS | Docker復旧後に同じ検証をPG16で再実行してgateを閉じ、Phase 2.1へ進む |
 | 2.1 | 作付計画＋高度ガント | **実装済み**：作物・品種・面積・収量目標の投影、日offset template展開、依存、追記進捗、resource競合、PCガント／mobile同一正本 | 機能testをPASS。PG16 migration再実行と500 task p95をrelease gateで確認 |
 | 2.2 | 在庫高度化＋traceability | **実装済み**：発注点、入荷予定、二人確認棚卸し、lot／期限／評価、追記型履歴、JGAP在庫CSV | 機能・RLS・migration testをPASS。並行棚卸し負荷、単位換算profile、実JGAP帳票照合をrelease gateで確認 |
-| 2.3 | 位置ログと作業実績 | 多言語同意、打刻連動ON/OFF、短期track、在圃時間、本人表示、管理者の最小権限 | 同意拒否でも全業務成立、休憩中0点、期限削除、失効／端末紛失、閲覧監査を実機PASS |
-| 2.4 | tenant内分析 | 計画対実績、収量、作業時間、資材、欠測／鮮度表示、CSV | DWHなしで動作、通貨混在禁止、projection再構築一致、dashboard p95をPASS |
-| 2.5 | UX／i18n batch L1〜L2 | 高度template、onboarding、横断検索、dashboard、共通／計画画面辞書化 | 翻訳scan対象をL1〜L2で0、英語native review、RTL疑似locale、実ユーザーUTをPASS |
+| 2.3 | 位置ログと作業実績 | **実装済み**：多言語同意、打刻連動ON/OFF、休憩停止、短期track、在圃時間、本人表示、期限削除、閲覧監査 | PG16、実機の失効／紛失、同意拒否・休憩中0点をrelease gateで確認 |
+| 2.4 | tenant内分析 | **実装済み**：計画対実績、収量、作業時間、資材、欠測／鮮度表示、DWH非依存projection | PG16、projection再構築一致、dashboard p95と実データ照合をrelease gateで確認 |
+| 2.5 | UX／i18n batch L1〜L2 | **i18n完了**：401件日英辞書、scan 13ファイル・258行→0、language QA、RTL共通／作業／ガント／GIS・200%試験。残りは高度template、onboarding、横断検索 | UX残件を実装し、英語を含む実ユーザーUTをPASS |
 
 Phase 2では位置ログ収集と消費表示を2.3で同時提供し、消費先のないPIIを先行収集しない。横断DWHは2.4のtenant内dashboardと別物であり、Phase 2 releaseの必須依存にしない。
 
@@ -66,4 +66,4 @@ Phase 4は「翻訳を追加すれば世界対応」と扱わず、**1対象国�
 
 ## 4. 直近の開始条件
 
-Phase 2の設計・fixture作成はM6の外部受入と並行できるが、production releaseは分ける。最初の実装着手は`2.0 model拡張`、次に`2.1 作付計画＋高度ガント`を推奨する。農機・外部API・DWHを先行すると、計画・在庫・分析の正規modelが未確定なまま外部契約を固定するため順序を逆転させない。
+Phase 2.0〜2.4とL1〜L2 i18nは実装済みである。直近は`0013`〜`0017`をPostgreSQL 16＋PostGISで連続検証し、その後2.5の高度template、onboarding、横断検索と実利用者UTを閉じる。農機・外部API・DWHの実契約は、Phase 2 modelの実環境gateとprovider sampleが揃うまで固定しない。
