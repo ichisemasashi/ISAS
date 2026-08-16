@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 const COMMIT = /^[0-9a-f]{40}$/;
 const URI = /^(?:artifact|https|s3):\/\/.+/;
 const RECOVERY_COMPONENTS = ["database", "session_context", "private_objects", "quarantine_archive", "shard_config", "offline_maps", "queues", "audit", "configuration", "kms"];
+const BACKUP_COMPONENTS = ["database", "session_context", "private_objects", "quarantine_archive", "shard_config", "offline_maps"];
 const VERIFY_CASES = ["schema", "rls_force_owner", "triggers_security_invoker", "audit_chain", "object_hashes", "queue_cursor", "idempotency", "revocation", "tenant_crossing", "synthetic_transaction"];
 const OPERATION_CASES = ["cold_start", "graceful_stop", "rolling_restart", "dependency_failure", "incident_response"];
 const CONTACTS = ["service_owner", "on_call", "security", "privacy", "legal"];
@@ -32,7 +33,12 @@ export function validateOperationalAcceptance(value, now = new Date()) {
   const present = new Set(Array.isArray(recovery.components) ? recovery.components : []);
   for (const component of RECOVERY_COMPONENTS) if (!present.has(component)) add(`recovery set is missing ${component}`);
   if (!Number.isFinite(recovery.pitr_lag_seconds) || recovery.pitr_lag_seconds < 0 || recovery.pitr_lag_seconds > 900) add("recovery set PITR lag must be 900 seconds or less");
-  if (!Array.isArray(recovery.backup_jobs) || recovery.backup_jobs.length < 6 || recovery.backup_jobs.some((job) => job?.status !== "COMPLETED" || !job?.recovery_point_arn)) add("all six or more backup jobs must be COMPLETED with recovery points");
+  if (!Number.isFinite(recovery.object_inventory_age_seconds) || recovery.object_inventory_age_seconds < 0 || recovery.object_inventory_age_seconds > 86400) add("recovery object inventory must be no more than 24 hours old");
+  if (!Array.isArray(recovery.backup_jobs) || recovery.backup_jobs.some((job) => job?.status !== "COMPLETED" || !job?.recovery_point_arn)) add("all backup jobs must be COMPLETED with recovery points");
+  else {
+    const completedComponents = new Set(recovery.backup_jobs.map((job) => job?.component));
+    for (const component of BACKUP_COMPONENTS) if (!completedComponents.has(component)) add(`completed backup jobs are missing ${component}`);
+  }
 
   for (const [name, drill, maxAge] of [["monthly_restore", value.monthly_restore, 35], ["quarterly_dr", value.quarterly_dr, 100]]) {
     if (drill?.status !== "PASS" || !recent(drill?.executed_at, now, maxAge) || !artifact(drill?.evidence)) add(`${name} must pass recently with evidence`);
