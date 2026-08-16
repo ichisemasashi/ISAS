@@ -2,10 +2,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ） v1**（敵対的レビュー8件＝High 3／Medium 4／Low 1を全件処置。残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0020.md)） |
+| ステータス | **採用（クローズ） v2**（v1のSLI/SLOを維持し、ADR-0023のlocal OTel stack、profile label、PII canary、単一Mac測定の証跡限界を波及。波及レビュー残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0020.md)／[ADR-0023レビュー](レビュー記録_ADR-0023.md)） |
 | 日付 | 2026-08-15 |
 | 由来 | 要求仕様5.1／5.2／5.3、ADR-0007の同期優先度、ADR-0008の法域内可観測性、ADR-0019のHA・RPO/RTO |
-| 関連 | [ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0003 監査](ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)、[ADR-0007 同期](ADR-0007-オフライン同期方式.md)、[ADR-0008 API](ADR-0008-API方式.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md)、[ADR-0019 インフラ・運用](ADR-0019-インフラ・運用.md)、[ADR-0021 テスト・リリース](ADR-0021-テスト・リリース方式.md) |
+| 関連 | [ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0003 監査](ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)、[ADR-0007 同期](ADR-0007-オフライン同期方式.md)、[ADR-0008 API](ADR-0008-API方式.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md)、[ADR-0019 インフラ・運用](ADR-0019-インフラ・運用.md)、[ADR-0021 テスト・リリース](ADR-0021-テスト・リリース方式.md)、[ADR-0023 Mac local integration](ADR-0023-Mac本番相当ローカル統合環境.md) |
 
 ---
 
@@ -92,6 +92,14 @@ weak referenceやobject孤立は日次照合し、壊れた関連を自動削除
 - collector、alert rule、dashboard、redaction、samplingはcode review対象の宣言構成とする。secret/PII canaryを非本番で流し、export先に出ないことを自動testする。
 - metric cardinality、dropped spans/logs、collector queue、scrape/export失敗、alert deliveryを「監視の監視」として持つ。signal欠落をSLO達成と解釈しない。
 
+### 2.7 【v2】Mac本番相当ローカル統合環境
+
+- localはOpenTelemetry Collector、Prometheus、Jaeger、Persesを採用し、既存BFFのOTLP contractを通す。auditはPostgreSQLの権威経路を維持し、Jaeger／logへ置換しない。
+- 全signalへ`deployment_id=local-integration`、`evidence_scope=local-integration`、source／component lock digestを付ける。tenant／user／field IDをlabelにしない既存規則は同じである。
+- dashboardは5 poolの待ち／上限、route latency／error、失効queue／DLQ、object pending／orphan、RLS拒否、migration、collector dropを最低表示する。
+- synthetic PII／secret canaryがmetric、trace、log、dashboardへ残らないこと、collector停止時に業務が有界dropで継続しdrop件数を回復後観測できることを試験する。
+- p95は30試行未満と`no_data`をPASSにしない。ただし単一Macの値は回帰診断であり、rolling production SLO、error budget、capacity、alert運用実績へ算入しない。
+
 ## 3. 検討した選択肢
 
 | 選択肢 | 評価 | 結論 |
@@ -109,5 +117,6 @@ weak referenceやobject孤立は日次照合し、壊れた関連を自動削除
 - telemetry費用を抑えるためsampleするが、SLI counter、audit/security権威event、backup/chain検査結果はsampleしない。
 - 99.5%は高可用性を意味するが無停止を保証しない。offline継続性は別SLIとして監視する。
 - dashboardが緑でも`no_data`、cardinality超過、export失敗があれば合格にしない。
+- local dashboardの緑はsignal contractの成立を示すだけで、法域内保持、on-call通知、production trafficのerror budgetを証明しない。
 
 方式判断は完了した。採用製品、法域別保持、on-call名簿、通知provider、予測trafficは配備時入力とし、ADR-0021のrelease manifestに固定する。実ingress／実端末／実networkの測定が揃うまでは、本番releaseを承認しない。

@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（再クローズ） v9**（2026-08-15。PG-M1/M2/M8を、明示tenant、数値bbox事前絞込＋厳密PostGIS判定、tenant単位KNN規約で裁定。S2は100万ポリゴン・64接続でbbox p95 80.71ms／KNN p95 54.41ms、漏洩0。方式をmigration `0009`と実repositoryへ昇格済み。日本初期配備はRDS PostgreSQL 16.14R2／PostGIS 3.4.6／PgBouncer 1.24.x。再レビュー残存High 0／Medium 0。[レビュー記録](レビュー記録_ADR-0004.md)／[PG検証](../PostgreSQL実挙動検証記録.md)） |
+| ステータス | **採用（再クローズ） v10**（v9のDB決定を維持し、ADR-0023の`local-integration`へPG16＋PostGIS 3.4と5独立PgBouncer、正式migration、support schema分離を波及。波及レビュー残存High 0／Medium 0。[レビュー記録](レビュー記録_ADR-0004.md)／[ADR-0023レビュー](レビュー記録_ADR-0023.md)／[PG検証](../PostgreSQL実挙動検証記録.md)） |
 | 由来 | 確定済み（要求仕様7章の方向性をADRとして正式記録） |
-| 関連 | 要求仕様 [7章／5.2](../../農業営農支援システム_要求仕様書.md)、[ADR-0001 RLS](ADR-0001-マルチテナント分離-行レベル-RLS.md)、[ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0003 データライフサイクル](ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)、[ADR-0007 オフライン同期]、[ADR-0010 地図/GIS] |
+| 関連 | 要求仕様 [7章／5.2](../../農業営農支援システム_要求仕様書.md)、[ADR-0001 RLS](ADR-0001-マルチテナント分離-行レベル-RLS.md)、[ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0003 データライフサイクル](ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)、[ADR-0007 オフライン同期]、[ADR-0010 地図/GIS]、[ADR-0023 Mac local integration](ADR-0023-Mac本番相当ローカル統合環境.md) |
 
 ---
 
@@ -80,6 +80,13 @@
 
 - **アップグレード時の注意**：**生成列・CHECK・索引が PostGIS 関数に依存する**ため、PostGIS のメジャーアップグレードで依存関係が問題になり得る（要確認）。**アップグレード手順の検証を ADR-0019 の運用項目に含める。**
 
+### 2.6 【v10】Mac本番相当ローカル統合環境
+
+- `local-integration`はproduction採用majorと同じPostgreSQL 16＋PostGIS 3.4系を使い、empty DBへ正式migrationを適用する。spike用DDLや別schemaだけでPASSにしない。
+- P0／Auth-P1／P1／P2／OpsはPgBouncer 1.24系の5独立instance、別login role、別接続上限で構成する。単一Mac上の論理分離であり、failure domain分離とは表示しない。
+- local session/context／失効queueは`local_support` schemaへ置くが、業務schemaとowner、role、migration履歴を分離し、business roleの任意queryを許さない。
+- S1／S2／S5／S7と、全poolでの`SET LOCAL`消去、ROLLBACK失敗時の接続破棄をlocal acceptanceへ含める。単一Macの性能値をproduction capacity証跡へ転用しない。
+
 ## 3. 検討した選択肢（Options）
 
 | 観点 | 選択肢 | 評価 |
@@ -114,3 +121,4 @@
 - 日本初期配備は東京regionのRDS Multi-AZ DB cluster（writer 1＋reader 2、3 AZ）とする。P0/P1 writeと権威readはwriter、遅延許容P2だけreaderを使う。
 - PostgreSQL/PostGIS minor更新はempty DBと前版snapshotで全migration、RLS/FORCE、owner、trigger、`security_invoker`、bbox/KNN plan、S2/S5/S7を再実行する。
 - JSONBはversion付き同期payload、外部取込原文、非索引metadataへ限定する。tenant、scope、status、時刻、金額、数量、農薬安全、FK対象は型付きcolumnとconstraintを正とする。
+- `local-integration`はADR-0023 §2.4の構成でproduction migration、5 pool、support schema分離を検証する。local backupや単一nodeのPASSをRDS Multi-AZ／PITR受入へ算入しない。

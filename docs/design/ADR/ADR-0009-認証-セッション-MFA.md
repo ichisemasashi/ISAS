@@ -2,10 +2,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（再クローズ） v4**（v3のBFF主体／DB注入境界を、公開HTTP入力→context再導出→DB正規化→`SET LOCAL`→RLSの単一経路として確定。S8はPostgreSQL 16.4で12群PASS、BFFアダプタは集合拡張拒否とROLLBACK失敗時の接続破棄を検証済み。第4回で残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0009.md)） |
+| ステータス | **採用（再クローズ） v5**（v4の単一注入経路を維持し、ADR-0023のKeycloak OIDC、PG永続session/context、失効consumerを非本番Integration profileへ波及。波及レビュー残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0009.md)／[ADR-0023レビュー](レビュー記録_ADR-0023.md)） |
 | 日付 | 2026-08-14 |
 | 由来 | 要裁定（要求仕様5.4「MFAを選択可」、7章「認証基盤」。PWA・RLS・複数法域を成立させる具体方式を確定する） |
-| 関連 | [要求仕様5.4](../../農業営農支援システム_要求仕様書.md)、[ADR-0001 RLS](ADR-0001-マルチテナント分離-行レベル-RLS.md)、[ADR-0002 法域・シャード](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0005 RBAC](ADR-0005-権限モデル-RBAC-メンバーシップ.md)、[ADR-0006 PWA](ADR-0006-フロントエンド構成-React-PWA.md)、[ADR-0007 同期](ADR-0007-オフライン同期方式.md)、[ADR-0008 API](ADR-0008-API方式.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md) |
+| 関連 | [要求仕様5.4／5.6](../../農業営農支援システム_要求仕様書.md)、[ADR-0001 RLS](ADR-0001-マルチテナント分離-行レベル-RLS.md)、[ADR-0002 法域・シャード](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0005 RBAC](ADR-0005-権限モデル-RBAC-メンバーシップ.md)、[ADR-0006 PWA](ADR-0006-フロントエンド構成-React-PWA.md)、[ADR-0007 同期](ADR-0007-オフライン同期方式.md)、[ADR-0008 API](ADR-0008-API方式.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md)、[ADR-0023 Mac local integration](ADR-0023-Mac本番相当ローカル統合環境.md) |
 
 ---
 
@@ -127,6 +127,14 @@ S8はPostgreSQL 16.4で通常tenant、scope、capability、group横断、雇用�
 - 外部エラーは「資格情報または所属を確認できない」へ統一し、メール／user／tenant／法域の存在を列挙させない。相関IDは非PIIとし、法域内ログだけへ詳細を残す。
 - 不審な反復、MFA疲労攻撃、回復失敗、複数法域／シャード探索の増加をレート制限と監視へ接続する（ADR-0017/0020）。
 
+### 2.9 【v5】Mac本番相当ローカル統合環境
+
+- local IdPはKeycloakを使い、authorization code＋PKCE、issuer／audience／nonce、TOTP／WebAuthn、step-up、logout／back-channel logoutを実接続する。OIDC mockのPASSはIntegration合格にしない。
+- browserへは`__Host-isas_session`だけを渡し、Keycloak token setは用途別local keyで暗号化してPostgreSQL `local_support`へ永続化する。BFF memory storeを正にしない。
+- Keycloak claimは主体と認証強度の入力に限定し、membership／role／scope／`authorization_version`は正式DBから再導出してv4 §2.5.1の単一経路へ渡す。
+- 正式DBの失効eventをlocal durable queueからsession／context／Offline Snapshotへ冪等反映し、consumer停止、重複、逆順、DLQ、再送を試験する。
+- このprofileはCognito署名／Hosted UI、DynamoDB条件書込、SQS visibility、KMS policyを証明しない。AWS adapter contractはStagingで再受入する。
+
 ## 3. 検討した選択肢（Options）
 
 | 選択肢 | 評価 |
@@ -156,7 +164,7 @@ S8はPostgreSQL 16.4で通常tenant、scope、capability、group横断、雇用�
 
 ## 5. 実装・検証への引き継ぎ
 
-- BFF/IdP製品の選定とHA、Cookie暗号鍵・token暗号鍵、セッションストア、back-channel logoutの配備はADR-0019/0017。
+- ProductionのBFF/IdPとHA、Cookie暗号鍵・token暗号鍵、セッションストア、back-channel logoutの配備はADR-0019/0017。Mac Integrationの製品と境界はADR-0023。
 - WebAuthn共有端末、passkey同期可否、TOTP回復、管理者回復の運用テストはADR-0017/0021。
 - AuthContext導出／DB検証関数の参照DDLはS8で12群PASS、BFFトランザクションアダプタも実装済み。残りは版管理・索引・backfill・失効イベントを含む本番migrationへの昇格と、`group_read`／労務横断contextの専用発行API実装。
 - オフラインSnapshotの署名検証、24h/72h/14d境界、時計ずれ、logout、失効後の未同期回復をS7へ追加する。

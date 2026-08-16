@@ -85,4 +85,4 @@
 - localで証明できること／できないことと、stagingへ残すgateが明示されている
 - ADR-0019の本番HA profileとADR-0021の環境分類を変更または緩和していない
 
-構成製品、component配置、local adapter方式、秘密管理方式の裁定は後続のADR-0023で行う。
+構成製品、component配置、local adapter方式、秘密管理方式は、後続の[ADR-0023](design/ADR/ADR-0023-Mac本番相当ローカル統合環境.md)で裁定済みである。本書は先行要求の履歴であり、方式の正本にはしない。

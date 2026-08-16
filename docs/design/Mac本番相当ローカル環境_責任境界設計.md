@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版 | v1.1（要求仕様書v1.1への統合を反映） |
+| 版 | v2（ADR-0023の方式決定を反映） |
 | 日付 | 2026-08-16 |
-| 状態 | **確定**。component方式と採用製品はADR-0023待ち |
+| 状態 | **確定**。component方式と採用製品は[ADR-0023](ADR/ADR-0023-Mac本番相当ローカル統合環境.md)で確定、実装は未着手 |
 | 上位要求 | [要求仕様書 v1.1 §5.6](../農業営農支援システム_要求仕様書.md#56-mac本番相当ローカル統合環境) |
 
 ---
@@ -77,9 +77,9 @@ R=実施、A=最終責任、C=協議、I=通知。`PO`=ISAS製品保守者、`LO
 - LAN listenerはloopback既定、明示設定時だけ許可し、TLSなしでは起動しない
 - local evidenceをproduction release manifestの必須証跡として受理しないschema検査を設ける
 
-## 5. 後続設計への入力と未決事項
+## 5. ADR-0023への入力と裁定結果
 
-次の事項は責任境界ではなく方式決定であるため、本書では確定しない。
+次の事項は責任境界ではなく方式決定であるため、本書では確定せずADR-0023へ渡した。
 
 1. local OIDC、object、queue、telemetry、ingress、poolerの採用製品とversion
 2. session/contextと失効eventをPostgreSQLへ集約するか、専用emulatorを使うか
@@ -87,4 +87,4 @@ R=実施、A=最終責任、C=協議、I=通知。`PO`=ISAS製品保守者、`LO
 4. ARM64／x86_64 image matrix、最小macOS／Docker Desktop／Colima version
 5. Compose topology、volume、port、resource limit、起動順、health contract
 
-これらはADR-0023で比較・裁定し、本書の名称、安全境界、非本番分類、責任分担を変更してはならない。変更が必要な場合は要求仕様書v1.1を先に改版する。
+ADR-0023はCompose、Caddy、Keycloak、PG16/PostGIS、5独立PgBouncer、PG永続session/context／queue、private filesystem object、local key、OTel stackを採用した。本書の名称、安全境界、非本番分類、責任分担は変更していない。今後これらの境界変更が必要な場合は要求仕様書v1.1を先に改版する。
