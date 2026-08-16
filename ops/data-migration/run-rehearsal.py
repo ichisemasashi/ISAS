@@ -98,7 +98,7 @@ class Client:
 
 def expect_counts(job: dict, expected: dict, phase: str) -> None:
     fields = {"rows": "rowCount", "valid": "validCount", "duplicates": "duplicateCount", "errors": "errorCount"}
-    mismatches = [f"{name} expected={expected[name]} actual={job.get(api)}" for name, api in fields.items()
+    mismatches = [f"{name} expected={expected.get(name)} actual={job.get(api)}" for name, api in fields.items()
                   if not isinstance(expected.get(name), int) or job.get(api) != expected[name]]
     if mismatches:
         raise RuntimeError(f"{phase} count mismatch: " + "; ".join(mismatches))
@@ -158,8 +158,11 @@ def validate_manifest(manifest: dict) -> None:
     if manifest.get("schema_version") != 1 or manifest.get("evidence_class") not in ("real_anonymized", "production_export"):
         raise RuntimeError("manifest must declare schema_version 1 and a real evidence_class")
     datasets = manifest.get("datasets")
-    if not isinstance(datasets, list) or tuple(item.get("dataset") for item in datasets) != ORDER:
+    if not isinstance(datasets, list) or not all(isinstance(item, dict) for item in datasets) or tuple(item.get("dataset") for item in datasets) != ORDER:
         raise RuntimeError("datasets must appear in fields, journals, pesticide_history order")
+    for item in datasets:
+        if not isinstance(item.get("mapping"), dict) or not isinstance(item.get("expected"), dict) or not isinstance(item.get("expected_committed"), int):
+            raise RuntimeError(f"{item['dataset']} mapping, expected counts, and expected_committed are required")
     if not isinstance(manifest.get("expected_exports"), dict) or not isinstance(manifest.get("restricted_scope_expected_exports"), dict):
         raise RuntimeError("exact full and restricted export counts are required")
 

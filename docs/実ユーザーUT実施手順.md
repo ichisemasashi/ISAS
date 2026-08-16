@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 版 | v1（2026-08-14） |
+| 版 | v2（2026-08-16） |
 | 状態 | **実施基盤完成・参加者セッション待ち** |
 | 対象 | 現場作業員、高齢作業員、技能実習生 |
 | 実装対象 | [`apps/web`](../apps/web/) |
@@ -90,11 +90,20 @@ Phase 1の主要導線を実際の利用者が現場条件で完遂できるか�
 
 ## 8. 証跡と判定
 
-テンプレートをコピーしてラウンド別ディレクトリを作り、匿名化済みCSVだけを保存する。
+テンプレートをコピーしてラウンド別ディレクトリを作り、匿名化済みCSVだけを保存する。`real-evidence.example.json`は実参加者性を検証する台帳の雛形であり、同意原本や録画そのものは参照先のアクセス制限された証跡保管庫へ置く。
 
 ```bash
 cp -R research/ut/templates research/ut/results/round-01
-python3 research/ut/analyze_ut.py research/ut/results/round-01 --output research/ut/results/round-01/report.md
+python3 research/ut/analyze_ut.py research/ut/results/round-01 --json --output /secure/ut/round-01-result.json
+python3 research/ut/analyze_ut.py research/ut/results/round-01 --output /secure/ut/round-01-report.md
+node research/ut/check-real-ut.mjs /secure/ut/round-01-result.json /secure/ut/round-01-evidence.json
 ```
 
-集計レポート、使用したアプリcommit、実施日、参加者構成、既知の逸脱を同じラウンドへ保存する。合格は集計ツールが全ゲートを`PASS`とし、Severity 1が0件の場合だけ宣言する。
+匿名CSV 4ファイルのSHA-256一覧を改変防止された証跡保管庫へ保存し、その参照を`analysis_inputs_digest`へ記録する。実参加者募集の対象群別証跡、同意台帳、時刻付き観察記録、実機matrixも参照だけを記録する。UT責任者と、進行役・実装者ではない独立照合者が別々に承認する。
+
+合格は次の両方を満たした場合だけ宣言する。
+
+1. 集計ツールが全数値gateを`PASS`とし、Severity 1が0件である。
+2. `check-real-ut.mjs`が実参加者由来、実機staging、対象群・人数一致、募集・同意・観察・入力digest、二者承認を検証して`PASS`する。
+
+fixture、開発者による事前走行、空テンプレート、生成したpersona、代理回答は実参加者証跡として認めない。数値だけを手作業で`PASS`へ変更しても証跡gateは通過しない。

@@ -42,6 +42,10 @@ class RehearsalUnitTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "count mismatch"):
             MODULE.expect_counts(job, {"rows": 4, "valid": 2, "duplicates": 1, "errors": 1}, "fields")
 
+    def test_missing_expected_count_is_a_clean_validation_error(self):
+        with self.assertRaisesRegex(RuntimeError, "count mismatch"):
+            MODULE.expect_counts({"rowCount": 1}, {}, "fields")
+
 
 if __name__ == "__main__":
     unittest.main()

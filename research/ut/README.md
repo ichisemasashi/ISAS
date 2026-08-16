@@ -10,6 +10,9 @@
 - `templates/findings.csv`：観察・重大度・改善追跡
 - `analyze_ut.py`：入力検証、SUS計算、ゲート判定
 - `test_analyze_ut.py`：集計規則の回帰テスト
+- `check-real-ut.mjs`：実参加者・実機・同意・独立承認の証跡gate
+- `test_check_real_ut.mjs`：実証跡gateの回帰テスト
+- `templates/real-evidence.example.json`：個人情報を含まない証跡参照の雛形
 - `results/`：実ラウンドの匿名結果。個人情報・同意原本・録画は置かない
 
 空テンプレート自体は実施証跡ではない。実参加者結果がない状態で合格レポートを作らない。
@@ -18,7 +21,9 @@
 
 ```bash
 python3 -m unittest discover -s research/ut -p 'test_*.py'
-python3 research/ut/analyze_ut.py research/ut/results/round-01 --output research/ut/results/round-01/report.md
+node --test research/ut/test_check_real_ut.mjs
+python3 research/ut/analyze_ut.py research/ut/results/round-01 --json --output /secure/ut/round-01-result.json
+node research/ut/check-real-ut.mjs /secure/ut/round-01-result.json /secure/ut/round-01-evidence.json
 ```
 
-入力不足・重複・未知の参加者、範囲外SUSはエラーにする。閾値未達の正しい集計は終了コード1、全ゲート合格は0を返す。
+入力不足・重複・未知の参加者、範囲外SUSはエラーにする。閾値未達の正しい集計は終了コード1、全ゲート合格は0を返す。ただし、集計が0でも実参加者証跡gateが0でなければ受入未完了である。

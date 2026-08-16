@@ -81,3 +81,18 @@ CSVはUTF-8（BOMあり／なし）、ヘッダー1行、最大50,000データ�
 - `GET /api/v1/exports/pesticide-records.csv?from=YYYY-MM-DD&to=YYYY-MM-DD`
 
 書込APIには同一オリジンCookie、`X-ISAS-Context`、CSRF tokenが必要である。外部スクリプトから直接呼ぶ場合も、ブラウザ管理画面と同じBFF認証境界を迂回してはならない。
+
+## 5. 実データrehearsal
+
+本番移行前に、個人情報を除去または仮名化した実CSVを隔離したAWS staging tenantへ投入する。具体的な環境変数、manifest、実行commandは[`ops/data-migration/README.md`](../ops/data-migration/README.md)を正とする。
+
+1. rehearsal専用tenantを初期化し、移行担当者とfield-group制限付き照合担当者を作る。RLSの縮小を実証するため、制限担当者の範囲外となる圃場を最低1件含める。
+2. 移行元責任者が、元CSVの件数、想定重複、想定エラー、確定予定件数をmanifestへ記入する。
+3. `run-rehearsal.py`で圃場→作業記録→農薬履歴を順に検査・確定する。同一key再送、件数恒等式、確定時重複も自動検査される。
+4. 全scopeと制限scopeで3種類のCSVを出力し、manifestの件数と照合する。制限scopeの件数は全scope以下で、少なくとも1種類は真に少なくなければならない。
+5. 移行元責任者と、実行者とは別の照合者が原本・画面・監査記録を確認し、証跡へ承認を追記する。
+6. `node ops/data-migration/check-rehearsal.mjs /secure/rehearsal/evidence.json`が`PASS`になることを本番移行の必要条件とする。
+
+圃場・作業記録は、隔離tenantであれば確定件数と対応する出力行を照合できる。農薬履歴取込はオフライン安全判定用の初期使用集計であり、法定散布明細である「農薬記録」出力を捏造しない。このため、農薬履歴取込件数と農薬記録出力件数は別々の期待値として照合し、同数を要求しない。
+
+実CSV本文、Cookie、CSRF token、氏名・連絡先・実圃場名はGitへ追加しない。Gitに残すのは匿名化した集計、SHA-256、job ID、artifact参照だけとする。
