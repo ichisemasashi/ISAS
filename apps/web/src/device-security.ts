@@ -167,6 +167,23 @@ export async function readEncryptedOutbox<T>(tenantId: string, eventId: string):
   return decryptJson<T>({ ...row.envelope, keyVersion: 0 }, contentKey);
 }
 
+export async function listEncryptedOutbox<T>(tenantId: string, limit = 100): Promise<T[]> {
+  const rows = (await readAll<OutboxRow>("outbox"))
+    .filter((row) => row.tenantId === tenantId && row.state === "pending")
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .slice(0, limit);
+  const values: T[] = [];
+  for (const row of rows) {
+    const value = await readEncryptedOutbox<T>(tenantId, row.id);
+    if (value !== null) values.push(value);
+  }
+  return values;
+}
+
+export async function encryptedOutboxCount(tenantId?: string): Promise<number> {
+  return (await readAll<OutboxRow>("outbox")).filter((row) => row.state === "pending" && (!tenantId || row.tenantId === tenantId)).length;
+}
+
 export async function listRecoveryPackages(tenantId: string): Promise<RecoveryPackage[]> {
   return (await readAll<OutboxRow>("outbox")).filter((row) => row.tenantId === tenantId).map((row) => ({
     format: "ISAS-OUTBOX-RECOVERY-1", eventId: row.id, tenantId: row.tenantId, createdAt: row.createdAt,

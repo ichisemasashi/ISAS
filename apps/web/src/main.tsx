@@ -5,6 +5,7 @@ import { createMvpGateway } from "./api";
 import { createBffAuthGateway, demoAuthGateway } from "./auth";
 import { PwaUpdateGate } from "./pwa-update";
 import "./styles.css";
+import { configureRecoveryPublicKey } from "./device-security";
 
 const root = createRoot(document.getElementById("root")!);
 const search = new URLSearchParams(window.location.search);
@@ -14,10 +15,24 @@ async function renderApplication() {
   if (utMode) {
     const { resetUtBrowserStorage, utGateway } = await import("./ut-fixture");
     if (search.get("reset") === "1") await resetUtBrowserStorage();
+    await configureDeviceRecovery();
     root.render(<StrictMode><UtModeBanner/><PwaUpdateGate/><AuthBoundary gateway={demoAuthGateway} api={utGateway} /></StrictMode>);
     return;
   }
+  await configureDeviceRecovery();
   root.render(<StrictMode><PwaUpdateGate/><AuthBoundary gateway={createBffAuthGateway()} api={createMvpGateway()} /></StrictMode>);
+}
+
+async function configureDeviceRecovery() {
+  if (utMode) {
+    const pair = await crypto.subtle.generateKey({ name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["wrapKey", "unwrapKey"]);
+    await configureRecoveryPublicKey("ut-ephemeral-recovery", await crypto.subtle.exportKey("jwk", pair.publicKey));
+    return;
+  }
+  const encoded = import.meta.env.VITE_DEVICE_RECOVERY_PUBLIC_JWK;
+  const keyId = import.meta.env.VITE_DEVICE_RECOVERY_KEY_ID;
+  if (!encoded || !keyId) return;
+  await configureRecoveryPublicKey(keyId, JSON.parse(encoded) as JsonWebKey);
 }
 
 function UtModeBanner() {

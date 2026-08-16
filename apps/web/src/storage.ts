@@ -1,4 +1,5 @@
 import type { FieldFeature, InventorySnapshot, JournalBootstrap, OfflineMapPackManifest, PesticideBootstrap, PullChange, QueueSnapshot, TodayTask } from "./api";
+import { acknowledgeEncryptedOutbox, encryptedOutboxCount, enqueueEncryptedOutbox, getEncryptedCache, listEncryptedOutbox, putEncryptedCache } from "./device-security";
 
 export type JournalDraft = { id: string; aggregateId: string; baseVersion: number; baseValue: Record<string, unknown>; instructionId?: string; fieldId?: string; fieldGroupId?: string; field: string; workType: string; startedAt: string; endedAt: string; memo: string; attachmentIds?: string[]; updatedAt: string };
 export type OutboxRecord = {
@@ -86,22 +87,28 @@ function cursorKey(tenantId: string, scope: string, priority: string) { return `
 
 export const browserStorage: StorageGateway = {
   saveDraft: (draft) => inTransaction("drafts", "readwrite", ({ drafts }) => idbRequest(drafts.put(draft)).then(() => undefined)),
-  enqueue: (record) => inTransaction("outbox", "readwrite", ({ outbox }) => idbRequest(outbox.put(record)).then(() => undefined)),
+  enqueue: (record) => enqueueEncryptedOutbox(record.tenantId, record.eventUuid, record),
   saveAttachment: (record) => inTransaction("attachments", "readwrite", ({ attachments }) => idbRequest(attachments.put(record)).then(() => undefined)),
   markAttachmentsReady: (journalIds) => inTransaction("attachments", "readwrite", async ({ attachments }) => {
     for (const row of await idbRequest<JournalAttachmentRecord[]>(attachments.getAll())) if (journalIds.includes(row.journalId)) attachments.put({ ...row, ready: true });
   }),
   listReadyAttachments: (tenantId) => inTransaction("attachments", "readonly", async ({ attachments }) => (await idbRequest<JournalAttachmentRecord[]>(attachments.getAll())).filter((row) => row.tenantId === tenantId && row.ready)),
   acknowledgeAttachment: (id) => inTransaction("attachments", "readwrite", ({ attachments }) => idbRequest(attachments.delete(id)).then(() => undefined)),
-  pendingCount: (tenantId) => inTransaction("outbox", "readonly", async ({ outbox }) => { const rows = await idbRequest<OutboxRecord[]>(outbox.getAll()); return tenantId ? rows.filter((row) => row.tenantId === tenantId).length : rows.length; }),
-  listOutbox: (tenantId, limit = 100) => inTransaction("outbox", "readonly", async ({ outbox }) => (await idbRequest<OutboxRecord[]>(outbox.getAll())).filter((row) => row.tenantId === tenantId).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, limit)),
-  acknowledge: (ids) => inTransaction("outbox", "readwrite", ({ outbox }) => { ids.forEach((id) => outbox.delete(id)); }),
-  quarantine: (records, queue, reason, recoveryAction) => inTransaction(["outbox", queue], "readwrite", (stores) => {
+  pendingCount: async (tenantId) => {
+    const legacy = await inTransaction("outbox", "readonly", ({ outbox }) => idbRequest<OutboxRecord[]>(outbox.getAll()));
+    if (legacy.some((row) => !tenantId || row.tenantId === tenantId)) throw new Error("legacy plaintext outbox requires supervised recovery");
+    return encryptedOutboxCount(tenantId);
+  },
+  listOutbox: (tenantId, limit = 100) => listEncryptedOutbox<OutboxRecord>(tenantId, limit),
+  acknowledge: acknowledgeEncryptedOutbox,
+  quarantine: async (records, queue, reason, recoveryAction) => {
+    await inTransaction(queue, "readwrite", (stores) => {
     for (const record of records) {
       stores[queue].put({ eventUuid: record.eventUuid, bundleId: record.bundleId, tenantId: record.tenantId, reason, recoveryAction, payload: record.payload, createdAt: new Date().toISOString() } satisfies LocalQueueRecord);
-      stores.outbox.delete(record.eventUuid);
     }
-  }),
+    });
+    await acknowledgeEncryptedOutbox(records.map((record) => record.eventUuid));
+  },
   getCursor: (tenantId, scope, priority) => inTransaction("cursors", "readonly", async ({ cursors }) => (await idbRequest<{ cursor: string } | undefined>(cursors.get(cursorKey(tenantId, scope, priority))))?.cursor || null),
   setCursor: (tenantId, scope, priority, cursor) => inTransaction("cursors", "readwrite", ({ cursors }) => idbRequest(cursors.put({ key: cursorKey(tenantId, scope, priority), tenantId, scope, priority, cursor })).then(() => undefined)),
   applyChanges: (tenantId, scope, changes) => inTransaction("changes", "readwrite", ({ changes: store }) => { for (const change of changes) store.put({ ...change, key: `${tenantId}:${scope}:${change.type}:${change.entityId || change.eventUuid || change.serverSeq}`, tenantId, scope }); }),
@@ -117,8 +124,8 @@ export const browserStorage: StorageGateway = {
     for (const pack of await idbRequest<OfflineMapPackRecord[]>(offlinePacks.getAll())) if (pack.tenantId === tenantId && pack.fieldGroupId === scope) { removedPacks.add(pack.packId); offlinePacks.delete(pack.packId); }
     for (const tile of await idbRequest<OfflineMapTileRecord[]>(offlineTiles.getAll())) if (removedPacks.has(tile.packId)) offlineTiles.delete(tile.key);
   }),
-  saveToday: (tenantId, tasks) => inTransaction("today", "readwrite", ({ today }) => idbRequest(today.put({ tenantId, tasks, savedAt: new Date().toISOString() })).then(() => undefined)),
-  getToday: (tenantId) => inTransaction("today", "readonly", async ({ today }) => (await idbRequest<{ tasks: TodayTask[] } | undefined>(today.get(tenantId)))?.tasks || []),
+  saveToday: (tenantId, tasks) => putEncryptedCache(tenantId, "today", `today:${tenantId}`, { tasks, savedAt: new Date().toISOString() }),
+  getToday: async (tenantId) => (await getEncryptedCache<{ tasks: TodayTask[] }>(tenantId, `today:${tenantId}`))?.tasks || [],
   saveJournalBootstrap: (tenantId, value) => inTransaction("journalBootstrap", "readwrite", ({ journalBootstrap }) => idbRequest(journalBootstrap.put({ tenantId, value, savedAt: new Date().toISOString() })).then(() => undefined)),
   getJournalBootstrap: (tenantId) => inTransaction("journalBootstrap", "readonly", async ({ journalBootstrap }) => (await idbRequest<{ value: JournalBootstrap } | undefined>(journalBootstrap.get(tenantId)))?.value || null),
   saveFields: (tenantId, fields) => inTransaction("fields", "readwrite", async ({ fields: store }) => {

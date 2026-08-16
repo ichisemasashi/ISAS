@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { App } from "./App";
 import type { MvpGateway } from "./api";
 import type { AppAuthorization, AuthBootstrap, AuthGateway, RequestContext } from "./auth";
+import { revokeDeviceAccess } from "./device-security";
+import { browserStorage } from "./storage";
 
 type BoundaryState =
   | { status: "loading" }
@@ -54,7 +56,14 @@ export function AuthBoundary({ gateway, api }: { gateway: AuthGateway; api: MvpG
     }
   };
 
-  return <App key={state.context.contextId} api={api} csrfToken={state.bootstrap.csrfToken} authorization={authorization} tenants={state.bootstrap.tenants} onTenantChange={switchTenant} />;
+  const logout = async () => {
+    const pending = await browserStorage.pendingCount(state.context.tenantId);
+    if (pending > 0) throw new Error(`未同期${pending}件を同期してからログアウトしてください。端末紛失時は管理者へ回復を依頼してください。`);
+    await revokeDeviceAccess(state.context.tenantId, []);
+    await gateway.logout(state.bootstrap.csrfToken);
+  };
+
+  return <App key={state.context.contextId} api={api} csrfToken={state.bootstrap.csrfToken} authorization={authorization} tenants={state.bootstrap.tenants} onTenantChange={switchTenant} onLogout={logout} />;
 }
 
 function AuthScreen({ title, description, actionLabel, onAction, busy = false }: { title: string; description: string; actionLabel?: string; onAction?: () => void; busy?: boolean }) {

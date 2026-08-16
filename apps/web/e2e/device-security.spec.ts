@@ -50,7 +50,8 @@ test("S9: cache/outbox鍵を分離し、rotation後も読め、失効後はrecov
   ]));
   expect(result.cacheBefore?.field).toBe("north");
   expect(result.outboxBefore?.memo).toBe("unsynced");
-  expect(result.cacheRotation).toMatchObject({ from: 1, to: 2, records: 1 });
+  expect(result.cacheRotation).toMatchObject({ from: 1, to: 2 });
+  expect(result.cacheRotation.records).toBeGreaterThanOrEqual(1);
   expect(result.outboxRotation).toMatchObject({ from: 1, to: 2, records: 1 });
   expect(result.afterRotation).toEqual({ cache: { field: "north" }, outbox: { eventUuid: "event-1", memo: "unsynced" } });
   expect(result.refusedUnsafeRevoke).toBe(true);
@@ -64,4 +65,27 @@ test("S9: storage quotaを観測し、outbox用安全余白を判定する", asy
   expect(result.quota).toBeGreaterThan(0);
   expect(result.available).toBeGreaterThanOrEqual(0);
   expect(typeof result.safeToWriteOutbox).toBe("boolean");
+});
+
+test("S9: 共有端末logoutはcache鍵を暗号消去する", async ({ page }) => {
+  await page.goto("/?ut=1&reset=1");
+  await expect(page.getByRole("heading", { name: /おはようございます/ })).toBeVisible();
+  await page.getByRole("button", { name: /アカウントメニュー/ }).click();
+  await page.getByRole("button", { name: "ログアウト" }).click();
+  await expect.poll(async () => page.evaluate(async () => (await import("/src/device-security.ts")).inspectDeviceVault())).toMatchObject({ keys: [], cacheRecords: 0, outboxRecords: 0 });
+});
+
+test("S9: 未同期outboxがある共有端末logoutを拒否して回復可能性を保つ", async ({ page }) => {
+  await page.goto("/?ut=1&reset=1&sync=fail");
+  await expect(page.getByRole("heading", { name: /おはようございます/ })).toBeVisible();
+  await page.getByRole("button", { name: "進行役：圏外を模擬" }).click();
+  await page.getByRole("button", { name: "作業を始める" }).click();
+  await expect(page.getByText("未同期 1件")).toBeVisible();
+  await page.getByRole("button", { name: "進行役：通信を戻す" }).click();
+  await page.getByRole("button", { name: /アカウントメニュー/ }).click();
+  await page.getByRole("button", { name: "ログアウト" }).click();
+  await expect(page.getByText(/未同期1件を同期してからログアウト/)).toBeVisible();
+  const vault = await page.evaluate(async () => (await import("/src/device-security.ts")).inspectDeviceVault());
+  expect(vault.outboxRecords).toBe(1);
+  expect(vault.keys.some((key) => key.purpose === "outbox")).toBe(true);
 });

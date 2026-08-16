@@ -85,6 +85,8 @@ export const utGateway: MvpGateway = {
 };
 
 export async function resetUtBrowserStorage(): Promise<void> {
+  const { resetDeviceVaultForTesting } = await import("./device-security");
+  await resetDeviceVaultForTesting();
   await new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase("isas-field-ops");
     request.onsuccess = () => resolve();

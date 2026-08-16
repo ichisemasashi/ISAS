@@ -17,20 +17,5 @@ test("未同期outboxは再読込後も同じUUIDで保持される", async ({ p
 });
 
 async function outboxEventUuids(page: import("@playwright/test").Page): Promise<string[]> {
-  return page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("isas-field-ops", 5);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      return await new Promise<string[]>((resolve, reject) => {
-        const request = db.transaction("outbox", "readonly").objectStore("outbox").getAllKeys();
-        request.onsuccess = () => resolve(request.result.map(String).sort());
-        request.onerror = () => reject(request.error);
-      });
-    } finally {
-      db.close();
-    }
-  });
+  return page.evaluate(async () => (await import("/src/device-security.ts")).listEncryptedOutbox<{ eventUuid: string }>("tenant-yamagata-midori", 100).then((rows) => rows.map((row) => row.eventUuid).sort()));
 }
