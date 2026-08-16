@@ -242,6 +242,34 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(response.status, 403);
   });
 
+  test("expands a crop plan template and keeps gantt and mobile progress on the same instructions", async () => {
+    const fx = fixture(["planning:manage", "instruction:manage"], {
+      planningTemplates: [{ id: "template-1", tenantId: "tenant-1", name: "水稲標準", cropName: "水稲", active: true, version: 3, steps: [
+        { stepKey: "plant", title: "田植え", workType: "定植", startOffsetDays: 0, durationMinutes: 120, priority: 1, sortOrder: 1 },
+        { stepKey: "check", title: "活着確認", workType: "生育確認", startOffsetDays: 7, durationMinutes: 60, priority: 1, sortOrder: 2, predecessorStepKey: "plant", dependencyType: "finish_start", lagMinutes: 0 },
+      ] }],
+      planningResources: [{ id: "resource-1", tenantId: "tenant-1", resourceType: "machine", name: "田植機", status: "active" }],
+    });
+    const templates = await fx.handle(fx.request("/api/v1/planning/templates")).then((response) => response.json());
+    assert.equal(templates.templates[0].version, 3);
+    const expandedResponse = await fx.handle(fx.request("/api/v1/planning/templates/template-1/expand", {
+      method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ cropPlanId: "plan-1", fieldId: "0198a6c0-0000-7000-8000-000000000101", fieldGroupId: "field-group-1", fieldName: "北圃場", cropName: "水稲", varietyName: "つや姫", plannedAreaM2: 1000, targetYieldKg: 540, assigneeUserId: "22222222-2222-7222-8222-222222222222", baseDate: "2027-05-01", expectedVersion: 3 }),
+    }));
+    assert.equal(expandedResponse.status, 201);
+    const expanded = await expandedResponse.json();
+    assert.equal(expanded.instructions.length, 2);
+    assert.equal(expanded.instructions[1].dependencies.length, 1);
+    const progress = await fx.handle(fx.request(`/api/v1/work-instructions/${expanded.instructions[0].id}/progress`, {
+      method: "PATCH", headers: { Origin: ORIGIN, "Content-Type": "application/json", "X-CSRF-Token": "csrf-1" },
+      body: JSON.stringify({ eventUuid: "progress-1", progressPercent: 40, expectedVersion: 1, note: "現場確認", occurredAt: "2027-05-01T01:00:00Z" }),
+    })).then((response) => response.json());
+    assert.equal(progress.progressPercent, 40);
+    const gantt = await fx.handle(fx.request("/api/v1/work-instructions")).then((response) => response.json());
+    assert.equal(gantt.instructions[0].progressPercent, 40);
+    assert.equal(gantt.instructions[0].varietyName, "つや姫");
+  });
+
   test("returns offline journal defaults and stores an idempotent photo upload", async () => {
     const fx = fixture(["journal:write"]);
     const bootstrap = await fx.handle(fx.request("/api/v1/journal-bootstrap"));

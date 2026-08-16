@@ -9,13 +9,15 @@ function clone(value) {
   return structuredClone(value);
 }
 
-export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [], pesticideRelease = null, agrochemicals = [], stockEvents = [] } = {}) {
+export function createMemoryMvpRepository({ tasks = [], fields = [], workInstructions = [], workJournals = [], pesticideRelease = null, agrochemicals = [], stockEvents = [], planningTemplates = [], planningResources = [] } = {}) {
   const receipts = new Map();
   const changes = [];
   const rejections = [];
   const conflicts = [];
   let sequence = 0;
   const instructions = clone(workInstructions);
+  const templates = clone(planningTemplates);
+  const resources = clone(planningResources);
   const attachments = [];
   const attachmentObjects = new Map();
   const journals = clone(workJournals);
@@ -60,6 +62,46 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
     async listWorkInstructions(_client, trusted) {
       const manager = trusted.authContext.capabilities.includes("instruction:manage");
       return { instructions: clone(instructions.filter((item) => item.tenantId === trusted.authContext.tenantId && (manager || item.assignment?.assigneeUserId === trusted.userId))) };
+    },
+
+    async listPlanningTemplates(_client, trusted) {
+      if (!trusted.authContext.capabilities.includes("planning:manage")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      return { templates: clone(templates.filter((item) => item.tenantId === trusted.authContext.tenantId && item.active !== false)) };
+    },
+
+    async expandPlanningTemplate(_client, trusted, templateId, input) {
+      if (!trusted.authContext.capabilities.includes("planning:manage") || !trusted.authContext.capabilities.includes("instruction:manage")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const template = templates.find((item) => item.id === templateId && item.tenantId === trusted.authContext.tenantId && item.active !== false);
+      if (!template || template.version !== input.expectedVersion || !/^\d{4}-\d{2}-\d{2}$/.test(input.baseDate || "")) throw new TypeError("invalid template expansion");
+      if (template.steps.some((step) => step.requiredResourceType) && !trusted.authContext.capabilities.includes("resource:manage")) throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+      const created = [];
+      const byStep = new Map();
+      for (const step of [...template.steps].sort((a, b) => a.sortOrder - b.sortOrder)) {
+        const start = new Date(`${input.baseDate}T00:00:00Z`); start.setUTCDate(start.getUTCDate() + step.startOffsetDays);
+        const end = new Date(start.getTime() + step.durationMinutes * 60000);
+        const item = { id: `expanded-${instructions.length + 1}`, tenantId: trusted.authContext.tenantId,
+          fieldId: input.fieldId, fieldGroupId: input.fieldGroupId, fieldName: input.fieldName || null,
+          cropPlanId: input.cropPlanId, cropName: input.cropName || template.cropName || null,
+          varietyName: input.varietyName || null, plannedAreaM2: input.plannedAreaM2 ?? null, targetYieldKg: input.targetYieldKg ?? null,
+          title: step.title, workType: step.workType, details: step.details || "", scheduledStart: start.toISOString(), scheduledEnd: end.toISOString(),
+          priority: step.priority ?? 1, status: "issued", progressPercent: 0, version: 1,
+          assignment: { id: `assignment-${instructions.length + 1}`, assigneeUserId: input.assigneeUserId, version: 1 }, dependencies: [], resourceConflicts: [] };
+        if (step.predecessorStepKey) item.dependencies.push({ predecessorInstructionId: byStep.get(step.predecessorStepKey), type: step.dependencyType || "finish_start", lagMinutes: step.lagMinutes || 0 });
+        const resource = resources.find((candidate) => candidate.tenantId === trusted.authContext.tenantId && candidate.resourceType === step.requiredResourceType && candidate.status === "active");
+        if (resource) item.resources = [{ id: resource.id, name: resource.name, quantity: step.requiredQuantity }];
+        instructions.push(item); created.push(item); byStep.set(step.stepKey, item.id);
+      }
+      return { templateId, cropPlanId: input.cropPlanId, instructions: clone(created), conflictCount: 0 };
+    },
+
+    async updateWorkProgress(_client, trusted, instructionId, input) {
+      const item = instructions.find((row) => row.id === instructionId && row.tenantId === trusted.authContext.tenantId);
+      if (!item || !Number.isInteger(input.progressPercent) || input.progressPercent < 0 || input.progressPercent > 100 || item.version !== input.expectedVersion) {
+        if (item && item.version !== input.expectedVersion) throw Object.assign(new Error("version conflict"), { code: "version_conflict", currentVersion: item.version });
+        throw new TypeError("invalid progress");
+      }
+      item.progressPercent = input.progressPercent; item.status = input.progressPercent === 100 ? "completed" : input.progressPercent > 0 ? "in_progress" : "issued"; item.version += 1;
+      return clone({ id: item.id, progressPercent: item.progressPercent, status: item.status, version: item.version, updatedAt: new Date().toISOString() });
     },
 
     async createWorkInstruction(_client, trusted, input) {

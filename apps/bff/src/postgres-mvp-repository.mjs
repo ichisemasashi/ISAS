@@ -215,7 +215,11 @@ function workInstructionDto(row) {
     fieldName: row.field_name || null, cropName: row.crop_name || null,
     title: row.title, workType: row.work_type, details: row.details,
     scheduledStart: new Date(row.scheduled_start).toISOString(), scheduledEnd: new Date(row.scheduled_end).toISOString(),
-    priority: Number(row.priority), status: row.status, version: Number(row.version),
+    priority: Number(row.priority), status: row.status, version: Number(row.version), progressPercent: Number(row.progress_percent || 0),
+    cropPlanId: row.crop_plan_id || null, varietyName: row.variety_name || null,
+    plannedAreaM2: row.planned_area_m2 == null ? null : Number(row.planned_area_m2),
+    targetYieldKg: row.target_yield_kg == null ? null : Number(row.target_yield_kg),
+    dependencies: row.dependencies || [], resources: row.resources || [], resourceConflicts: row.resource_conflicts || [],
     assignment: row.assignment_id ? { id: row.assignment_id, assigneeUserId: row.assignee_user_id, version: Number(row.assignment_version) } : null,
   };
 }
@@ -307,12 +311,32 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
                instruction.field_group_id::text AS field_group_id, field.name AS field_name,
                field.crop_name, instruction.title, instruction.work_type, instruction.details,
                instruction.scheduled_start, instruction.scheduled_end, instruction.priority,
-               instruction.status, instruction.version,
+               instruction.status, instruction.version, instruction.progress_percent,
+               instruction.crop_plan_id::text, plan.variety_name, plan.planned_area_m2, plan.target_yield_kg,
+               coalesce((SELECT jsonb_agg(jsonb_build_object(
+                 'predecessorInstructionId', dependency.predecessor_instruction_id::text,
+                 'type', dependency.dependency_type, 'lagMinutes', dependency.lag_minutes))
+                 FROM app.work_instruction_dependency dependency
+                 WHERE dependency.tenant_id = instruction.tenant_id
+                   AND dependency.successor_instruction_id = instruction.instruction_id), '[]'::jsonb) AS dependencies,
+               coalesce((SELECT jsonb_agg(jsonb_build_object(
+                 'id', resource.resource_id::text, 'name', resource.name, 'quantity', allocation.quantity))
+                 FROM app.work_resource_allocation allocation
+                 JOIN app.planning_resource resource USING (tenant_id, resource_id)
+                 WHERE allocation.tenant_id = instruction.tenant_id
+                   AND allocation.instruction_id = instruction.instruction_id), '[]'::jsonb) AS resources,
+               coalesce((SELECT jsonb_agg(jsonb_build_object(
+                 'resourceId', conflict.resource_id::text, 'resourceName', conflict.resource_name,
+                 'conflictStart', conflict.conflict_start, 'conflictEnd', conflict.conflict_end))
+                 FROM app.resource_conflict conflict
+                 WHERE conflict.tenant_id = instruction.tenant_id
+                   AND (conflict.left_instruction_id = instruction.instruction_id OR conflict.right_instruction_id = instruction.instruction_id)), '[]'::jsonb) AS resource_conflicts,
                assignment.assignment_id::text AS assignment_id,
                assignment.assignee_user_id::text AS assignee_user_id,
                assignment.version AS assignment_version
         FROM app.work_instruction instruction
         JOIN app.field field ON field.tenant_id = instruction.tenant_id AND field.field_id = instruction.field_id
+        LEFT JOIN app.crop_plan plan ON plan.tenant_id = instruction.tenant_id AND plan.crop_plan_id = instruction.crop_plan_id
         LEFT JOIN app.work_assignment assignment
           ON assignment.tenant_id = instruction.tenant_id
          AND assignment.instruction_id = instruction.instruction_id
@@ -321,6 +345,123 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           AND (assignment.assignee_user_id = app.current_user_id() OR app.has_capability('instruction:manage'))
         ORDER BY instruction.scheduled_start, instruction.instruction_id`);
       return { instructions: result.rows.map(workInstructionDto) };
+    },
+
+    async listPlanningTemplates(client) {
+      const result = await client.query(`SELECT template.template_id::text AS id, template.name, template.crop_name,
+          template.description, template.version, template.active,
+          coalesce(jsonb_agg(jsonb_build_object('stepKey', step.step_key, 'title', step.title,
+            'workType', step.work_type, 'details', step.details, 'startOffsetDays', step.start_offset_days,
+            'durationMinutes', step.duration_minutes, 'priority', step.priority,
+            'predecessorStepKey', step.predecessor_step_key, 'dependencyType', step.dependency_type,
+            'lagMinutes', step.lag_minutes, 'requiredResourceType', step.required_resource_type,
+            'requiredQuantity', step.required_quantity, 'sortOrder', step.sort_order)
+            ORDER BY step.sort_order, step.step_key) FILTER (WHERE step.step_key IS NOT NULL), '[]'::jsonb) AS steps
+        FROM app.work_plan_template template
+        LEFT JOIN app.work_plan_template_step step USING (tenant_id, template_id)
+        WHERE template.active
+        GROUP BY template.tenant_id, template.template_id
+        ORDER BY template.name`);
+      return { templates: result.rows.map((row) => ({ id: row.id, name: row.name, cropName: row.crop_name || null,
+        description: row.description, version: Number(row.version), active: row.active, steps: row.steps })) };
+    },
+
+    async expandPlanningTemplate(client, trusted, templateId, input) {
+      if (!isUuid(templateId) || !isUuid(input?.cropPlanId) || !isUuid(input?.assigneeUserId)
+        || !/^\d{4}-\d{2}-\d{2}$/.test(input?.baseDate || "") || !Number.isInteger(input?.expectedVersion)) throw new TypeError("invalid template expansion");
+      await requireCapability(client, "planning:manage");
+      await requireCapability(client, "instruction:manage");
+      const template = await client.query(`SELECT template.template_id::text, template.version,
+          plan.crop_plan_id::text, plan.field_id::text, plan.field_group_id::text
+        FROM app.work_plan_template template
+        JOIN app.crop_plan plan ON plan.tenant_id = template.tenant_id AND plan.crop_plan_id = $2::uuid
+        WHERE template.tenant_id = app.current_tenant_id() AND template.template_id = $1::uuid
+          AND template.active AND plan.deleted_at IS NULL FOR UPDATE OF template`, [templateId, input.cropPlanId]);
+      if (!template.rows[0]) throw new TypeError("unknown template or crop plan");
+      if (Number(template.rows[0].version) !== input.expectedVersion) throw Object.assign(new Error("version conflict"), { code: "version_conflict", currentVersion: Number(template.rows[0].version) });
+      const steps = await client.query(`SELECT * FROM app.work_plan_template_step
+        WHERE tenant_id = app.current_tenant_id() AND template_id = $1::uuid ORDER BY sort_order, step_key`, [templateId]);
+      if (!steps.rows.length) throw new TypeError("template has no steps");
+      if (steps.rows.some((step) => step.required_resource_type)) await requireCapability(client, "resource:manage");
+      const ids = new Map(); const created = [];
+      for (const step of steps.rows) {
+        const instructionId = uuid(); const assignmentId = uuid(); ids.set(step.step_key, instructionId);
+        const inserted = await client.query(`WITH instruction AS (
+          INSERT INTO app.work_instruction
+              (tenant_id, instruction_id, field_id, field_group_id, crop_plan_id, title, work_type, details,
+               scheduled_start, scheduled_end, priority, created_by, updated_by)
+            SELECT app.current_tenant_id(), $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7,
+              ($8::date + $9::integer)::timestamp AT TIME ZONE field.timezone,
+              (($8::date + $9::integer)::timestamp AT TIME ZONE field.timezone) + make_interval(mins => $10::integer),
+              $11, app.current_user_id(), app.current_user_id()
+            FROM app.field field
+            WHERE field.tenant_id = app.current_tenant_id() AND field.field_id = $2::uuid
+            RETURNING *
+          ), assignment AS (
+            INSERT INTO app.work_assignment (tenant_id, assignment_id, instruction_id, field_group_id, assignee_user_id, assigned_by)
+            SELECT tenant_id, $12::uuid, instruction_id, field_group_id, $13::uuid, app.current_user_id() FROM instruction RETURNING *
+          ) SELECT instruction.*, assignment.assignment_id::text, assignment.assignee_user_id::text, assignment.version AS assignment_version,
+              field.name AS field_name, field.crop_name
+            FROM instruction CROSS JOIN assignment, app.field field
+            WHERE field.tenant_id = instruction.tenant_id AND field.field_id = instruction.field_id`,
+        [instructionId, template.rows[0].field_id, template.rows[0].field_group_id, input.cropPlanId,
+          step.title, step.work_type, step.details, input.baseDate, step.start_offset_days, step.duration_minutes,
+          step.priority, assignmentId, input.assigneeUserId]);
+        created.push(workInstructionDto({ ...inserted.rows[0], id: instructionId, field_id: template.rows[0].field_id,
+          field_group_id: template.rows[0].field_group_id, crop_plan_id: input.cropPlanId, dependencies: [], resources: [], resource_conflicts: [] }));
+        if (step.required_resource_type) {
+          await client.query(`INSERT INTO app.work_resource_allocation
+              (tenant_id, allocation_id, instruction_id, resource_id, field_group_id, quantity,
+               allocated_start, allocated_end, created_by, updated_by)
+            SELECT instruction.tenant_id, $2::uuid, instruction.instruction_id, resource.resource_id,
+              instruction.field_group_id, $3, instruction.scheduled_start, instruction.scheduled_end,
+              app.current_user_id(), app.current_user_id()
+            FROM app.work_instruction instruction
+            JOIN LATERAL (SELECT resource_id FROM app.planning_resource
+              WHERE tenant_id = instruction.tenant_id AND resource_type = $4 AND status = 'active'
+                AND deleted_at IS NULL AND (field_group_id IS NULL OR field_group_id = instruction.field_group_id)
+              ORDER BY resource_id LIMIT 1) resource ON true
+            WHERE instruction.tenant_id = app.current_tenant_id() AND instruction.instruction_id = $1::uuid`,
+          [instructionId, uuid(), Number(step.required_quantity), step.required_resource_type]);
+        }
+      }
+      for (const step of steps.rows) if (step.predecessor_step_key) {
+        const predecessor = ids.get(step.predecessor_step_key); const successor = ids.get(step.step_key);
+        if (!predecessor) throw new TypeError("unknown predecessor step");
+        await client.query(`INSERT INTO app.work_instruction_dependency
+          (tenant_id, predecessor_instruction_id, successor_instruction_id, dependency_type, lag_minutes, created_by)
+          VALUES (app.current_tenant_id(), $1::uuid, $2::uuid, $3, $4, app.current_user_id())`,
+        [predecessor, successor, step.dependency_type, step.lag_minutes]);
+      }
+      const conflicts = await client.query(`SELECT count(*)::integer AS count FROM app.resource_conflict
+        WHERE tenant_id = app.current_tenant_id()
+          AND (left_instruction_id = ANY($1::uuid[]) OR right_instruction_id = ANY($1::uuid[]))`, [[...ids.values()]]);
+      return { templateId, cropPlanId: input.cropPlanId, instructions: created, conflictCount: Number(conflicts.rows[0].count) };
+    },
+
+    async updateWorkProgress(client, trusted, instructionId, input) {
+      if (!isUuid(instructionId) || !isUuid(input?.eventUuid) || !Number.isInteger(input?.progressPercent)
+        || input.progressPercent < 0 || input.progressPercent > 100 || !Number.isInteger(input?.expectedVersion)
+        || typeof input.note !== "string" || input.note.length > 1000) throw new TypeError("invalid progress");
+      const locked = await client.query(`SELECT instruction_id::text, field_group_id::text, version
+        FROM app.work_instruction WHERE tenant_id = app.current_tenant_id() AND instruction_id = $1::uuid
+          AND deleted_at IS NULL FOR UPDATE`, [instructionId]);
+      if (!locked.rows[0]) throw new TypeError("unknown instruction");
+      if (Number(locked.rows[0].version) !== input.expectedVersion) throw Object.assign(new Error("version conflict"), { code: "version_conflict", currentVersion: Number(locked.rows[0].version) });
+      const existing = await client.query(`SELECT progress_percent, event_ts FROM app.work_progress_event
+        WHERE tenant_id = app.current_tenant_id() AND event_uuid = $1::uuid`, [input.eventUuid]);
+      if (existing.rows[0]) return { id: instructionId, progressPercent: Number(existing.rows[0].progress_percent), status: null, version: input.expectedVersion, updatedAt: iso(existing.rows[0].event_ts) };
+      await client.query(`INSERT INTO app.work_progress_event
+        (tenant_id, progress_event_id, event_uuid, instruction_id, field_group_id, progress_percent, note, actor_user_id, occurred_at)
+        VALUES (app.current_tenant_id(), $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, app.current_user_id(), $7::timestamptz)`,
+      [uuid(), input.eventUuid, instructionId, locked.rows[0].field_group_id, input.progressPercent, input.note, input.occurredAt || new Date().toISOString()]);
+      const updated = await client.query(`UPDATE app.work_instruction SET progress_percent = $2,
+          status = CASE WHEN $2 = 100 THEN 'completed' WHEN $2 > 0 THEN 'in_progress' ELSE 'issued' END,
+          progress_updated_at = clock_timestamp(), updated_at = clock_timestamp(), updated_by = app.current_user_id(), version = version + 1
+        WHERE tenant_id = app.current_tenant_id() AND instruction_id = $1::uuid
+        RETURNING progress_percent, status, version, updated_at`, [instructionId, input.progressPercent]);
+      return { id: instructionId, progressPercent: Number(updated.rows[0].progress_percent), status: updated.rows[0].status,
+        version: Number(updated.rows[0].version), updatedAt: iso(updated.rows[0].updated_at) };
     },
 
     async createWorkInstruction(client, trusted, input) {

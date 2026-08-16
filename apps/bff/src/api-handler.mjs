@@ -282,6 +282,19 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         return json(200, result, requestId);
       }
 
+      if (request.method === "GET" && url.pathname === "/api/v1/planning/templates") {
+        const result = await database.transaction(trusted, (client, canonical) => repository.listPlanningTemplates(client, canonical ? { ...trusted, authContext: canonical } : trusted), { readOnly: true });
+        return json(200, result, requestId);
+      }
+
+      const templateExpansion = url.pathname.match(/^\/api\/v1\/planning\/templates\/([^/]+)\/expand$/);
+      if (request.method === "POST" && templateExpansion) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.expandPlanningTemplate(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(templateExpansion[1]), body));
+        return json(201, result, requestId);
+      }
+
       if (request.method === "GET" && url.pathname === "/api/v1/journal-bootstrap") {
         const instructionId = url.searchParams.get("instructionId");
         const fieldId = url.searchParams.get("fieldId");
@@ -392,6 +405,14 @@ export function createMvpApiHandler({ origin, resolveContext, database, reposito
         if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
         const body = await readJsonObject(request);
         const result = await database.transaction(trusted, (client, canonical) => repository.reassignWorkInstruction(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(assignmentMatch[1]), body));
+        return json(200, result, requestId);
+      }
+
+      const progressMatch = url.pathname.match(/^\/api\/v1\/work-instructions\/([^/]+)\/progress$/);
+      if (request.method === "PATCH" && progressMatch) {
+        if (!validWrite(request, origin, trusted.csrfToken)) return problem(403, "request_rejected", "Request rejected", requestId);
+        const body = await readJsonObject(request);
+        const result = await database.transaction(trusted, (client, canonical) => repository.updateWorkProgress(client, canonical ? { ...trusted, authContext: canonical } : trusted, decodeURIComponent(progressMatch[1]), body));
         return json(200, result, requestId);
       }
 
