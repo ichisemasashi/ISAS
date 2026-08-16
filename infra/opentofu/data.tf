@@ -137,6 +137,36 @@ data "aws_iam_policy_document" "ops_evidence" {
       values   = ["false"]
     }
   }
+
+
+  statement {
+    sid       = "AllowRecoveryInventoryDelivery"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.ops_evidence.arn}/recovery-inventory/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["s3.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values = [
+        aws_s3_bucket.private_objects.arn,
+        aws_s3_bucket.quarantine_archive.arn,
+        aws_s3_bucket.shard_config.arn,
+        aws_s3_bucket.offline_maps.arn,
+      ]
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "ops_evidence" {

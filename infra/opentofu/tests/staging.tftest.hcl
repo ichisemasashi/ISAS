@@ -81,6 +81,13 @@ mock_provider "aws" {
     }
   }
 
+  mock_resource "aws_s3_bucket" {
+    defaults = {
+      arn = "arn:aws:s3:::isas-mock-bucket"
+      id  = "isas-mock-bucket"
+    }
+  }
+
   mock_resource "aws_rds_cluster" {
     defaults = {
       arn                   = "arn:aws:rds:ap-northeast-1:123456789012:cluster:isas-test"
@@ -173,6 +180,11 @@ run "staging_plan" {
   assert {
     condition     = output.deployment_manifest.database.pitr && output.deployment_manifest.database.backup_retention_days == 30 && output.deployment_manifest.database.reader_endpoint != ""
     error_message = "RDS must expose a reader endpoint with 30-day PITR retention."
+  }
+
+  assert {
+    condition     = length(output.deployment_manifest.recovery.protected_resources) == 6 && length(output.deployment_manifest.recovery.inventory_names) == 4 && output.deployment_manifest.recovery.backup_role_arn != ""
+    error_message = "The recovery set must expose six protected resources, four daily object inventories and its backup role."
   }
 
   assert {

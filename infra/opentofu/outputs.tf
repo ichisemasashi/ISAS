@@ -131,6 +131,22 @@ output "deployment_manifest" {
       dashboard_name = aws_cloudwatch_dashboard.overview.dashboard_name
       incident_topic = aws_sns_topic.incident.arn
     }
+    recovery = {
+      vault_name      = aws_backup_vault.main.name
+      backup_role_arn = aws_iam_role.backup.arn
+      backup_plan_id  = aws_backup_plan.main.id
+      evidence_bucket = aws_s3_bucket.ops_evidence.id
+      vpc_id          = aws_vpc.main.id
+      protected_resources = {
+        database           = aws_rds_cluster.core.arn
+        session_context    = aws_dynamodb_table.session_context.arn
+        private_objects    = aws_s3_bucket.private_objects.arn
+        quarantine_archive = aws_s3_bucket.quarantine_archive.arn
+        shard_config       = aws_s3_bucket.shard_config.arn
+        offline_maps       = aws_s3_bucket.offline_maps.arn
+      }
+      inventory_names = { for key, inventory in aws_s3_bucket_inventory.recovery : key => inventory.name }
+    }
     github_deploy_role_arn = aws_iam_role.github_deploy.arn
   }
 }

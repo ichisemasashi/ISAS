@@ -55,6 +55,27 @@ data "aws_iam_policy_document" "kms_queue" {
   }
 }
 
+data "aws_iam_policy_document" "kms_backup" {
+  source_policy_documents = [data.aws_iam_policy_document.kms.json]
+
+  statement {
+    sid       = "S3InventoryEncryption"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = ["*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["s3.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
 resource "aws_kms_key" "data" {
   description             = "${var.deployment_id} database and session data"
   enable_key_rotation     = true
@@ -92,7 +113,7 @@ resource "aws_kms_key" "backup" {
   enable_key_rotation     = true
   multi_region            = false
   deletion_window_in_days = 30
-  policy                  = data.aws_iam_policy_document.kms.json
+  policy                  = data.aws_iam_policy_document.kms_backup.json
 }
 
 resource "aws_kms_key" "signing" {

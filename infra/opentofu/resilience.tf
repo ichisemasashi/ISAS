@@ -38,6 +38,44 @@ resource "aws_s3_bucket_lifecycle_configuration" "private_objects" {
   depends_on = [aws_s3_bucket_versioning.private_objects]
 }
 
+locals {
+  recovery_inventory_buckets = {
+    private_objects    = aws_s3_bucket.private_objects.id
+    quarantine_archive = aws_s3_bucket.quarantine_archive.id
+    shard_config       = aws_s3_bucket.shard_config.id
+    offline_maps       = aws_s3_bucket.offline_maps.id
+  }
+}
+
+resource "aws_s3_bucket_inventory" "recovery" {
+  for_each = local.recovery_inventory_buckets
+
+  bucket                   = each.value
+  name                     = "${local.name}-${replace(each.key, "_", "-")}-recovery"
+  included_object_versions = "All"
+
+  schedule { frequency = "Daily" }
+
+  destination {
+    bucket {
+      format     = "CSV"
+      bucket_arn = aws_s3_bucket.ops_evidence.arn
+      prefix     = "recovery-inventory/${each.key}"
+
+      encryption {
+        sse_kms { key_id = aws_kms_key.backup.arn }
+      }
+    }
+  }
+
+  optional_fields = ["Size", "LastModifiedDate", "ETag", "StorageClass", "EncryptionStatus", "ObjectLockRetainUntilDate", "ObjectLockMode"]
+
+  depends_on = [
+    aws_s3_bucket_policy.ops_evidence,
+    aws_s3_bucket_server_side_encryption_configuration.ops_evidence,
+  ]
+}
+
 resource "aws_s3_access_point" "private_attachments" {
   name   = "${local.name}-attachments"
   bucket = aws_s3_bucket.private_objects.id
