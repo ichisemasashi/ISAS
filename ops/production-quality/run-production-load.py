@@ -120,8 +120,9 @@ def run_s7(client: Client, context_id: str, csrf: str, membership_version: str, 
 
     def push(index_event: tuple[int, str]):
         index, event_id = index_event
+        occurred_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         body = {"bundles": [{"bundleId": f"quality-{event_id}", "events": [{
-            "eventUuid": event_id, "kind": "punch", "occurredAt": "2026-08-16T00:00:00Z",
+            "eventUuid": event_id, "kind": "punch", "occurredAt": occurred_at,
             "membershipVersion": membership_version, "authorizationSnapshotId": snapshot_id,
             "payload": {"action": "quality_probe", "synthetic": True, "sequence": index},
         }]}]}
@@ -169,6 +170,7 @@ def run_pool_saturation(client: Client, context_id: str, scope: str, samples: in
         raise RuntimeError("P2 saturation did not exercise a controlled endpoint")
     return {"status": "pass", "p2_concurrency": p2_concurrency, "p2_requests": len(p2_results),
             "p0_samples": samples, "p0_within_500ms": within, "p0_availability": round(availability, 6),
+            "p2_utilization_max": None, "p2_waiting_max": None,
             "p0_p50_ms": round(percentile(latencies, .5), 2), "p0_p95_ms": round(percentile(latencies, .95), 2),
             "p0_p99_ms": round(percentile(latencies, .99), 2), "p0_max_ms": round(max(latencies), 2)}
 

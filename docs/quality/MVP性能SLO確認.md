@@ -50,3 +50,5 @@ Web buildでは地図lazy chunkがminified 941.40KB（gzip 244.95KB）で500KB�
 ## 再受入条件
 
 本番候補環境でTLS ingress、実BFF HTTP runtime、pooler、object storage、背景地図、iOS／Android実機を接続し、上表の全画面／操作を30回以上測定する。p95とerror率をCI成果物へ保存し、いずれか未測定または超過ならリリースを止める。
+
+2026-08-16にProduction BFFへserver-side P0/P1/P2 routingを接続し、実入口を対象に1,000 S7 requestとP2連続負荷中1,000 P0 sampleを測るrunner、およびP0の99.9%/500ms、P2 utilization/wait、9画面SLOを強制するgateを追加した。実staging測定値はまだないため、上表の未測定判定は変わらない。実行方法は[本番相当統合品質試験](../../ops/production-quality/README.md)を正本とする。

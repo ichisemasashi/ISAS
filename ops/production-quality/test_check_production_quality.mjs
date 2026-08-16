@@ -14,7 +14,7 @@ function ready() {
       network: { kind: "actual", evidence: "artifact://quality/network" },
     },
     s7: { ...pass("s7"), requests: 1100, failures: 0, p95_ms: 250, duplicate_changes: 0 },
-    pool_saturation: { ...pass("pool"), p2_concurrency: 32, p0_samples: 1000, p0_within_500ms: 999 },
+    pool_saturation: { ...pass("pool"), p2_concurrency: 32, p2_utilization_max: .95, p2_waiting_max: 4, p0_samples: 1000, p0_within_500ms: 999 },
     screens: Object.fromEntries(Object.entries(SCREEN_SLOS).map(([name, budget]) => [name, { ...pass(`screen-${name}`), iterations: 30, p95_ms: budget, error_rate: .001 }])),
     functional: Object.fromEntries(FUNCTIONAL_CASES.map((name) => [name, pass(name)])),
     manual_wcag: Object.fromEntries(MANUAL_WCAG_CASES.map((name) => [name, pass(name)])),

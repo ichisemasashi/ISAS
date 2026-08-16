@@ -65,7 +65,8 @@ export function validateProductionQuality(value, now = new Date()) {
   }
   const saturation = value.pool_saturation ?? {};
   if (saturation.status !== "pass" || saturation.p2_concurrency < 2 || saturation.p0_samples < 1000
-    || saturation.p0_within_500ms / saturation.p0_samples < .999 || !artifact(saturation.evidence)) {
+    || saturation.p0_within_500ms / saturation.p0_samples < .999 || saturation.p2_utilization_max < .9
+    || saturation.p2_waiting_max < 1 || !artifact(saturation.evidence)) {
     add("P2 saturation must retain at least 99.9% of 1000+ P0 samples within 500ms");
   }
 

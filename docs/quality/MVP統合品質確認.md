@@ -6,6 +6,8 @@
 | 実装／自動試験範囲 | **PASS** |
 | 本番リリース | **条件付き・未承認** |
 
+> 2026-08-16追記：Production BFFのP0/P1/P2 routing、実TLS/BFF/PG16/PostGIS/network用S7・P2飽和runner、99.9%/500ms・全画面・機能・手動WCAG・penetration証跡gate、実Service Worker更新時の暗号化outbox保持E2Eを追加した。実AWS staging URL／session／fixtureが未提供のため、[本番相当試験手順](../../ops/production-quality/README.md)の実測は未実施で`BLOCKED`である。
+
 ## ゲート結果
 
 | ゲート | 結果 | 証拠境界 |
@@ -52,8 +54,8 @@ PostgreSQLは検証専用`spike` DBを再構築し、`0001`〜`0009`と対応ver
 2. TLS ingress、SPA CSP／Trusted Types、rate limit、secret manager／KMS、SBOM／成果物署名を配備する。
 3. S9端末暗号化・暗号消去・offline recovery／鍵交代と、S6 iOS／Android実機を合格させる。
 4. object storage、画像scan／再encode、期限付きdownload、輸出step-up／監査を接続する。
-5. 本番相当fixtureと実ネットワークで地図、一覧1万、ガント500、写真保存、一般GET、ログインのp95を測る。
-6. screen reader、200% zoom、contrast、端末向き、屋外／手袋を含む手動WCAG／端末確認を行う。
+5. 実装済みproduction品質runnerを本番相当fixtureと実ネットワークで実行し、地図、一覧1万、ガント500、写真保存、一般GET、ログインのp95とP2飽和中P0を測る。
+6. 証跡gateの12項目に従い、screen reader、200% zoom、contrast、端末向き、屋外／手袋を含む手動WCAG／端末確認を行う。
 7. 作業員・高齢者・技能実習生の実ユーザーUTで成功率90%、日誌30秒、農薬60秒、SUS 75、全員のオフライン理解を実測する。
 8. ADR-0019〜0021の法域別provider／製品／ownerを実manifestへ固定し、同一digest段階配備、月次restore、四半期DRを本番候補環境で合格させる。
 
