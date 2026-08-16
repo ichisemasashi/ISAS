@@ -103,7 +103,9 @@ save_state() {
 
 set_stage() {
   stage=$1
-  jq --arg stage "$stage" --arg updatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '.stage=$stage | .updated_at=$updatedAt' "$state_file" >"$temporary_directory/next-state.json"
+  jq --arg stage "$stage" --arg updatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '.stage=$stage | .updated_at=$updatedAt | .history=((.history // []) + [{stage:$stage,entered_at:$updatedAt}])' \
+    "$state_file" >"$temporary_directory/next-state.json"
   mv "$temporary_directory/next-state.json" "$state_file"
   save_state
 }
@@ -146,7 +148,8 @@ if [ "$command" = staging ]; then
     --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg candidateMigration "$candidate_migration" \
     '{schema_version:1,stage:"staging",deployment_id:$deploymentId,source_commit:$sourceCommit,artifact_set_digest:$artifactSetDigest,
-      previous:{web:$previousWeb,bff:$previousBff},candidate:{web:$candidateWeb,bff:$candidateBff,migration:$candidateMigration},created_at:$createdAt,updated_at:$createdAt}' >"$state_file"
+      previous:{web:$previousWeb,bff:$previousBff},candidate:{web:$candidateWeb,bff:$candidateBff,migration:$candidateMigration},created_at:$createdAt,updated_at:$createdAt,
+      history:[{stage:"staging",entered_at:$createdAt}],observations:[]}' >"$state_file"
   save_state
 elif [ "$command" = prepare ]; then
   apply_weights 0
@@ -188,7 +191,8 @@ elif [ "$command" = prepare ]; then
     --arg candidateWeb "$candidate_web" --arg candidateBff "$candidate_bff" --arg candidateMigration "$candidate_migration" \
     --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{schema_version:1,stage:"prepared",deployment_id:$deploymentId,source_commit:$sourceCommit,artifact_set_digest:$artifactSetDigest,
-      previous:{web:$previousWeb,bff:$previousBff},candidate:{web:$candidateWeb,bff:$candidateBff,migration:$candidateMigration},created_at:$createdAt,updated_at:$createdAt}' >"$state_file"
+      previous:{web:$previousWeb,bff:$previousBff},candidate:{web:$candidateWeb,bff:$candidateBff,migration:$candidateMigration},created_at:$createdAt,updated_at:$createdAt,
+      history:[{stage:"prepared",entered_at:$createdAt}],observations:[]}' >"$state_file"
   save_state
 elif [ "$command" = rollback ]; then
   apply_weights 0

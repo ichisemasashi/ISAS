@@ -65,6 +65,13 @@ while :; do
 
   echo "stage=$expected_stage elapsed=${elapsed}s eligible_transactions=$transactions alarms=OK"
   if [ "$elapsed" -ge "$minimum_seconds" ] && [ "$transactions" -ge "$minimum_transactions" ]; then
+    jq --arg stage "$expected_stage" --arg startedAt "$start_time" --arg completedAt "$end_time" \
+      --argjson duration "$elapsed" --argjson transactions "$transactions" --argjson alarms "$alarm_count" \
+      '.observations=((.observations // []) + [{stage:$stage,started_at:$startedAt,completed_at:$completedAt,
+        duration_seconds:$duration,eligible_transactions:$transactions,blocking_alarm_count:$alarms,status:"PASS"}])' \
+      "$state_file" >"$temporary_directory/observed-state.json"
+    mv "$temporary_directory/observed-state.json" "$state_file"
+    aws s3 cp "$state_file" "$STATE_URI" --region "$AWS_REGION" --only-show-errors
     echo "progressive delivery observation PASS"
     exit 0
   fi
