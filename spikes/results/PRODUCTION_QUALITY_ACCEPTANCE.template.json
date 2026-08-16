@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "BLOCKED",
+  "source_commit": "",
+  "deployment_id": "",
+  "measured_at": "",
+  "environment": {},
+  "s7": {},
+  "pool_saturation": {},
+  "screens": {},
+  "functional": {},
+  "manual_wcag": {},
+  "penetration": {},
+  "adversarial_review": {},
+  "approvals": []
+}
