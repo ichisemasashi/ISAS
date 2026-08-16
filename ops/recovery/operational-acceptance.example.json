@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "NOT_RUN",
+  "deployment_id": "isas-jp-stg-01",
+  "environment": "staging",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "completed_at": null,
+  "real_data_and_ut": {"migration": {"status": "BLOCKED", "evidence": null}, "ut": {"status": "BLOCKED", "evidence": null}},
+  "recovery_set": {"status": "BLOCKED", "id": null, "components": [], "pitr_lag_seconds": null, "backup_jobs": [], "evidence": null},
+  "monthly_restore": {"status": "NOT_RUN", "executed_at": null, "isolated_account": true, "production_network_attached": false, "egress_mode": "sink_only", "data_loss_seconds": null, "recovery_seconds": null, "verification": {}, "evidence": null},
+  "quarterly_dr": {"status": "NOT_RUN", "executed_at": null, "unannounced_generation_selection": false, "isolated_account": true, "production_network_attached": false, "egress_mode": "sink_only", "data_loss_seconds": null, "recovery_seconds": null, "verification": {}, "evidence": null},
+  "operations": {},
+  "operations_inventory": {"placeholder_matches": null, "placeholder_scan": {}, "contacts": {}, "monitoring": {}, "ledger": {}},
+  "approvals": []
+}

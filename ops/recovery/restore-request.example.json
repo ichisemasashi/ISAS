@@ -1,0 +1,9 @@
+{
+  "status": "NOT_APPROVED",
+  "target_environment": "isolated_restore",
+  "egress_mode": "sink_only",
+  "isolation_vpc_id": "replace-me",
+  "ticket_ref": "replace-me",
+  "restore_resources": [],
+  "approvals": []
+}
