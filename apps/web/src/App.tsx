@@ -7,19 +7,13 @@ import { evaluatePesticideUse, safetyReasonLabel } from "./pesticide-safety";
 import { DataMigrationPanel } from "./DataMigrationPanel";
 import { SecurityAdministrationPanel } from "./SecurityAdministrationPanel";
 import { SchedulePage } from "./SchedulePage";
+import { applyDocumentLocale, localeProfiles, resolveLocale, translate, type Locale } from "./i18n";
 
 const FieldsPage = lazy(() => import("./FieldsPage").then((module) => ({ default: module.FieldsPage })));
 
 type Route = "today" | "schedule" | "journal" | "pesticide" | "inventory" | "fields" | "more";
 type PunchState = "idle" | "working" | "break";
 type Theme = "field" | "dark" | "contrast";
-type Locale = "ja" | "en";
-
-const copy = {
-  ja: { today: "今日", schedule: "予定", record: "記録", fields: "圃場", more: "その他", online: "オンライン", offline: "オフライン" },
-  en: { today: "Today", schedule: "Schedule", record: "Record", fields: "Fields", more: "More", online: "Online", offline: "Offline" },
-} as const;
-
 const Icon = ({ name }: { name: "today" | "schedule" | "record" | "field" | "more" | "sync" | "clock" | "leaf" | "warning" }) => {
   const paths = {
     today: <><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18"/></>,
@@ -61,7 +55,10 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
   const [pending, setPending] = useState(0);
   const [punch, setPunch] = useState<PunchState>("idle");
   const [theme, setTheme] = useState<Theme>("field");
-  const [locale, setLocale] = useState<Locale>("ja");
+  const [locale, setLocale] = useState<Locale>(() => {
+    const requested = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("locale") : null;
+    return requested ? resolveLocale(requested) : "ja";
+  });
   const [notice, setNotice] = useState("");
   const [tasks, setTasks] = useState<TodayTask[]>([]);
   const [instructions, setInstructions] = useState<WorkInstruction[]>([]);
@@ -137,8 +134,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.documentElement.lang = locale;
-    document.documentElement.dir = "ltr";
+    applyDocumentLocale(document.documentElement, locale);
   }, [theme, locale]);
 
   const navigate = (next: Route) => {
@@ -194,7 +190,7 @@ export function App({ api, csrfToken, storage = browserStorage, authorization = 
         <header className="topbar">
           <div className="mobile-brand"><Brand compact /></div>
           <div className="system-status" aria-live="polite">
-            <span className={`connection ${online ? "is-online" : "is-offline"}`}><span className="status-dot" />{online ? copy[locale].online : copy[locale].offline}</span>
+            <span className={`connection ${online ? "is-online" : "is-offline"}`}><span className="status-dot" />{translate(locale, online ? "online" : "offline")}</span>
             <span className={`auth-state mode-${effectiveAccessMode}`}>{effectiveAccessMode === "online" ? "認証済み" : effectiveAccessMode === "offline-write" ? "オフライン記録可" : effectiveAccessMode === "offline-read" ? "オフライン読取のみ" : "再認証が必要"}</span>
             <span className="sync-state"><Icon name="sync" />未同期 {pending}件</span>
           </div>
@@ -244,11 +240,11 @@ function Brand({ compact = false }: { compact?: boolean }) {
 
 function Nav({ route, locale, navigate }: { route: Route; locale: Locale; navigate: (route: Route) => void }) {
   const items: { route: Route; label: string; icon: "today" | "schedule" | "record" | "field" | "more" }[] = [
-    { route: "today", label: copy[locale].today, icon: "today" },
-    { route: "schedule", label: copy[locale].schedule, icon: "schedule" },
-    { route: "journal", label: copy[locale].record, icon: "record" },
-    { route: "fields", label: copy[locale].fields, icon: "field" },
-    { route: "more", label: copy[locale].more, icon: "more" },
+    { route: "today", label: translate(locale, "today"), icon: "today" },
+    { route: "schedule", label: translate(locale, "schedule"), icon: "schedule" },
+    { route: "journal", label: translate(locale, "record"), icon: "record" },
+    { route: "fields", label: translate(locale, "fields"), icon: "field" },
+    { route: "more", label: translate(locale, "more"), icon: "more" },
   ];
   return <div className="nav-items">{items.map((item) => <button key={item.route} className={route === item.route ? "active" : ""} aria-current={route === item.route ? "page" : undefined} onClick={() => navigate(item.route)}><Icon name={item.icon}/><span>{item.label}</span></button>)}</div>;
 }
@@ -503,7 +499,7 @@ function MorePage({ api, csrfToken, authorization, online, instructions, setInst
     setInstructions((current) => current.map((item) => item.id === instruction.id ? { ...item, version: result.version, assignment: { id: result.assignmentId, assigneeUserId: result.assigneeUserId, version: 1 } } : item));
     setNotice("担当者を変更しました。");
   };
-  return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態、同期で判断が必要な項目を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{locale === "ja" ? "日本語" : "English"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div><div><span>差し戻しキュー</span><strong>{queueCounts.rejections}件</strong></div><div><span>競合キュー</span><strong>{queueCounts.conflicts}件</strong></div></div>
+  return <div className="page-content narrow-page"><div className="form-heading"><span className="section-kicker">SETTINGS</span><h1>その他</h1><p>表示と端末状態、同期で判断が必要な項目を確認できます。</p></div><div className="settings-list"><div><span>表示テーマ</span><strong>{theme === "field" ? "屋外向け" : theme === "dark" ? "ダーク" : "高コントラスト"}</strong></div><div><span>表示言語</span><strong>{localeProfiles[locale].label}{!localeProfiles[locale].reviewed && "（翻訳レビュー未完了）"}</strong></div><div><span>オフライン保持</span><strong>利用可能</strong></div><div><span>差し戻しキュー</span><strong>{queueCounts.rejections}件</strong></div><div><span>競合キュー</span><strong>{queueCounts.conflicts}件</strong></div></div>
     {onLogout && <section className="queue-panel"><h2>この端末の利用を終了</h2><p>同期済みcacheを暗号消去し、BFFとIdPのsessionを終了します。未同期記録がある間は安全のため実行できません。</p><button className="secondary-action" disabled={!online} onClick={() => void onLogout().catch((error) => setNotice(error instanceof Error ? error.message : "ログアウトできませんでした。"))}>ログアウト</button></section>}
     {manager && <section className="queue-panel"><h2>作業指示を発行</h2><form className="record-form compact-form" onSubmit={(event) => void createInstruction(event)}><div className="form-grid"><label>圃場ID<input name="fieldId" required/></label><label>担当者ID<input name="assigneeUserId" required/></label><label>指示名<input name="title" required/></label><label>作業種別<input name="workType" required/></label><label>開始予定<input name="scheduledStart" type="datetime-local" required/></label><label>終了予定<input name="scheduledEnd" type="datetime-local" required/></label><label>優先度<select name="priority" defaultValue="1"><option value="0">高</option><option value="1">通常</option><option value="2">低</option></select></label><label>詳細<textarea name="details" rows={2}/></label></div><button className="primary-action" disabled={!online}>オンラインで発行</button></form>
       <div>{instructions.map((instruction) => <article key={instruction.id}><strong>{instruction.title}</strong><p>{instruction.fieldName}・担当 {instruction.assignment?.assigneeUserId || "未割当"}・version {instruction.version}</p><div className="queue-actions"><label>新しい担当者ID<input value={assignees[instruction.id] || ""} onChange={(event) => setAssignees((current) => ({ ...current, [instruction.id]: event.target.value }))}/></label><button className="secondary-action" disabled={!online} onClick={() => void reassign(instruction)}>再割当</button></div></article>)}</div></section>}
