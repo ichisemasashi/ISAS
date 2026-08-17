@@ -71,7 +71,14 @@ function FieldMap({ fields, selectedId, onSelect, onBounds, backgroundStyle }: {
       const bounds = geometryBounds(fieldsRef.current);
       if (bounds) { value.fitBounds(new LngLatBounds(bounds[0], bounds[1]), { padding: 48, maxZoom: 16, duration: 0 }); fitted.current = true; }
     });
-    value.on("moveend", () => { const bounds = value.getBounds(); onBounds([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]); });
+    value.on("moveend", () => {
+      // MapLibre can emit moveend for its initial camera before assigned fields
+      // have been fitted. Searching that default extent may race with the full
+      // field response and replace a user's polygons with an empty collection.
+      if (!fitted.current) return;
+      const bounds = value.getBounds();
+      onBounds([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]);
+    });
     return () => { value.remove(); map.current = null; };
   }, []);
 
@@ -121,7 +128,10 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
       const all: FieldFeature[] = []; let cursor: string | null = null;
       do { const page = await api.getFields(authorization.context.contextId, { limit: 500, cursor }, controller.signal); all.push(...page.features); cursor = page.nextCursor; } while (cursor && !controller.signal.aborted);
       await storage.saveFields(tenantId, all);
-      if (!controller.signal.aborted) { setFields(all); setMapFields(all); setStatus(tr("fieldspage.l121.7", [all.length])); }
+      if (!controller.signal.aborted) {
+        boundsRequest.current?.abort();
+        setFields(all); setMapFields(all); setStatus(tr("fieldspage.l121.7", [all.length]));
+      }
     })().catch(() => { if (!controller.signal.aborted) setStatus(tr("fieldspage.l122.8")); });
     return () => controller.abort();
   }, [api, authorization.context.contextId, online, storage, tenantId]);
@@ -148,7 +158,9 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
     if (!online) return;
     boundsRequest.current?.abort();
     const controller = new AbortController(); boundsRequest.current = controller;
-    api.getFields(authorization.context.contextId, { bbox, limit: 500 }, controller.signal).then((page) => setMapFields(page.features)).catch(() => undefined);
+    api.getFields(authorization.context.contextId, { bbox, limit: 500 }, controller.signal)
+      .then((page) => { if (!controller.signal.aborted) setMapFields(page.features); })
+      .catch(() => undefined);
   };
 
   return <div className="page-content fields-page">

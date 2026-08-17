@@ -14,7 +14,11 @@ vi.mock("maplibre-gl", () => {
     setFeatureState() {}
     getCanvas() { return { style: { cursor: "" } }; }
     getBounds() { return { getWest: () => 140.2, getSouth: () => 38.1, getEast: () => 140.5, getNorth: () => 38.4 }; }
-    on(event: string, layerOrHandler: unknown, handler?: () => void) { if (event === "load") queueMicrotask(layerOrHandler as () => void); return handler; }
+    on(event: string, layerOrHandler: unknown, handler?: () => void) {
+      if (event === "load") queueMicrotask(layerOrHandler as () => void);
+      if (event === "moveend") (layerOrHandler as () => void)();
+      return handler;
+    }
     remove() {}
   }
   return { Map: MockMap, NavigationControl: class {}, LngLatBounds: class {}, addProtocol: vi.fn(), setWorkerUrl: vi.fn() };
@@ -34,4 +38,23 @@ test("renders the assigned-field list from IndexedDB cache while offline", async
   expect(await screen.findByRole("button", { name: /北圃場/ })).toBeInTheDocument();
   expect(screen.getByText(/端末保存済み/)).toBeInTheDocument();
   expect(api.getFields).not.toHaveBeenCalled();
+});
+
+test("does not search the default map extent before assigned fields are fitted", async () => {
+  const getFields = vi.fn(async (_contextId: string, options: { bbox?: number[] }) => {
+    if (options.bbox) return { type: "FeatureCollection" as const, features: [], nextCursor: null };
+    return { type: "FeatureCollection" as const, features: [field], nextCursor: null };
+  });
+  const api = { getFields } as unknown as MvpGateway;
+  const storage = {
+    getFields: vi.fn(async () => []),
+    saveFields: vi.fn(async () => undefined),
+    getLatestOfflineMapPack: vi.fn(async () => null),
+  } as unknown as StorageGateway;
+
+  render(<FieldsPage api={api} storage={storage} authorization={demoAuthorization} online />);
+
+  expect(await screen.findByRole("button", { name: /北圃場/ })).toBeInTheDocument();
+  expect(getFields).toHaveBeenCalledTimes(1);
+  expect(getFields.mock.calls[0]?.[1]).not.toHaveProperty("bbox");
 });

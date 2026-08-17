@@ -20,9 +20,11 @@ export default defineConfig({
   use: {
     baseURL: "https://isas.localhost:8443",
     ignoreHTTPSErrors: true,
-    launchOptions: { args: [`--ignore-certificate-errors-spki-list=${localCertificateSpki}`] },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "local-chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "local-chromium", use: { ...devices["Desktop Chrome"], launchOptions: { args: [`--ignore-certificate-errors-spki-list=${localCertificateSpki}`] } } },
+    { name: "local-webkit", use: { ...devices["Desktop Safari"] } },
+  ],
 });
