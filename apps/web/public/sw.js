@@ -1,7 +1,7 @@
 // Bump the shell cache whenever deployment headers or shell policy changes so
 // already-installed clients receive an update prompt instead of retaining an
 // older cached document (for example, one with a stale map-tile CSP).
-const CACHE = "isas-shell-v3";
+const CACHE = "isas-shell-v4";
 const SHELL = ["/", "/manifest.webmanifest", "/icon.svg"];
 const CACHEABLE_DESTINATIONS = new Set(["script", "style", "image", "font"]);
 

@@ -38,6 +38,16 @@ describe("PWA update safety gate", () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
+  test("reloads safely when the waiting worker already activated", async () => {
+    const result = await activateWaitingWorker(
+      { waiting: null },
+      { pendingCount: vi.fn(async () => 0) },
+      undefined,
+      () => false,
+    );
+    expect(result).toEqual({ status: "current", pending: 0 });
+  });
+
   test("explains that a Service Worker TLS failure requires local CA trust", () => {
     expect(registrationErrorMessage(new DOMException("An SSL certificate error occurred when fetching the script.", "SecurityError")))
       .toContain("mkcert -install");

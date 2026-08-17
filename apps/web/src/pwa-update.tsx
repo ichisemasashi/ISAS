@@ -5,6 +5,7 @@ import { tr } from "./i18n";
 export type PwaUpdateResult =
   | { status: "blocked"; pending: number }
   | { status: "blocked-input"; pending: 0 }
+  | { status: "current"; pending: 0 }
   | { status: "activating"; pending: 0 };
 
 export function registrationErrorMessage(error: unknown): string {
@@ -20,29 +21,31 @@ export async function activateWaitingWorker(
   beforeActivate: () => void = () => undefined,
   hasOpenForm: () => boolean = () => typeof document !== "undefined" && document.querySelector("form") !== null,
 ): Promise<PwaUpdateResult> {
+  const waiting = registration.waiting;
   const pending = await storage.pendingCount();
   if (pending > 0) return { status: "blocked", pending };
   if (hasOpenForm()) return { status: "blocked-input", pending: 0 };
-  if (!registration.waiting) throw new Error(tr("pwa_update.l18.1"));
+  if (!waiting) return { status: "current", pending: 0 };
   beforeActivate();
-  registration.waiting.postMessage({ type: "SKIP_WAITING" });
+  waiting.postMessage({ type: "SKIP_WAITING" });
   return { status: "activating", pending: 0 };
 }
 
 export function observeWaitingWorker(
   registration: ServiceWorkerRegistration,
   onWaiting: (registration: ServiceWorkerRegistration) => void,
+  hasActiveController: () => boolean = () => typeof navigator !== "undefined" && navigator.serviceWorker.controller !== null,
 ): () => void {
   const notifyWhenInstalled = (worker: ServiceWorker | null) => {
     if (!worker) return () => undefined;
     const onStateChange = () => {
-      if (worker.state === "installed" && registration.waiting) onWaiting(registration);
+      if (worker.state === "installed" && registration.waiting && hasActiveController()) onWaiting(registration);
     };
     worker.addEventListener("statechange", onStateChange);
     onStateChange();
     return () => worker.removeEventListener("statechange", onStateChange);
   };
-  if (registration.waiting) onWaiting(registration);
+  if (registration.waiting && hasActiveController()) onWaiting(registration);
   let detachWorker = notifyWhenInstalled(registration.installing);
   const onUpdateFound = () => {
     detachWorker();
@@ -88,6 +91,10 @@ export function PwaUpdateGate({ storage = browserStorage }: { storage?: Pick<Sto
       }
       if (result.status === "blocked-input") {
         setBlockedInput(true);
+        return;
+      }
+      if (result.status === "current") {
+        window.location.reload();
         return;
       }
     } catch {
