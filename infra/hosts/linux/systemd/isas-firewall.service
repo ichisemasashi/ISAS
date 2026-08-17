@@ -1,0 +1,19 @@
+[Unit]
+Description=ISAS nftables default-deny boundary
+Before=isas-edge.service
+PartOf=isas.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '/usr/sbin/nft delete table inet isas 2>/dev/null || true; exec /usr/sbin/nft --file /etc/nftables.d/isas-production.nft'
+ExecReload=/bin/sh -c '/usr/sbin/nft delete table inet isas 2>/dev/null || true; exec /usr/sbin/nft --file /etc/nftables.d/isas-production.nft'
+ExecStop=-/usr/sbin/nft delete table inet isas
+RemainAfterExit=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+CapabilityBoundingSet=CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target

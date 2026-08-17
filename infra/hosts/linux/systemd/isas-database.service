@@ -1,0 +1,44 @@
+[Unit]
+Description=ISAS database boundary
+PartOf=isas.target
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/var/lib/isas
+ConditionPathIsMountPoint=/var/lib/isas
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=isas-db
+Group=isas-db
+WorkingDirectory=/var/lib/isas/database
+LoadCredentialEncrypted=config:/etc/isas/credentials/database.cred
+ExecStart=/opt/isas/current/database/bin/start --config %d/config
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+ReadWritePaths=/var/lib/isas/database /run/isas/database
+LimitNOFILE=65536
+LogNamespace=isas

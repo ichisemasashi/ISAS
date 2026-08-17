@@ -1,0 +1,20 @@
+[Unit]
+Description=Renew ISAS edge certificate
+After=isas-edge.service
+
+[Service]
+Type=oneshot
+User=isas-edge
+Group=isas-edge
+LoadCredentialEncrypted=config:/etc/isas/credentials/edge.cred
+ExecStart=/opt/isas/current/edge/bin/renew-certificate --config %d/config
+ExecStartPost=+/bin/systemctl reload isas-edge.service
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/isas/edge /run/isas/edge
+LogNamespace=isas

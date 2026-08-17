@@ -1,0 +1,42 @@
+[Unit]
+Description=ISAS object and queue boundary
+PartOf=isas.target
+Requires=isas-database.service
+After=isas-database.service
+RequiresMountsFor=/var/lib/isas
+ConditionPathIsMountPoint=/var/lib/isas
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=isas-objq
+Group=isas-objq
+WorkingDirectory=/var/lib/isas/object-queue
+LoadCredentialEncrypted=config:/etc/isas/credentials/object-queue.cred
+ExecStart=/opt/isas/current/object-queue/bin/start --config %d/config
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+ReadWritePaths=/var/lib/isas/object-queue /run/isas/object-queue
+LimitNOFILE=65536
+LogNamespace=isas

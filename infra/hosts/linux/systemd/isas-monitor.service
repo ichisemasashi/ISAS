@@ -1,0 +1,17 @@
+[Unit]
+Description=ISAS local health and common SLO probe
+After=isas-edge.service
+
+[Service]
+Type=oneshot
+User=isas-otel
+Group=isas-otel
+ExecStart=/usr/local/libexec/isas-production-monitor
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LogNamespace=isas

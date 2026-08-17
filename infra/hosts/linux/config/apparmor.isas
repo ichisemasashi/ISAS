@@ -1,0 +1,68 @@
+#include <tunables/global>
+
+/opt/isas/releases/*/database/bin/start flags=(attach_disconnected) {
+  #include <abstractions/base>
+  network inet stream,
+  network inet6 stream,
+  /opt/isas/releases/*/database/** rix,
+  /var/lib/isas/database/** rwk,
+  /run/isas/database/** rwk,
+  /run/credentials/isas-database.service/config r,
+  #include if exists <local/isas-database>
+}
+
+/opt/isas/releases/*/identity/bin/start flags=(attach_disconnected) {
+  #include <abstractions/base>
+  network inet stream,
+  network inet6 stream,
+  /opt/isas/releases/*/identity/** rix,
+  /var/lib/isas/identity/** rwk,
+  /run/isas/identity/** rwk,
+  /run/credentials/isas-identity.service/config r,
+  #include if exists <local/isas-identity>
+}
+
+/opt/isas/releases/*/object-queue/bin/start flags=(attach_disconnected) {
+  #include <abstractions/base>
+  network inet stream,
+  network inet6 stream,
+  /opt/isas/releases/*/object-queue/** rix,
+  /var/lib/isas/object-queue/** rwk,
+  /run/isas/object-queue/** rwk,
+  /run/credentials/isas-object-queue.service/config r,
+  #include if exists <local/isas-object-queue>
+}
+
+/opt/isas/releases/*/app/bin/start flags=(attach_disconnected) {
+  #include <abstractions/base>
+  network inet stream,
+  network inet6 stream,
+  /opt/isas/releases/*/app/** rix,
+  /var/lib/isas/app/** rwk,
+  /run/isas/app/** rwk,
+  /run/credentials/isas-app.service/config r,
+  #include if exists <local/isas-app>
+}
+
+/opt/isas/releases/*/edge/bin/start flags=(attach_disconnected) {
+  #include <abstractions/base>
+  network inet stream,
+  network inet6 stream,
+  /opt/isas/releases/*/edge/** rix,
+  /var/lib/isas/edge/** rwk,
+  /run/isas/edge/** rwk,
+  /run/credentials/isas-edge.service/config r,
+  /run/credentials/isas-certificate-renew.service/config r,
+  #include if exists <local/isas-edge>
+}
+
+/opt/isas/releases/*/telemetry/bin/start flags=(attach_disconnected) {
+  #include <abstractions/base>
+  network inet stream,
+  network inet6 stream,
+  /opt/isas/releases/*/telemetry/** rix,
+  /var/lib/isas/telemetry/** rwk,
+  /run/isas/telemetry/** rwk,
+  /run/credentials/isas-telemetry.service/config r,
+  #include if exists <local/isas-telemetry>
+}

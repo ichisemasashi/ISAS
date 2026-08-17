@@ -1,0 +1,6 @@
+u isas-db - "ISAS database" /var/lib/isas/database /usr/sbin/nologin
+u isas-idp - "ISAS identity" /var/lib/isas/identity /usr/sbin/nologin
+u isas-objq - "ISAS object queue" /var/lib/isas/object-queue /usr/sbin/nologin
+u isas-app - "ISAS application" /var/lib/isas/app /usr/sbin/nologin
+u isas-edge - "ISAS edge" /var/lib/isas/edge /usr/sbin/nologin
+u isas-otel - "ISAS telemetry" /var/lib/isas/telemetry /usr/sbin/nologin

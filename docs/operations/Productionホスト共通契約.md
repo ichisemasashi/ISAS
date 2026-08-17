@@ -14,7 +14,7 @@
 
 | `host_os` | Production方式 | 現在の実装・受入状態 |
 |---|---|---|
-| `linux` | support対象distribution上の署名済みOCIまたはnative service、systemd等のservice manager、OS firewall、暗号化storage | [定義](../../infra/hosts/linux/profile.json)・[runbook](Linux-Production-runbook.md)実装済み、実host受入は未完了（KCOMP-H4） |
+| `linux` | support対象distribution上の署名済みnative service、systemd、AppArmor、nftables、LUKS2。ISAS runtimeはDocker／OCI daemon非依存 | [native実装](../../infra/hosts/linux/)・[runbook](Linux-Production-runbook.md)・静的検査済み。実host受入は未完了 |
 | `macos` | macOS用Production service構成、OS起動管理、sleep／update／disk／暗号化／backup対策。`local-integration`とdata・secret・profileを分離 | [native実装](../../infra/hosts/macos/)・[runbook](macOS-Production-runbook.md)・静的検査済み。実host 2台の受入は未完了 |
 | `freebsd` | FreeBSD Jail、native package／ports、rc.d、VNET／pf、ZFS、rctl | [定義](../../infra/hosts/freebsd/profile.json)・[runbook](FreeBSD-Production-runbook.md)実装済み、実host受入は未完了（KCOMP-H2） |
 

@@ -1,0 +1,43 @@
+[Unit]
+Description=ISAS TLS edge boundary
+PartOf=isas.target
+Requires=isas-app.service isas-firewall.service
+After=isas-app.service isas-firewall.service
+RequiresMountsFor=/var/lib/isas
+ConditionPathIsMountPoint=/var/lib/isas
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=isas-edge
+Group=isas-edge
+WorkingDirectory=/var/lib/isas/edge
+LoadCredentialEncrypted=config:/etc/isas/credentials/edge.cred
+ExecStart=/opt/isas/current/edge/bin/start --config %d/config
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+ReadWritePaths=/var/lib/isas/edge /run/isas/edge
+LimitNOFILE=65536
+LogNamespace=isas

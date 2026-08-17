@@ -1,0 +1,15 @@
+d /var/lib/isas 0711 root root -
+d /var/lib/isas/database 0700 isas-db isas-db -
+d /var/lib/isas/identity 0700 isas-idp isas-idp -
+d /var/lib/isas/object-queue 0700 isas-objq isas-objq -
+d /var/lib/isas/app 0700 isas-app isas-app -
+d /var/lib/isas/edge 0700 isas-edge isas-edge -
+d /var/lib/isas/telemetry 0700 isas-otel isas-otel -
+d /run/isas 0711 root root -
+d /run/isas/database 0700 isas-db isas-db -
+d /run/isas/identity 0700 isas-idp isas-idp -
+d /run/isas/object-queue 0700 isas-objq isas-objq -
+d /run/isas/app 0700 isas-app isas-app -
+d /run/isas/edge 0700 isas-edge isas-edge -
+d /run/isas/telemetry 0700 isas-otel isas-otel -
+d /etc/isas/credentials 0700 root root -

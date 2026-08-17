@@ -1,0 +1,7 @@
+[Unit]
+Description=ISAS Production service boundary target
+Requires=isas-firewall.service isas-database.service isas-identity.service isas-object-queue.service isas-app.service isas-edge.service isas-telemetry.service
+After=isas-firewall.service isas-database.service isas-identity.service isas-object-queue.service isas-app.service isas-edge.service isas-telemetry.service
+
+[Install]
+WantedBy=multi-user.target

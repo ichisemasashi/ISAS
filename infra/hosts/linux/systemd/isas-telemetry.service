@@ -1,0 +1,42 @@
+[Unit]
+Description=ISAS telemetry boundary
+PartOf=isas.target
+Requires=isas-app.service
+After=isas-app.service
+RequiresMountsFor=/var/lib/isas
+ConditionPathIsMountPoint=/var/lib/isas
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=isas-otel
+Group=isas-otel
+WorkingDirectory=/var/lib/isas/telemetry
+LoadCredentialEncrypted=config:/etc/isas/credentials/telemetry.cred
+ExecStart=/opt/isas/current/telemetry/bin/start --config %d/config
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+ReadWritePaths=/var/lib/isas/telemetry /run/isas/telemetry
+LimitNOFILE=65536
+LogNamespace=isas

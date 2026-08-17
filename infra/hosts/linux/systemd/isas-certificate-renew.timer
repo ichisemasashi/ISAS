@@ -1,0 +1,11 @@
+[Unit]
+Description=Check ISAS edge certificate renewal daily
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+Unit=isas-certificate-renew.service
+
+[Install]
+WantedBy=timers.target

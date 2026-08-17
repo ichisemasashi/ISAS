@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "profile_id": "linux-production",
+  "host_os": "linux",
+  "distributions": [
+    { "id": "debian", "version_id": "13", "minimum_systemd": 257, "security_profile": "apparmor" },
+    { "id": "ubuntu", "version_id": "24.04", "minimum_systemd": 255, "security_profile": "apparmor" }
+  ],
+  "architectures": ["x86_64", "aarch64"],
+  "minimum_resources": { "cpu_cores": 8, "memory_gib": 32, "data_disk_gib": 1024 },
+  "root": "/opt/isas",
+  "state_root": "/var/lib/isas",
+  "secret_store": "systemd-creds-encrypted",
+  "artifact": { "type": "versioned-native-deb", "signature": "openssl-detached-sha256", "sbom": "spdx-json", "mutable_tag_allowed": false },
+  "container_runtime": "none",
+  "slo": { "p0_availability": 0.999, "p0_latency_ms": 500 },
+  "services": [
+    { "name": "database", "unit": "isas-database.service", "user": "isas-db", "listen": "127.0.0.1:6432", "artifact": "database.deb" },
+    { "name": "identity", "unit": "isas-identity.service", "user": "isas-idp", "listen": "127.0.0.1:8443", "artifact": "identity.deb" },
+    { "name": "object-queue", "unit": "isas-object-queue.service", "user": "isas-objq", "listen": "127.0.0.1:9000,127.0.0.1:4222", "artifact": "object-queue.deb" },
+    { "name": "app", "unit": "isas-app.service", "user": "isas-app", "listen": "127.0.0.1:3000", "artifact": "app.deb" },
+    { "name": "edge", "unit": "isas-edge.service", "user": "isas-edge", "listen": "0.0.0.0:8444", "external": "443/tcp-via-nftables", "artifact": "edge.deb" },
+    { "name": "telemetry", "unit": "isas-telemetry.service", "user": "isas-otel", "listen": "127.0.0.1:4317,127.0.0.1:4318", "artifact": "telemetry.deb" }
+  ],
+  "start_order": ["database", "identity", "object-queue", "app", "edge", "telemetry"],
+  "stop_order": ["edge", "app", "telemetry", "object-queue", "identity", "database"]
+}
