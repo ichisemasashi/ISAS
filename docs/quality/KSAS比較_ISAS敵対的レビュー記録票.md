@@ -65,23 +65,26 @@ KSASの非公開な内部architecture、RLS、MFA、暗号鍵、backup方式、S
 |---|---|---|---|
 | Linux | OCI imageとComposeはLinux containerを前提とし、技術的な移植可能性が高い | distribution、kernel、cgroup、firewall、SELinux／AppArmor、systemd、storage、backupを固定しておらず、同じComposeが動けば本番適合と誤認する | **Production必須対象、現状未承認** |
 | macOS | Apple Silicon＋Docker Desktopの`local-integration`は実機検証済み | 現行profileはloopback・synthetic・単一failure domainでありProduction用ではない。Docker公式supportはDesktopをproduction runtimeのsupport対象外としているため、Desktop依存だけでは保守契約を成立させられない | **Production必須対象、現状未承認**。Production専用runtime／service構成と同一SLOの実証が必要 |
-| FreeBSD | 文書・CI・runbook・実測なし | Docker Engine公式のsupported installation platformにFreeBSDがなく、現行Linux image／Composeをnative実行できると仮定して導入が停止する | **Production必須対象、現状未承認**。native構成または明示承認されたvirtualization構成が必要 |
+| FreeBSD | 文書・CI・runbook・実測なし | FreeBSDにはDocker Engineがなく、現行Linux image／Composeを実行基盤として流用できると仮定すると導入が停止する | **Production必須対象、現状未承認**。FreeBSD Jail上のnative service構成と、rc.d、VNET／pf、ZFS、rctlを含む運用受入が必要 |
 
-### 4.1 必須の定義変更
+### 4.1 FreeBSD ProductionはJailを前提とする
 
-「FreeBSDでhostする」の実装方式は次のどちらかを要求仕様で明記する。ユーザーの追加承認がない限り、Linux guest方式をFreeBSD native対応と読み替えない。
+FreeBSD Production profileはDocker、Compose、OCI runtimeを要求せず、FreeBSD Jailでserviceを分離して構成する。Linux guestやvirtualizationをKCOMP-H2の代替解決案には含めない。JailはDocker互換containerとして扱わず、FreeBSDのOS-level isolationとして個別に設計・検証する。
 
-- **親host方式**：FreeBSD上のbhyve等でsupport対象Linux guestを動かし、そのguest内でISAS OCI stackを運用する。この場合、application runtime OSはLinuxであり、FreeBSDはhypervisor／hostとしてbackup、network、起動監視を担う。
-- **native方式**：FreeBSD上でPostgreSQL、PostGIS、BFF、Web、IdP、proxy、queue、object、telemetryをnative serviceとして構築する。現行Composeとは別artifact、rc.d、jail／pkg、pf、ZFS、upgrade／rollback試験が必要であり、独立した大規模portingである。
+基準構成は次の責任境界とする。
 
-この二つを「どちらもFreeBSD対応」と曖昧に表記してはならない。親host方式を採る場合も、利用者がその方式をFreeBSD host要件の充足として承認し、bhyve、Linux guest、ZFS dataset、snapshot整合、時刻同期、UPS、guest監視まで受入対象に含める。承認がなければnative方式を完了条件とする。
+- 外部公開するTLS ingress／Webは`edge` Jail、BFFは`app` Jail、PostgreSQL 16＋PostGISとPgBouncerはdata用Jail、IdP、object／queue、telemetryは依存関係と権限境界に応じた専用Jailへ配置する。
+- 各componentはFreeBSD native package／portsまたは署名済みapplication artifactとしてversionを固定し、rc.dで起動順序、health check、graceful shutdown、再起動を管理する。
+- Jail networkはVNET／epair／pfで分離し、外部から到達できる入口を`edge` Jailに限定する。Jailにhost root、Docker socket、不要なdevice、host filesystem全体を渡さない。
+- dataを持つJailには分離したZFS datasetとquotaを割り当て、rctlでresource上限を設定する。ZFS snapshotだけをDB backupとは見なさず、PostgreSQL整合backup、WAL archive／PITR、暗号化したoff-host recovery setを組み合わせる。
+- ComposeはLinux／macOS用profileのartifactとして残せるが、FreeBSD Productionの起動・更新・rollback・backup・restore手順はJail manifestとrc.d設定を正本にする。
 
 ## 5. 敵対的指摘一覧
 
 | ID | 重要度 | 区分 | 攻撃仮説／不整合 | 要求処置 | 状態 |
 |---|---|---|---|---|---|
 | KCOMP-H1 | High | 要求逸脱 | ユーザー要求はmacOS／Linux／FreeBSD Production hostなのに、ISAS文書が無断でAWSをProduction正本、Macを非本番限定に変更している。このままでは正しい要求を満たさない構成が承認される | ユーザー要求を最上位の正本として要求仕様・ADR・IaC・runbook・roadmapを訂正し、AWS前提を必須条件から除去する | 未処置 |
-| KCOMP-H2 | High | FreeBSD | FreeBSDでDocker Composeが同等に動くと仮定すると、daemon・network・volume・health・image実行の入口で停止する | native Production profileを設計する。Linux guest案はユーザーが明示承認した場合だけ代替案とし、方式別runbookとE2Eを作る | 未処置 |
+| KCOMP-H2 | High | FreeBSD | FreeBSDにはDocker Engineがなく、Docker Compose／OCI stackを実行基盤にするとdaemon・network・volume・health・image実行の入口で停止する | FreeBSD Jailを正規Production profileとして設計し、native package／ports、rc.d、VNET／pf、ZFS、rctlによるservice分離、runbook、backup／restore、E2Eを実装・受入する | 未処置 |
 | KCOMP-H3 | High | macOS | 検証用Docker Desktop stackをそのまま本番化すると、user session、Desktop update、sleep、単一disk／電源、support対象外のproduction runtimeに業務を依存させる | macOS Productionを正規profileとして`local-integration`から分離し、runtime保守、auto-start、sleep、backup、監視、更新、復旧、共通SLOを受入する | 未処置 |
 | KCOMP-H4 | High | Linux | Linuxにproduction IaC、OS hardening、service manager、backup、upgrade、firewall、secret、support matrixがない | support対象distribution／version／archを定義し、empty hostからrestoreまで自動化・実証する。Linuxだけを上位hostとは扱わない | 未処置 |
 | KCOMP-H5 | High | 競争力 | 農機adapterがADRだけなのにKSAS相当のsmart agricultureを想起させると、自動日誌・収量・可変施肥を期待した導入が失敗する | capability catalogに`implemented／validated／planned／out-of-scope`を表示し、最初の実connectorを契約・sample・実機で受入する | 未処置 |
@@ -114,16 +117,18 @@ KSASの非公開な内部architecture、RLS、MFA、暗号鍵、backup方式、S
 
 これらが揃う前に「3 OS対応」と記載すると、最も危険な部分だけが運用者の推測へ落ちる。
 
-### KCOMP-H2：FreeBSDは互換性確認ではなく方式裁定が必要
+### KCOMP-H2：FreeBSDはJail前提のProduction profileが必要
 
-Docker公式のEngine install対象はLinux distribution群で、FreeBSDはsupported platform表にない。現行imageは`linux/amd64`／`linux/arm64`を前提とするため、FreeBSD native hostでの`docker compose up`を受入手順にできない。ここから「Podman互換なら動くだろう」「jailはcontainerだから同じ」という推測へ進むと、network、healthcheck、volume permission、read-only root、capability、image architecture、support責任が未検証のままになる。
+Docker公式のEngine install対象はLinux distribution群で、FreeBSDはsupported platform表にない。現行imageは`linux/amd64`／`linux/arm64`を前提とするため、FreeBSD hostでの`docker compose up`を受入手順にできない。「Jailはcontainerだから同じ」という読み替えも、network、health check、filesystem permission、resource制御、package更新、support責任を未検証のままにする。
 
-最初のspikeは次の二案を同じ合格にせず比較する。
+解決案はFreeBSD Jailによるnative Production profileに固定する。最初の技術spikeでは、少なくとも次を実装して計測する。
 
-1. FreeBSD＋bhyve＋support対象Linux guest＋同一署名OCI artifact。これはユーザーが親host方式を承認した場合だけ要件充足候補にする。
-2. FreeBSD native service群＋rc.d／jail＋ZFS／pf。
+1. `edge`、`app`、data、IdP、object／queue、telemetryのJail manifestと、Jail間通信を必要最小限に制限するVNET／epair／pf ruleset。
+2. FreeBSD native package／portsまたは署名済みapplication artifactのversion固定、provenance／SBOM確認、rc.dによる起動順序、health check、graceful shutdown、restart。
+3. JailごとのZFS dataset／quotaとrctl、secret分離、host filesystem／deviceへの不要なaccess拒否。
+4. PostgreSQL整合backup、WAL archive／PITR、暗号化したoff-host recovery set、および空のFreeBSD hostへの復旧手順。
 
-90日以内にrestoreできるrecovery set、host reboot後の自動復旧、guest停止検知、ZFS snapshotとPostgreSQL整合性まで測る。単にログイン画面が出るだけでは不合格とする。
+受入では、host reboot後の自動復旧、service停止検知、certificate／package更新、rollback、disk full、Jail停止・侵害時の横展開防止、backup／PITR／全損restoreを実行する。その上でRLS、認証・失効、監査chain、queue／object障害、性能SLOの共通E2Eを合格させる。単にログイン画面が出るだけでは不合格とする。
 
 ### KCOMP-H3：Mac検証環境をProductionへ流用できない
 
@@ -181,7 +186,7 @@ host profileごとに次の4状態を機械可読にする。
 | 3 | 配備ADR再編 | provider-neutral ADR、同格のhost profile、FreeBSD方式裁定 | AWS前提による要求逸脱0件。各OSの完了条件が同じ業務・security・復旧gateへ接続 |
 | 4 | Linux Production | IaC、install／upgrade／rollback／backup／restore／incident runbook | empty host→稼働、全損→restore、RLS／監査／SLO／securityを別担当者がPASS |
 | 5 | macOS Production | production専用profile、runtime保守、auto-start、sleep／update／disk／backup対策 | 共通SLO、再起動・全損復旧・外部監視をPASS。縮退はユーザー承認なしに許可しない |
-| 6 | FreeBSD Production | native案を基準とし、承認された場合のみLinux guest案を比較 | 採用案でhost reboot、network、volume、restore、upgrade、securityをE2E PASS |
+| 6 | FreeBSD Production | Jail manifest、native package／ports、rc.d、VNET／pf、ZFS／rctl、install／運用／復旧runbook | 空のFreeBSD hostから構築し、reboot、network分離、resource制御、upgrade／rollback、backup／PITR／全損restore、securityをE2E PASS |
 | 7 | Cross-host artifact | linux/amd64／arm64署名image、SBOM、provenance、compatibility matrix | 同一source／migration／contract test、host固有差分がmanifest化済み |
 | 8 | Core実受入 | 実CSV、3,000圃場benchmark、実端末、UT、法令master、DR | host別manifestへ実証跡を登録しProduction blocker 0件 |
 | 9 | 最初の農機縦切り | 1実format／connector、日誌候補、監査、運用 | 実sample・実機または契約済sandboxで再送／停止／単位／圃場照合PASS |
@@ -239,7 +244,7 @@ host profileごとに次の4状態を機械可読にする。
 | ISASをKSAS同等の完成製品と表示する | **不可**。農機ecosystem、実API、support、実受入に重大差 |
 | LinuxでProduction hostする | **要求上は必須、実装は未承認**。Production artifactと実運用gateが必要 |
 | macOSでProduction hostする | **要求上は必須、実装は未承認**。`local-integration`とは別のProduction profileが必要 |
-| FreeBSDでProduction hostする | **要求上は必須、実装は未承認**。native方式を基準とし、virtualization代替はユーザー承認が必要 |
+| FreeBSDでProduction hostする | **要求上は必須、実装は未承認**。FreeBSD Jailを前提とするProduction profileと共通運用gateの実装・受入が必要 |
 | `v1.0.0`をProduction releaseとして扱う | **不可**。baseline tagでありProductionは`BLOCKED` |
 
 High 6件を閉じるまで、実データの業務正本化、KSASからの切替、Production release、3 OS対応の対外表明を承認しない。
