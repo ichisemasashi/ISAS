@@ -5,9 +5,10 @@
 | レビュー日 | 2026-08-17 |
 | レビュー対象 | ISAS Web／BFF／DB migration／Compose／IaC、要求仕様、ADR、運用・利用者文書、release・品質証跡 |
 | 比較対象 | クボタ営農支援システムKSASの公式公開機能、FAQ、マニュアル、API開発者サイト、会員規約 |
-| 追加制約 | ISASのホストOSはmacOS、LinuxまたはFreeBSDのいずれかとする |
+| ユーザー確定要求 | ISASはmacOS、LinuxまたはFreeBSDのいずれでもProduction hostできること。この要求を既存ADR・IaC・運用文書より上位の正本としてレビューする |
+| 訂正履歴 | 初版がAWS Production前提とMac非本番限定を所与として扱った判断を撤回。これらはユーザー要求ではなく、作成側が混入させた要求逸脱として再分類した |
 | 手法 | 公開機能比較、正本間の矛盾探索、実装／試験／運用証跡の三点照合、障害・移行・保守・競争力の反対仮説 |
-| 総合判定 | **BLOCKED**。ISASの業務coreには比較可能な実装があるが、指定された3系統のhost契約とProduction受入が未成立。KSAS代替製品としての同等性も未証明 |
+| 総合判定 | **BLOCKED**。ISASの業務coreには比較可能な実装があるが、確定要求である3系統のhost契約とProduction受入が未成立。KSAS代替製品としての同等性も未証明 |
 | 指摘集計 | High 6件、Medium 8件、Low 2件。レビュー時点では全件未処置 |
 
 ## 1. 結論
@@ -15,10 +16,10 @@
 ISASは、圃場GIS、作業指示・日誌、農薬・在庫、CSV移行、offline outbox、RLS・監査という中核に実装上の強みがある。しかし、次の3点を混同すると誤った導入判断になる。
 
 1. **KSASは運営主体とサポート窓口を持つcloud serviceである。** ISASはself-hostを目指すsoftwareであり、availability、backup、security update、問い合わせ対応を導入組織が引き受ける。画面機能だけを並べても代替性は証明できない。
-2. **ISASの`v1.0.0`はProduction承認版ではない。** release note自身が`BLOCKED`と明記し、実AWS、実利用者UT、実端末、restore／DR、段階配備を未完了としている。
-3. **今回のhost制約は現行設計を変更する。** 現在のProduction正本はAWS、Mac Composeは非本番`local-integration`である。Linux production runbookはなく、FreeBSD native runtimeも検証されていない。したがって「macOS／Linux／FreeBSDでhost可能」は現状の事実ではない。
+2. **ISASの`v1.0.0`はProduction承認版ではない。** release note自身が`BLOCKED`と明記している。そこで列挙されたAWS固有の未完了事項は本来要求ではなく、macOS／Linux／FreeBSD Production対応から逸脱して作られた実装計画の残件である。実利用者UT、実端末、restore／DR、段階配備等のprovider非依存gateは引き続き必要である。
+3. **既存文書がユーザー要求から逸脱している。** ProductionをAWS前提、Mac Composeを非本番`local-integration`限定とした決定には、ユーザーの確定要求を変更する権限も根拠もない。Linux production runbookとFreeBSD runtimeがないことも含め、これは「新しい制約による変更」ではなく、ISAS文書・実装側の要求追跡欠陥である。
 
-Production候補として最初に成立させるべきものは、**LinuxをTier 1 reference host**とするprovider-neutralなself-host profileである。macOSは単一node・縮退SLOを明示したTier 2、FreeBSDは「FreeBSD上のLinux VMを許すか」を先に決めたTier 3とする。3 OSを同じ構成として一括認定してはならない。
+macOS、Linux、FreeBSDはすべて**正規のProduction host対象**であり、品質上の上下関係を設けない。実装順としてLinuxを最初のreference profileにすることはできるが、それを理由にmacOSを非本番・縮退版、FreeBSDを任意対応へ格下げしてはならない。OS固有の構成と試験を分けながら、共通の業務要件、security、backup／restore、監査、release gateを3 OSすべてで満たす必要がある。
 
 ## 2. 比較の証拠範囲と限界
 
@@ -62,27 +63,27 @@ KSASの非公開な内部architecture、RLS、MFA、暗号鍵、backup方式、S
 
 | Host候補 | 現行実装で確認できるもの | 破壊仮説 | 判定 |
 |---|---|---|---|
-| Linux | OCI imageとComposeはLinux containerを前提とし、技術的な移植可能性が高い | distribution、kernel、cgroup、firewall、SELinux／AppArmor、systemd、storage、backupを固定しておらず、同じComposeが動けば本番適合と誤認する | **最優先の実装候補、現状未承認** |
-| macOS | Apple Silicon＋Docker Desktopの`local-integration`は実機検証済み | Docker DesktopはLinux VM内daemonであり、現行profileはloopback・synthetic・単一failure domain。Docker公式supportもDesktopをproduction runtimeとして対象外にしている | **非本番は可。本番は別profileと縮退SLO・自己責任を明示するまで不可** |
-| FreeBSD | 文書・CI・runbook・実測なし | Docker Engine公式のsupported installation platformにFreeBSDがなく、現行Linux image／Composeをnative実行できると仮定して導入が停止する | **BLOCKED**。Linux guestを許すかnative portを行うかの裁定が先 |
+| Linux | OCI imageとComposeはLinux containerを前提とし、技術的な移植可能性が高い | distribution、kernel、cgroup、firewall、SELinux／AppArmor、systemd、storage、backupを固定しておらず、同じComposeが動けば本番適合と誤認する | **Production必須対象、現状未承認** |
+| macOS | Apple Silicon＋Docker Desktopの`local-integration`は実機検証済み | 現行profileはloopback・synthetic・単一failure domainでありProduction用ではない。Docker公式supportはDesktopをproduction runtimeのsupport対象外としているため、Desktop依存だけでは保守契約を成立させられない | **Production必須対象、現状未承認**。Production専用runtime／service構成と同一SLOの実証が必要 |
+| FreeBSD | 文書・CI・runbook・実測なし | Docker Engine公式のsupported installation platformにFreeBSDがなく、現行Linux image／Composeをnative実行できると仮定して導入が停止する | **Production必須対象、現状未承認**。native構成または明示承認されたvirtualization構成が必要 |
 
 ### 4.1 必須の定義変更
 
-「FreeBSDでhostする」は次のどちらかを要求仕様で明記する。
+「FreeBSDでhostする」の実装方式は次のどちらかを要求仕様で明記する。ユーザーの追加承認がない限り、Linux guest方式をFreeBSD native対応と読み替えない。
 
 - **親host方式**：FreeBSD上のbhyve等でsupport対象Linux guestを動かし、そのguest内でISAS OCI stackを運用する。この場合、application runtime OSはLinuxであり、FreeBSDはhypervisor／hostとしてbackup、network、起動監視を担う。
 - **native方式**：FreeBSD上でPostgreSQL、PostGIS、BFF、Web、IdP、proxy、queue、object、telemetryをnative serviceとして構築する。現行Composeとは別artifact、rc.d、jail／pkg、pf、ZFS、upgrade／rollback試験が必要であり、独立した大規模portingである。
 
-この二つを「どちらもFreeBSD対応」と曖昧に表記してはならない。最短経路は親host方式だが、bhyve、Linux guest、ZFS dataset、snapshot整合、時刻同期、UPS、guest監視まで受入対象に含める。
+この二つを「どちらもFreeBSD対応」と曖昧に表記してはならない。親host方式を採る場合も、利用者がその方式をFreeBSD host要件の充足として承認し、bhyve、Linux guest、ZFS dataset、snapshot整合、時刻同期、UPS、guest監視まで受入対象に含める。承認がなければnative方式を完了条件とする。
 
 ## 5. 敵対的指摘一覧
 
 | ID | 重要度 | 区分 | 攻撃仮説／不整合 | 要求処置 | 状態 |
 |---|---|---|---|---|---|
-| KCOMP-H1 | High | 配備 | 要求はmacOS／Linux／FreeBSD hostなのに、Production正本はAWS、MacはProduction利用禁止である。営業資料だけを変更するとrunbook・SLO・責任境界が破綻する | provider-neutral self-host要求、ADR、threat model、release classを新設し、AWSはその一profileへ変更する | 未処置 |
-| KCOMP-H2 | High | FreeBSD | FreeBSDでDocker Composeが同等に動くと仮定すると、daemon・network・volume・health・image実行の入口で停止する | Linux guest許容を裁定。許容ならFreeBSD host runbookとE2E、非許容ならnative port計画と専用gateを作る | 未処置 |
-| KCOMP-H3 | High | macOS | 検証用Docker Desktop stackをそのまま本番化すると、user session、Desktop update、sleep、単一disk／電源、support対象外のproduction runtimeに業務を依存させる | `mac-single-node-production`を`local-integration`から分離し、auto-start、sleep禁止、UPS、外部backup、監視、更新保留、復旧、縮退SLO、licenseを受入する | 未処置 |
-| KCOMP-H4 | High | Linux | 最も実現性の高いLinuxにproduction IaC、OS hardening、service manager、backup、upgrade、firewall、secret、support matrixがない | 1つのdistribution／version／archをTier 1に固定し、empty hostからrestoreまで自動化・実証する | 未処置 |
+| KCOMP-H1 | High | 要求逸脱 | ユーザー要求はmacOS／Linux／FreeBSD Production hostなのに、ISAS文書が無断でAWSをProduction正本、Macを非本番限定に変更している。このままでは正しい要求を満たさない構成が承認される | ユーザー要求を最上位の正本として要求仕様・ADR・IaC・runbook・roadmapを訂正し、AWS前提を必須条件から除去する | 未処置 |
+| KCOMP-H2 | High | FreeBSD | FreeBSDでDocker Composeが同等に動くと仮定すると、daemon・network・volume・health・image実行の入口で停止する | native Production profileを設計する。Linux guest案はユーザーが明示承認した場合だけ代替案とし、方式別runbookとE2Eを作る | 未処置 |
+| KCOMP-H3 | High | macOS | 検証用Docker Desktop stackをそのまま本番化すると、user session、Desktop update、sleep、単一disk／電源、support対象外のproduction runtimeに業務を依存させる | macOS Productionを正規profileとして`local-integration`から分離し、runtime保守、auto-start、sleep、backup、監視、更新、復旧、共通SLOを受入する | 未処置 |
+| KCOMP-H4 | High | Linux | Linuxにproduction IaC、OS hardening、service manager、backup、upgrade、firewall、secret、support matrixがない | support対象distribution／version／archを定義し、empty hostからrestoreまで自動化・実証する。Linuxだけを上位hostとは扱わない | 未処置 |
 | KCOMP-H5 | High | 競争力 | 農機adapterがADRだけなのにKSAS相当のsmart agricultureを想起させると、自動日誌・収量・可変施肥を期待した導入が失敗する | capability catalogに`implemented／validated／planned／out-of-scope`を表示し、最初の実connectorを契約・sample・実機で受入する | 未処置 |
 | KCOMP-H6 | High | release | codeとlocal testのPASSを、販売中KSASと同じ「利用可能」と数えると、実data、実利用者、端末、restore、incident未検証のsystemへ業務正本を移す | host profileごとの実release manifest、実UT、実CSV rehearsal、restore／DR、security、24時間監視を完了するまでProduction表示を禁止する | 未処置 |
 | KCOMP-M1 | Medium | API | 外部API／WebhookはADR中心で、実client、公開endpoint、version運用、supportがない | 最小read-only APIから実client contract、sandbox、rate／revocation、運用窓口を受入する | 未処置 |
@@ -98,12 +99,14 @@ KSASの非公開な内部architecture、RLS、MFA、暗号鍵、backup方式、S
 
 ## 6. High指摘の攻撃詳細
 
-### KCOMP-H1：配備正本が今回のhost制約と矛盾する
+### KCOMP-H1：配備正本がユーザーの確定要求を無断変更している
 
-ISAS要求仕様§5.6とADR-0023はMacを明確に非本番Integrationとし、Productionへ昇格させない。ADR-0019と開発工程はAWS serviceを採用し、運用文書もAWS staging／Productionを前提にする。今回の制約を満たすには単なる文言置換ではなく、次の正本を同時に変更する必要がある。
+ユーザーの確定要求は、ISASをmacOS、LinuxまたはFreeBSDでhostできることである。それにもかかわらず、ISAS要求仕様§5.6とADR-0023はMacを非本番Integrationへ限定し、ADR-0019と開発工程はAWS serviceをProduction前提として採用した。これはユーザー要求の変更ではなく、作成側による要求逸脱である。AWSの採用判断とMacの非本番限定を、過去に文書化されたという理由で正当化してはならない。
+
+是正では、macOS／Linux／FreeBSDをすべてProduction対象へ戻し、AWS固有構成を必須の正本から外す。AWS artifactを残す場合は、3 OS self-host要件を置換しない任意adapterとして明示する。単なる文言置換ではなく、次の正本を同時に変更する必要がある。
 
 - 要求仕様：self-host Production class、許容host、単一node／HA class、責任分担
-- ADR-0002／0019／0020／0021／0023：provider-neutral interfaceとhost別profile
+- ADR-0002／0019／0020／0021／0023：3 OS Productionを正本とするprovider-neutral interfaceとhost別profile
 - threat model：host root、Docker socket、hypervisor、backup媒体、operator端末
 - deployment：secret、TLS、IdP、object、queue、telemetry、backup、upgrade
 - release manifest：`host_os`、kernel、runtime、filesystem、encryption、failure domain、support期限
@@ -117,27 +120,27 @@ Docker公式のEngine install対象はLinux distribution群で、FreeBSDはsuppo
 
 最初のspikeは次の二案を同じ合格にせず比較する。
 
-1. FreeBSD＋bhyve＋Tier 1 Linux guest＋同一署名OCI artifact。
+1. FreeBSD＋bhyve＋support対象Linux guest＋同一署名OCI artifact。これはユーザーが親host方式を承認した場合だけ要件充足候補にする。
 2. FreeBSD native service群＋rc.d／jail＋ZFS／pf。
 
 90日以内にrestoreできるrecovery set、host reboot後の自動復旧、guest停止検知、ZFS snapshotとPostgreSQL整合性まで測る。単にログイン画面が出るだけでは不合格とする。
 
 ### KCOMP-H3：Mac検証環境をProductionへ流用できない
 
-現行Mac profileはsynthetic data、loopback入口、単一Mac、Docker DesktopのLinux VMを意図したものと文書化されている。さらにDocker公式support scopeはDocker Desktopをproduction runtimeとして対象外にしている。したがってmacOS採用時は、第三者supportを期待せずISAS運用者がruntime障害まで引き受ける条件になる。
+現行Mac profileはsynthetic data、loopback入口、単一Mac、Docker DesktopのLinux VMを意図した検証用構成にすぎない。これはmacOSをProduction対象外にしてよい理由ではなく、macOS Production profileが欠落している証拠である。さらにDocker公式support scopeはDocker Desktopをproduction runtimeとして対象外にしているため、Docker Desktopだけを正規runtimeにするならISAS側がruntime障害まで保守する必要がある。別runtimeまたはnative service構成も含めて比較し、macOS上で共通Production gateを満たす方式を選定する。
 
-Macを許容するなら、次のいずれかを選ぶ。
+macOS Productionでは、少なくとも次の構成classを要件に照らして評価する。
 
-- **single-node class**：計画停止と長時間復旧を許容し、HA／99.9%を約束しない。暗号化外部backupと代替Macへのrestoreを必須にする。
+- **single-node class**：暗号化外部backupと代替Macへのrestoreを必須にする。HA／SLOを下げる場合はユーザーの明示承認が必要で、実装側が一方的に縮退させない。
 - **externalized state class**：MacはWeb／BFF nodeに限定し、DB、object、queue、IdP、backupを別failure domainへ置く。これは「Mac 1台host」ではなく分散配備である。
 
 どちらも`local-integration`とは別profile、別data、別secret、別tag／manifestを使用する。
 
-### KCOMP-H4：Linuxをreferenceにしないと3 OS対応の基準がない
+### KCOMP-H4：Linux Production profileが欠落している
 
 OCI stackの自然な実行基盤はLinuxだが、現在のrepositoryにはself-host Productionのgolden pathがない。AWS adapterをlocal adapterへ差し替えただけでは、OS update、daemon restart、disk full、certificate renewal、firewall、log rotation、backup整合、restore、secret rotationを所有できない。
 
-Tier 1 Linux profileは、特定distributionのsupport期間、x86_64／arm64、minimum CPU／RAM／disk、LUKS等の暗号化、SELinux／AppArmor、systemd、nftables／Docker chain、rootless可否、UPS、NTP、registry、署名検証をversion固定する。最小hostからのinstallと、全損hostへのrestoreを別担当者が再現して初めて基準になる。
+Linux profileは、特定distributionのsupport期間、x86_64／arm64、minimum CPU／RAM／disk、LUKS等の暗号化、SELinux／AppArmor、systemd、nftables／Docker chain、rootless可否、UPS、NTP、registry、署名検証をversion固定する。最小hostからのinstallと、全損hostへのrestoreを別担当者が再現して初めてProduction対応になる。Linuxを先に実装しても、macOS／FreeBSDより上位の製品classにはしない。
 
 ### KCOMP-H5：KSASとの差は農機ecosystemで拡大する
 
@@ -174,11 +177,11 @@ host profileごとに次の4状態を機械可読にする。
 | 順序 | 工程 | 成果物 | 再レビュー合格条件 |
 |---:|---|---|---|
 | 1 | Product status是正 | capability catalog、README／UI／release表示 | plannedとvalidatedが混在せず、`v1.0.0`がProductionと誤認されない |
-| 2 | Self-host要求確定 | 要求仕様改版、単一node／HA class、host定義、RACI | macOS／Linux／FreeBSDの意味と非対象が承認済み |
-| 3 | 配備ADR再編 | provider-neutral ADR、host profile、FreeBSD方式裁定 | AWS前提と3 OS制約の矛盾0件 |
-| 4 | Linux Tier 1 | IaC、install／upgrade／rollback／backup／restore／incident runbook | empty host→稼働、全損→restore、RLS／監査／SLO／securityを別担当者がPASS |
-| 5 | Mac Tier 2 | production専用profile、縮退SLO、auto-start、sleep／update／disk／backup対策 | Docker Desktop support外をrisk受容し、再起動・全損復旧・外部監視をPASS |
-| 6 | FreeBSD Tier 3 spike | Linux guest案とnative案の比較証跡 | 採用案でhost reboot、network、volume、restore、upgrade、securityをE2E PASS |
+| 2 | ユーザー要求への復帰 | 要求仕様改版、3 OS Production、単一node／HA class、host定義、RACI | macOS／Linux／FreeBSDを正規Production対象とし、AWS必須・Mac非本番限定の記述が0件 |
+| 3 | 配備ADR再編 | provider-neutral ADR、同格のhost profile、FreeBSD方式裁定 | AWS前提による要求逸脱0件。各OSの完了条件が同じ業務・security・復旧gateへ接続 |
+| 4 | Linux Production | IaC、install／upgrade／rollback／backup／restore／incident runbook | empty host→稼働、全損→restore、RLS／監査／SLO／securityを別担当者がPASS |
+| 5 | macOS Production | production専用profile、runtime保守、auto-start、sleep／update／disk／backup対策 | 共通SLO、再起動・全損復旧・外部監視をPASS。縮退はユーザー承認なしに許可しない |
+| 6 | FreeBSD Production | native案を基準とし、承認された場合のみLinux guest案を比較 | 採用案でhost reboot、network、volume、restore、upgrade、securityをE2E PASS |
 | 7 | Cross-host artifact | linux/amd64／arm64署名image、SBOM、provenance、compatibility matrix | 同一source／migration／contract test、host固有差分がmanifest化済み |
 | 8 | Core実受入 | 実CSV、3,000圃場benchmark、実端末、UT、法令master、DR | host別manifestへ実証跡を登録しProduction blocker 0件 |
 | 9 | 最初の農機縦切り | 1実format／connector、日誌候補、監査、運用 | 実sample・実機または契約済sandboxで再送／停止／単位／圃場照合PASS |
@@ -234,9 +237,9 @@ host profileごとに次の4状態を機械可読にする。
 |---|---|
 | ISAS業務coreをKSAS比較のpilotへ使う | **条件付き可**。synthetic／隔離data、非Production表示、手入力coreにscopeを限定 |
 | ISASをKSAS同等の完成製品と表示する | **不可**。農機ecosystem、実API、support、実受入に重大差 |
-| LinuxでProduction hostする | **現状不可、最優先候補**。Tier 1 artifactと実運用gateが必要 |
-| macOSでProduction hostする | **現状不可**。`local-integration`流用禁止。single-node縮退classのrisk受容が必要 |
-| FreeBSDでProduction hostする | **現状不可**。Linux guestかnative portか未決定 |
+| LinuxでProduction hostする | **要求上は必須、実装は未承認**。Production artifactと実運用gateが必要 |
+| macOSでProduction hostする | **要求上は必須、実装は未承認**。`local-integration`とは別のProduction profileが必要 |
+| FreeBSDでProduction hostする | **要求上は必須、実装は未承認**。native方式を基準とし、virtualization代替はユーザー承認が必要 |
 | `v1.0.0`をProduction releaseとして扱う | **不可**。baseline tagでありProductionは`BLOCKED` |
 
 High 6件を閉じるまで、実データの業務正本化、KSASからの切替、Production release、3 OS対応の対外表明を承認しない。
