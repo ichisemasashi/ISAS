@@ -190,13 +190,13 @@ host profileごとに次の4状態を機械可読にする。
 
 | ID | 今回追加した実装・仕様 | 状態を維持する理由 |
 |---|---|---|
-| KCOMP-H2〜H4 | `infra/hosts/{freebsd,macos,linux}/profile.json`、host別runbook、実機受入validator | 各OSの実host、2 failure domain、backup／restore、E2E証跡がない |
-| KCOMP-H5 | [capability catalog](../product/capability-catalog.json)、[初回農機connector受入契約](../product/初回農機connector受入契約.md) | 契約済み実connector、実sample、実機受入がない |
-| KCOMP-H6 | Production表示の強制BLOCKED、host別release manifest validator、専用tag namespace | 実UT、実CSV、DR、security、24時間監視を完了したhost別manifestがない |
-| KCOMP-M1 | [外部API最小受入契約](../product/外部API最小受入契約.md) | 実client、service identity、sandbox、rate／失効、support受入がない |
-| KCOMP-M5 | [host別reference benchmark仕様](host別reference-benchmark仕様.md) | 3 OS上の同一fixtureによる公開実測結果がない |
-| KCOMP-M7 | [3年TCO入力仕様](../operations/3年TCO入力仕様.md)と計算器 | 9組合せの実見積、人件費、停止costが未入力 |
-| KCOMP-M8 | [vendor exit full export仕様](../operations/vendor-exit-full-export仕様.md) | 完全export／import実装と空ISASへのrestore・削除証明がない |
+| KCOMP-H2〜H4 | 要求仕様§5.7、ADR-0019 v4、`infra/hosts/{freebsd,macos,linux}/profile.json`、host別runbook、実機受入validator | 各OSの実host、2 failure domain、backup／restore、E2E証跡がない |
+| KCOMP-H5 | 要求仕様§5.8、ADR-0012 v2、[capability catalog](../product/capability-catalog.json)、[初回農機connector受入契約](../product/初回農機connector受入契約.md) | 契約済み実connector、実sample、実機受入がない |
+| KCOMP-H6 | 要求仕様§5.8、ADR-0021 v4、Production表示の強制BLOCKED、host別release manifest validator、専用tag namespace | 実UT、実CSV、DR、security、24時間監視を完了したhost別manifestがない |
+| KCOMP-M1 | 要求仕様F-94、ADR-0013 v2、[外部API最小受入契約](../product/外部API最小受入契約.md) | 実client、service identity、sandbox、rate／失効、support受入がない |
+| KCOMP-M5 | 要求仕様§5.2.3、ADR-0019 v4、[host別reference benchmark仕様](host別reference-benchmark仕様.md) | 3 OS上の同一fixtureによる公開実測結果がない |
+| KCOMP-M7 | 要求仕様§5.8、ADR-0019 v4、[3年TCO入力仕様](../operations/3年TCO入力仕様.md)と計算器 | 9組合せの実見積、人件費、停止costが未入力 |
+| KCOMP-M8 | 要求仕様F-85／§5.3、ADR-0003 v10、[vendor exit full export仕様](../operations/vendor-exit-full-export仕様.md) | 完全export／import実装と空ISASへのrestore・削除証明がない |
 
 ## 7. ISASが維持すべき差別化候補
 

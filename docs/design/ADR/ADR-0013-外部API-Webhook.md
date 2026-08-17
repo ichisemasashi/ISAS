@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ） v1**（敵対的レビュー9件を全件処置、残存 High 0／Medium 0。[レビュー記録](レビュー記録_ADR-0013.md)） |
+| ステータス | **採用（クローズ） v2**（v1を維持し、KCOMP-M1の最小read-only APIと実client受入境界を追加） |
 | 日付 | 2026-08-16 |
 | 由来 | 要求仕様 F-90〜93、ADR-0008からの委譲事項 |
 | 関連 | [ADR-0002 配備](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0005 権限](ADR-0005-権限モデル-RBAC-メンバーシップ.md)、[ADR-0008 API](ADR-0008-API方式.md)、[ADR-0014 DWH](ADR-0014-横断分析-DWH.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md) |
@@ -10,6 +10,8 @@
 ## 1. 決定
 
 ### 1.1 外部REST API
+
+最初の公開sliceは`GET /api/v1/fields`に限定する。browser sessionとは別のservice identityへ`fields:read`、単一tenant、field-group scope、purpose、有効期限を束縛する。公開拡大はこのsliceの実client受入後に別判断する。
 
 - 公開面はADR-0008のversion付きRESTとし、browser BFF sessionとは別のservice identityを用いる。OIDC/OAuth 2.0の短期access tokenを検証し、`client_id`、issuer、audience、scope、単一tenant、法域、期限を法域内registryの現在設定から導出する。token claimだけで権限を拡張しない。
 - client credentialは1connector・1tenant・1用途とし、複数tenant／複数国を横断するtokenやendpointを提供しない。人の権限をserviceへ委任・偽装せず、監査actorは`service + client_id`とする。
@@ -57,3 +59,5 @@ client、subscription、secret、scope、destinationの変更・失効は`author
 5. P2外部負荷下でもP0失効とP1現場APIのSLOを守る。
 
 実IdP client、連携先domain、payload項目、法的根拠、SLAはconnectorごとの二者承認対象であり、本ADRだけでは接続を許可しない。
+
+最初の実clientでは、client owner、契約、IdP client、sandbox／production endpoint、OpenAPI version、rate／`Retry-After`、失効、180日前廃止通知、障害・security窓口を台帳へ固定する。sandboxでtenant越境、scope拡張、cursor流用、期限切れ・失効tokenを拒否し、実client version／source digestと二者承認を証跡化するまで外部APIを`validated`と表示しない。受入票は[外部API最小受入契約](../../product/外部API最小受入契約.md)を正とする。
