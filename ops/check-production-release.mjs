@@ -65,7 +65,7 @@ export function validateProductionRelease({ release, build, delivery, bake, rele
     if (!evidence(approval?.evidence)) add(`24-hour approvals[${index}].evidence is required`);
   });
   if (actors.size < 2 || !roles.has("release_manager") || !roles.has("independent_verifier")) add("24-hour evidence requires two distinct release_manager and independent_verifier approvals");
-  if (bake?.tag?.name !== `v${release?.release?.version}`) add("production tag must equal v<release.version>");
+  if (bake?.tag?.name !== `production/v${release?.release?.version}`) add("production tag must equal production/v<release.version>");
   if (bake?.tag?.target_commit !== release?.release?.source_commit) add("production tag target must match release source_commit");
   return errors;
 }

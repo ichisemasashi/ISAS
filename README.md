@@ -1,5 +1,7 @@
 # ISAS
 
+> **Version status: baseline／Production BLOCKED.** `v1.0.0`をProduction承認版として使用しないでください。Production releaseだけが使用するtag namespaceは`production/v<version>`です。
+
 イチセ・スマート・アグリ・システム — 営農支援Webアプリケーション。
 
 現場での入力（作業日誌・農薬記録・打刻）を核に、圃場GIS・作付計画・在庫・労務・農機連携までを扱う。オフライン前提・多テナント・多言語（将来の海外展開）を初期から設計に織り込む。ライセンスは MIT（[LICENSE](LICENSE)）。サービス実施範囲・データレジデンシー・法令遵守は運用者責任。
@@ -21,7 +23,7 @@
 | [docs/design/UXデザインシステム.md](docs/design/UXデザインシステム.md) | Phase 1のUXデザインシステム、IA、主要導線、UT計画 |
 | [docs/operations/](docs/operations/README.md) | デプロイ、ロールバック、バックアップ、復旧、障害対応runbook |
 | [docs/manual/](docs/manual/README.md) | システム管理者向け／利用者向けの運用マニュアルと配布手順 |
-| [docs/release/RELEASE-1.0.0.md](docs/release/RELEASE-1.0.0.md) | version 1.0 baselineの内容、品質証跡、本番release blocker |
+| [docs/release/](docs/release/README.md) | baselineとProduction承認を分離したrelease一覧 |
 | [docs/product/](docs/product/README.md) | `implemented／validated／planned／out-of-scope`を区別する製品capability catalog |
 | [spikes/](spikes/README.md) | 技術検証（PostgreSQL＋PostGIS の PoC ハーネス） |
 | [apps/web/](apps/web/) | React＋TypeScript＋PWAによるPhase 1 MVPフロントエンド |

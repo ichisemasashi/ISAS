@@ -7,6 +7,7 @@ import { PwaUpdateGate } from "./pwa-update";
 import "./styles.css";
 import { configureRecoveryPublicKey } from "./device-security";
 import { tr } from "./i18n";
+import { BuildStatusBanner } from "./BuildStatusBanner";
 
 const root = createRoot(document.getElementById("root")!);
 const search = new URLSearchParams(window.location.search);
@@ -17,11 +18,11 @@ async function renderApplication() {
     const { resetUtBrowserStorage, utGateway } = await import("./ut-fixture");
     if (search.get("reset") === "1") await resetUtBrowserStorage();
     await configureDeviceRecovery();
-    root.render(<StrictMode><UtModeBanner/><PwaUpdateGate/><AuthBoundary gateway={demoAuthGateway} api={utGateway} /></StrictMode>);
+    root.render(<StrictMode><BuildStatusBanner/><UtModeBanner/><PwaUpdateGate/><AuthBoundary gateway={demoAuthGateway} api={utGateway} /></StrictMode>);
     return;
   }
   await configureDeviceRecovery();
-  root.render(<StrictMode><PwaUpdateGate/><AuthBoundary gateway={createBffAuthGateway()} api={createMvpGateway()} /></StrictMode>);
+  root.render(<StrictMode><BuildStatusBanner/><PwaUpdateGate/><AuthBoundary gateway={createBffAuthGateway()} api={createMvpGateway()} /></StrictMode>);
 }
 
 async function configureDeviceRecovery() {

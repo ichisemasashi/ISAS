@@ -51,7 +51,7 @@ function evidence() {
       { actor: "manager", role: "release_manager", approved_at: "2026-08-16T04:10:00Z", evidence: "artifact://approval/final-manager" },
       { actor: "verifier", role: "independent_verifier", approved_at: "2026-08-16T04:11:00Z", evidence: "artifact://approval/final-verifier" },
     ],
-    tag: { name: "v1.1.0", target_commit: source },
+    tag: { name: "production/v1.1.0", target_commit: source },
   };
   return { release, build, delivery, bake, releaseBytes };
 }

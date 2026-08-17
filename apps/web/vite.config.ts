@@ -25,6 +25,14 @@ function maplibreWorkerAssets(): Plugin {
 }
 
 export default defineConfig({
+  define: {
+    __ISAS_BUILD_INFO__: JSON.stringify({
+      version: process.env.ISAS_BUILD_VERSION || "0.1.0",
+      commit: process.env.ISAS_BUILD_COMMIT || "development",
+      releaseClass: "baseline",
+      productionStatus: "BLOCKED",
+    }),
+  },
   plugins: [react(), maplibreWorkerAssets()],
   server: { host: "127.0.0.1", port: 4173, proxy: { "/api": { target: "http://127.0.0.1:3000", changeOrigin: false } } },
   preview: { host: "127.0.0.1", port: 4173 },

@@ -1,3 +1,11 @@
+.build-status-banner {
+  background: #5b1a1a;
+  color: #fff;
+  font: 700 0.78rem/1.4 system-ui, sans-serif;
+  padding: 0.35rem 0.75rem;
+  text-align: center;
+}
+
 :root {
   color-scheme: light;
   font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", system-ui, sans-serif;

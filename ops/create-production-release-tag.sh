@@ -5,7 +5,7 @@ set -eu
 evidence_file=$1
 tag_name=$(jq -er '.tag.name' "$evidence_file")
 target_commit=$(jq -er '.tag.target_commit' "$evidence_file")
-case "$tag_name" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "invalid production tag" >&2; exit 64 ;; esac
+case "$tag_name" in production/v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "invalid production tag namespace" >&2; exit 64 ;; esac
 case "$target_commit" in *[!0-9a-f]*|'') echo "invalid target commit" >&2; exit 64 ;; esac
 [ "${#target_commit}" -eq 40 ] || { echo "target commit must have 40 characters" >&2; exit 64; }
 git cat-file -e "$target_commit^{commit}"

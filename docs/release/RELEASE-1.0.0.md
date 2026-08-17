@@ -7,6 +7,8 @@
 | 位置付け | MVP実装・設計・品質証跡・運用文書のversion 1.0 baseline |
 | Production承認 | **未承認**。このtagだけでは本番配備不可 |
 
+Production承認tagは別namespaceの`production/v<version>`だけを使用する。このbaselineに対応するProduction tagは存在しない。
+
 ## 含まれるもの
 
 - 今日の作業、打刻、写真付き日誌、template／前回値、承認／差し戻し／訂正。
