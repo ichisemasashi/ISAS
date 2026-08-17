@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.isas.edge</string><key>UserName</key><string>_isas_edge</string>
+<key>ProgramArguments</key><array><string>/Library/Application Support/ISAS/Production/current/edge/bin/start</string><string>--config</string><string>/Library/Application Support/ISAS/Production/config/edge.conf</string></array>
+<key>WorkingDirectory</key><string>/Library/Application Support/ISAS/Production/data/edge</string>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ProcessType</key><string>Interactive</string><key>ThrottleInterval</key><integer>10</integer>
+<key>HardResourceLimits</key><dict><key>NumberOfFiles</key><integer>32768</integer><key>NumberOfProcesses</key><integer>512</integer></dict>
+<key>StandardOutPath</key><string>/Library/Logs/ISAS/Production/edge.stdout.log</string><key>StandardErrorPath</key><string>/Library/Logs/ISAS/Production/edge.stderr.log</string>
+</dict></plist>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.isas.identity</string><key>UserName</key><string>_isas_idp</string>
+<key>ProgramArguments</key><array><string>/Library/Application Support/ISAS/Production/current/identity/bin/start</string><string>--config</string><string>/Library/Application Support/ISAS/Production/config/identity.conf</string></array>
+<key>WorkingDirectory</key><string>/Library/Application Support/ISAS/Production/data/identity</string>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ProcessType</key><string>Interactive</string><key>ThrottleInterval</key><integer>10</integer>
+<key>HardResourceLimits</key><dict><key>NumberOfFiles</key><integer>16384</integer><key>NumberOfProcesses</key><integer>512</integer></dict>
+<key>StandardOutPath</key><string>/Library/Logs/ISAS/Production/identity.stdout.log</string><key>StandardErrorPath</key><string>/Library/Logs/ISAS/Production/identity.stderr.log</string>
+</dict></plist>

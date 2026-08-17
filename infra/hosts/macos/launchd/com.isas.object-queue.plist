@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.isas.object-queue</string><key>UserName</key><string>_isas_objq</string>
+<key>ProgramArguments</key><array><string>/Library/Application Support/ISAS/Production/current/object-queue/bin/start</string><string>--config</string><string>/Library/Application Support/ISAS/Production/config/object-queue.conf</string></array>
+<key>WorkingDirectory</key><string>/Library/Application Support/ISAS/Production/data/object-queue</string>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ProcessType</key><string>Interactive</string><key>ThrottleInterval</key><integer>10</integer>
+<key>HardResourceLimits</key><dict><key>NumberOfFiles</key><integer>32768</integer><key>NumberOfProcesses</key><integer>1024</integer></dict>
+<key>StandardOutPath</key><string>/Library/Logs/ISAS/Production/object-queue.stdout.log</string><key>StandardErrorPath</key><string>/Library/Logs/ISAS/Production/object-queue.stderr.log</string>
+</dict></plist>

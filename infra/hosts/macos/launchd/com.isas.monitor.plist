@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.isas.monitor</string><key>UserName</key><string>_isas_otel</string>
+<key>ProgramArguments</key><array><string>/usr/local/libexec/isas-production-monitor</string></array>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><false/><key>StartInterval</key><integer>30</integer><key>ProcessType</key><string>Background</string>
+<key>HardResourceLimits</key><dict><key>NumberOfFiles</key><integer>256</integer><key>NumberOfProcesses</key><integer>64</integer></dict>
+<key>StandardOutPath</key><string>/Library/Logs/ISAS/Production/monitor.stdout.log</string><key>StandardErrorPath</key><string>/Library/Logs/ISAS/Production/monitor.stderr.log</string>
+</dict></plist>

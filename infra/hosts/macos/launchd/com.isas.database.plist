@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.isas.database</string><key>UserName</key><string>_isas_db</string>
+<key>ProgramArguments</key><array><string>/Library/Application Support/ISAS/Production/current/database/bin/start</string><string>--config</string><string>/Library/Application Support/ISAS/Production/config/database.conf</string></array>
+<key>WorkingDirectory</key><string>/Library/Application Support/ISAS/Production/data/database</string>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ProcessType</key><string>Interactive</string><key>ThrottleInterval</key><integer>10</integer>
+<key>HardResourceLimits</key><dict><key>NumberOfFiles</key><integer>65536</integer><key>NumberOfProcesses</key><integer>2048</integer></dict>
+<key>StandardOutPath</key><string>/Library/Logs/ISAS/Production/database.stdout.log</string><key>StandardErrorPath</key><string>/Library/Logs/ISAS/Production/database.stderr.log</string>
+</dict></plist>

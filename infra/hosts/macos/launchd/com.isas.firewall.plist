@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.isas.firewall</string><key>UserName</key><string>root</string>
+<key>ProgramArguments</key><array><string>/sbin/pfctl</string><string>-a</string><string>com.isas.production</string><string>-f</string><string>/etc/pf.anchors/com.isas.production</string></array>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><false/><key>ProcessType</key><string>Background</string>
+<key>HardResourceLimits</key><dict><key>NumberOfFiles</key><integer>256</integer><key>NumberOfProcesses</key><integer>32</integer></dict>
+<key>StandardOutPath</key><string>/Library/Logs/ISAS/Production/firewall.stdout.log</string><key>StandardErrorPath</key><string>/Library/Logs/ISAS/Production/firewall.stderr.log</string>
+</dict></plist>

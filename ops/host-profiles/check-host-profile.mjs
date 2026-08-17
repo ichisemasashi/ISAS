@@ -28,7 +28,12 @@ export function validateDefinition(value) {
     for (const key of ["manifest", "jail_config", "firewall_config", "resource_config", "service_script", "install_script", "backup_script", "restore_script", "os_dispatch"])
       if (!text(value?.implementation?.[key])) errors.push(`FreeBSD implementation.${key} is required`);
   }
-  if (value?.host_os === "macos" && (value.service_manager !== "launchd" || !value.forbidden_runtime_dependencies?.includes("docker-desktop"))) errors.push("macOS Production must use launchd and forbid Docker Desktop dependency");
+  if (value?.host_os === "macos") {
+    if (value.service_manager !== "launchd" || !value.forbidden_runtime_dependencies?.includes("docker-desktop")) errors.push("macOS Production must use launchd and forbid Docker Desktop dependency");
+    for (const key of ["manifest", "firewall_config", "install_script", "preflight_script", "backup_script", "restore_script", "update_script", "monitor_script", "os_dispatch"])
+      if (!text(value?.implementation?.[key])) errors.push(`macOS implementation.${key} is required`);
+    if (!uniqueText(value?.implementation?.launchd_services) || value.implementation.launchd_services.length < BOUNDARIES.length) errors.push("macOS implementation.launchd_services must contain every service boundary");
+  }
   if (value?.host_os === "linux" && (value.service_manager !== "systemd" || !value.network_policy?.startsWith("nftables"))) errors.push("Linux Production must use systemd and default-deny nftables");
   return errors;
 }
@@ -61,6 +66,51 @@ export async function validateFreeBsdImplementation(definition) {
   return errors;
 }
 
+export async function validateMacOsImplementation(definition) {
+  if (definition?.host_os !== "macos") return [];
+  const errors = [];
+  const files = {};
+  const implementation = definition.implementation || {};
+  for (const key of ["manifest", "firewall_config", "install_script", "preflight_script", "backup_script", "restore_script", "update_script", "monitor_script", "os_dispatch"]) {
+    try { files[key] = await readFile(implementation[key], "utf8"); }
+    catch { errors.push(`macOS implementation file is missing: ${key}=${implementation[key]}`); }
+  }
+  const plists = [];
+  for (const file of implementation.launchd_services || []) {
+    try { plists.push({ file, body: await readFile(file, "utf8") }); }
+    catch { errors.push(`macOS launchd file is missing: ${file}`); }
+  }
+  if (errors.length) return errors;
+  let manifest;
+  try { manifest = JSON.parse(files.manifest); } catch { errors.push("macOS manifest must be valid JSON"); return errors; }
+  if (manifest.host_os !== "macos" || manifest.profile_id !== "macos-production") errors.push("macOS manifest identity must be macos-production");
+  if (!manifest.root?.includes("/ISAS/Production") || /local-integration/i.test(manifest.root)) errors.push("macOS manifest must use a Production-only root");
+  if (manifest.slo?.p0_availability !== 0.999 || manifest.slo?.p0_latency_ms !== 500) errors.push("macOS manifest must declare the common P0 SLO");
+  for (const boundary of BOUNDARIES) {
+    const service = manifest.services?.find((item) => item.name === boundary);
+    if (!service) { errors.push(`macOS manifest service is missing: ${boundary}`); continue; }
+    if (!service.user?.startsWith("_isas_") || service.user === "root") errors.push(`macOS service must use a non-root identity: ${boundary}`);
+    const plist = plists.find((item) => item.body.includes(`<string>${service.label}</string>`));
+    if (!plist) { errors.push(`macOS launchd service is missing: ${service.label}`); continue; }
+    for (const token of ["<key>UserName</key>", `<string>${service.user}</string>`, "<key>ProgramArguments</key>", "<key>RunAtLoad</key><true/>", "<key>KeepAlive</key>", "<key>HardResourceLimits</key>", "<key>StandardOutPath</key>", "/ISAS/Production/"])
+      if (!plist.body.includes(token)) errors.push(`macOS ${service.label} plist must contain ${token}`);
+  }
+  const required = [
+    ["firewall_config", ["ext_if", "block in log quick", "port 443", "port 8444", "127.0.0.1"]],
+    ["preflight_script", ["macOS host required", "ISAS_SUPPORTED_MACOS_MAJORS", "FileVault must be enabled", "pmset -g custom", "sleep", "local-integration data"]],
+    ["install_script", ["macOS host required", "dscl", "pkgutil --check-signature", "installer -pkg", "/Library/Application Support/ISAS/Production", "launchctl bootstrap", "pfctl"]],
+    ["backup_script", ["pg_basebackup", "WAL archive", "object inventory", "audit anchor", "key reference", "shasum -a 256"]],
+    ["restore_script", ["shasum -a 256 -c", "launchctl bootout", "identity/bin/import", "object-queue/bin/import", "ISAS_RESTORE_WAL_DIR"]],
+    ["update_script", ["peer failure-domain readiness", "/operations/drain", "isas-production-backup", "softwareupdate", "launchctl bootstrap", "/health/ready"]],
+    ["monitor_script", ["/health/live", "/health/ready", "0.500", "p0_availability_target=99.9"]],
+    ["os_dispatch", ["case \"$host_os\"", "Darwin)", "infra/hosts/macos/bin/install.sh", "FreeBSD)", "Linux)"]],
+  ];
+  for (const [key, tokens] of required) for (const token of tokens) if (!files[key].includes(token)) errors.push(`macOS ${key} must contain ${token}`);
+  const runtime = files.install_script + files.preflight_script + plists.map((item) => item.body).join("");
+  if (/docker\s+(?:compose|run|start)|docker\.app|\.docker\//i.test(runtime)) errors.push("macOS Production runtime must not invoke Docker Desktop");
+  return errors;
+}
+
 export function validateAcceptance(definition, value) {
   const errors = [];
   if (value?.schema_version !== 1 || value?.profile_id !== definition.profile_id || value?.host_os !== definition.host_os) errors.push("acceptance identity must match the host definition");
@@ -79,6 +129,7 @@ async function main(argv = process.argv.slice(2)) {
   const definition = JSON.parse(await readFile(argv[0], "utf8"));
   const errors = validateDefinition(definition);
   errors.push(...await validateFreeBsdImplementation(definition));
+  errors.push(...await validateMacOsImplementation(definition));
   if (argv[1]) errors.push(...validateAcceptance(definition, JSON.parse(await readFile(argv[1], "utf8"))));
   if (errors.length) { console.error(`host profile: BLOCKED (${errors.length})`); errors.forEach((error) => console.error(`- ${error}`)); return 1; }
   console.log(`host profile definition: PASS ${definition.profile_id}`); return 0;

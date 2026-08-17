@@ -13,6 +13,27 @@
   "resource_control": "launchd-limits",
   "forbidden_runtime_dependencies": ["docker-desktop", "interactive-user-session", "local-integration-volume"],
   "required_service_boundaries": ["edge", "app", "database", "identity", "object-queue", "telemetry"],
+  "implementation": {
+    "manifest": "infra/hosts/macos/manifest.json",
+    "firewall_config": "infra/hosts/macos/config/pf.isas.conf",
+    "launchd_services": [
+      "infra/hosts/macos/launchd/com.isas.database.plist",
+      "infra/hosts/macos/launchd/com.isas.identity.plist",
+      "infra/hosts/macos/launchd/com.isas.object-queue.plist",
+      "infra/hosts/macos/launchd/com.isas.app.plist",
+      "infra/hosts/macos/launchd/com.isas.edge.plist",
+      "infra/hosts/macos/launchd/com.isas.telemetry.plist",
+      "infra/hosts/macos/launchd/com.isas.firewall.plist",
+      "infra/hosts/macos/launchd/com.isas.monitor.plist"
+    ],
+    "install_script": "infra/hosts/macos/bin/install.sh",
+    "preflight_script": "infra/hosts/macos/bin/preflight.sh",
+    "backup_script": "infra/hosts/macos/bin/backup.sh",
+    "restore_script": "infra/hosts/macos/bin/restore.sh",
+    "update_script": "infra/hosts/macos/bin/rolling-update.sh",
+    "monitor_script": "infra/hosts/macos/bin/monitor.sh",
+    "os_dispatch": "ops/host-profiles/install-host.sh"
+  },
   "status": "BLOCKED",
-  "status_reason": "two failure domains, unattended lifecycle, and full restore are not accepted"
+  "status_reason": "native implementation exists; two failure domains, full restore, E2E, and SLO acceptance evidence are not recorded"
 }
