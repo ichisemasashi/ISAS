@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "currency": "JPY",
+  "pricedAt": "replace-me",
+  "profiles": [
+    { "hostOs": "macos", "fieldCount": 100, "oneTime": "replace-me", "monthly": "replace-me", "annual": "replace-me", "downtime": "replace-me", "updateCount36Months": "replace-me" },
+    { "hostOs": "linux", "fieldCount": 1000, "oneTime": "replace-me", "monthly": "replace-me", "annual": "replace-me", "downtime": "replace-me", "updateCount36Months": "replace-me" },
+    { "hostOs": "freebsd", "fieldCount": 3000, "oneTime": "replace-me", "monthly": "replace-me", "annual": "replace-me", "downtime": "replace-me", "updateCount36Months": "replace-me" }
+  ]
+}

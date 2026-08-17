@@ -184,6 +184,20 @@ host profileごとに次の4状態を機械可読にする。
 
 **処置結果（2026-08-17）**：配備別運用台帳へRACI、support時間・timezone、Sev 1〜4定義と初動時間、service owner／on-call／security／脆弱性／privacy窓口、version EOLと移行通知期間を必須化した。Production BFFは`ISAS_OPERATIONS_LEDGER`を起動時に読み、空欄、placeholder、不正窓口、配備ID不一致を拒否する。release manifestも同台帳のdigestと証跡URIを要求する。意図的に不完全なexampleが検査失敗し、完全fixtureが起動・release検査を通ることを自動testで確認した。
 
+## 6.1 未クローズ指摘の実装進捗（2026-08-17）
+
+状態を`対応済`へ変更していない項目には、次の成果物と外部gateが残る。成果物の追加だけを受入完了とみなさない。
+
+| ID | 今回追加した実装・仕様 | 状態を維持する理由 |
+|---|---|---|
+| KCOMP-H2〜H4 | `infra/hosts/{freebsd,macos,linux}/profile.json`、host別runbook、実機受入validator | 各OSの実host、2 failure domain、backup／restore、E2E証跡がない |
+| KCOMP-H5 | [capability catalog](../product/capability-catalog.json)、[初回農機connector受入契約](../product/初回農機connector受入契約.md) | 契約済み実connector、実sample、実機受入がない |
+| KCOMP-H6 | Production表示の強制BLOCKED、host別release manifest validator、専用tag namespace | 実UT、実CSV、DR、security、24時間監視を完了したhost別manifestがない |
+| KCOMP-M1 | [外部API最小受入契約](../product/外部API最小受入契約.md) | 実client、service identity、sandbox、rate／失効、support受入がない |
+| KCOMP-M5 | [host別reference benchmark仕様](host別reference-benchmark仕様.md) | 3 OS上の同一fixtureによる公開実測結果がない |
+| KCOMP-M7 | [3年TCO入力仕様](../operations/3年TCO入力仕様.md)と計算器 | 9組合せの実見積、人件費、停止costが未入力 |
+| KCOMP-M8 | [vendor exit full export仕様](../operations/vendor-exit-full-export仕様.md) | 完全export／import実装と空ISASへのrestore・削除証明がない |
+
 ## 7. ISASが維持すべき差別化候補
 
 敵対的レビューはKSASの機能表をそのまま模倣する提案ではない。次のISAS特性は、実証できれば明確な価値になる。
