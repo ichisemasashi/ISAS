@@ -79,6 +79,20 @@ Keycloakで利用者名とpasswordを送信し、次画面へ現在の6桁TOTP c
 
 この利用者とsynthetic tenantはlocal migrationでのみ作成される。本番の利用者・tenant・credentialを流用しない。
 
+### `migration:manage`管理者でログイン
+
+`migration:manage`は`group_admin`に付与される。`local-operator`は`organization_admin`なので、eMAFF圃場境界またはCSVの取込確認には別の`group_admin`を登録する。
+
+```bash
+ops/local/register-test-user.sh --username test-map-admin --display-name '圃場取込管理者' --role group_admin
+sed -n 's/^PASSWORD=//p' .local/secrets/test-users/test-map-admin.env
+sed -n 's/^TOTP_SECRET=//p' .local/secrets/test-users/test-map-admin.env
+```
+
+最後の2つの値は本人だけがTerminalで確認し、出力を保存・共有しない。TOTP認証器へ`test-map-admin@isas.localhost`、時間ベース、6桁、30秒、SHA-1として登録する。`local-operator`とは別のprivate browser windowで`https://isas.localhost:8443`を開き、`test-map-admin`または`test-map-admin@invalid.example`、password、現在の6桁TOTP codeの順でログインする。ローカル実証tenantの「圃場」に「eMAFF農地ナビから取込」が表示されることを確認する。表示されない場合は`group_admin`で登録したか、対象tenantとonline状態が正しいかを確認し、古いsessionをログアウトして再ログインする。
+
+これは`local-integration`専用のsynthetic accountである。staging／Productionでは二人承認済みの管理者登録workflowと配備先IdPを使用する。詳細と障害時の確認方法は[システム管理者運用ガイド](../../docs/manual/システム管理者運用ガイド.md)を参照する。
+
 ## テスト利用者の登録
 
 ### Web画面から登録する
