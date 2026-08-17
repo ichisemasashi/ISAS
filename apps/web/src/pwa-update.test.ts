@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { activateWaitingWorker } from "./pwa-update";
+import { activateWaitingWorker, registrationErrorMessage } from "./pwa-update";
 
 describe("PWA update safety gate", () => {
   test("blocks activation while any tenant has pending outbox records", async () => {
@@ -36,5 +36,10 @@ describe("PWA update safety gate", () => {
     );
     expect(result).toEqual({ status: "blocked-input", pending: 0 });
     expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("explains that a Service Worker TLS failure requires local CA trust", () => {
+    expect(registrationErrorMessage(new DOMException("An SSL certificate error occurred when fetching the script.", "SecurityError")))
+      .toContain("mkcert -install");
   });
 });

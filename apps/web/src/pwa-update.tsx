@@ -7,6 +7,13 @@ export type PwaUpdateResult =
   | { status: "blocked-input"; pending: 0 }
   | { status: "activating"; pending: 0 };
 
+export function registrationErrorMessage(error: unknown): string {
+  const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return /\b(?:ssl|certificate|cert)\b/i.test(detail)
+    ? tr("pwa_update.tls_error")
+    : tr("pwa_update.l66.4");
+}
+
 export async function activateWaitingWorker(
   registration: Pick<ServiceWorkerRegistration, "waiting">,
   storage: Pick<StorageGateway, "pendingCount">,
@@ -62,9 +69,9 @@ export function PwaUpdateGate({ storage = browserStorage }: { storage?: Pick<Sto
         if (!granted) setError(tr("pwa_update.l61.2"));
       }).catch(() => setError(tr("pwa_update.l62.3")));
     }
-    navigator.serviceWorker.register("/sw.js").then((value) => {
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((value) => {
       detach = observeWaitingWorker(value, setRegistration);
-    }).catch(() => setError(tr("pwa_update.l66.4")));
+    }).catch((registrationError: unknown) => setError(registrationErrorMessage(registrationError)));
     return () => detach();
   }, []);
 
