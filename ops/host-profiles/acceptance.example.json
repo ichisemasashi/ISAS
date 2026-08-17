@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "profile_id": "replace-me",
+  "host_os": "replace-me",
+  "source_commit": "replace-me",
+  "failure_domains": [],
+  "gates": {
+    "install": { "status": "BLOCKED", "evidence": "replace-me" },
+    "reboot": { "status": "BLOCKED", "evidence": "replace-me" },
+    "start_stop": { "status": "BLOCKED", "evidence": "replace-me" },
+    "rolling_restart": { "status": "BLOCKED", "evidence": "replace-me" },
+    "upgrade": { "status": "BLOCKED", "evidence": "replace-me" },
+    "rollback": { "status": "BLOCKED", "evidence": "replace-me" },
+    "backup": { "status": "BLOCKED", "evidence": "replace-me" },
+    "pitr_restore": { "status": "BLOCKED", "evidence": "replace-me" },
+    "full_host_restore": { "status": "BLOCKED", "evidence": "replace-me" },
+    "security": { "status": "BLOCKED", "evidence": "replace-me" },
+    "e2e": { "status": "BLOCKED", "evidence": "replace-me" },
+    "slo": { "status": "BLOCKED", "evidence": "replace-me" }
+  },
+  "approvals": []
+}

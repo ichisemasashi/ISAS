@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "profile_id": "freebsd-production",
+  "host_os": "freebsd",
+  "supported_versions": ["15.1-RELEASE", "14.4-RELEASE"],
+  "architectures": ["amd64", "arm64"],
+  "artifact_format": "freebsd-pkg-and-signed-application-bundle",
+  "service_manager": "rc.d",
+  "isolation": "jail-vnet",
+  "network_policy": "pf-default-deny",
+  "filesystem": "zfs",
+  "storage_encryption": "geli-or-hardware-equivalent",
+  "resource_control": "rctl",
+  "forbidden_runtime_dependencies": ["docker", "docker-compose", "linux-guest"],
+  "required_service_boundaries": ["edge", "app", "database", "identity", "object-queue", "telemetry"],
+  "status": "BLOCKED",
+  "status_reason": "FreeBSD Staging Jail E2E and restore evidence is not recorded"
+}

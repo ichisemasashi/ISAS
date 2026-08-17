@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "profile_id": "macos-production",
+  "host_os": "macos",
+  "supported_versions": ["current-security-supported", "previous-security-supported"],
+  "architectures": ["arm64", "amd64"],
+  "artifact_format": "signed-application-bundle",
+  "service_manager": "launchd",
+  "isolation": "native-service-identities",
+  "network_policy": "application-firewall-and-pf-default-deny",
+  "filesystem": "apfs",
+  "storage_encryption": "filevault",
+  "resource_control": "launchd-limits",
+  "forbidden_runtime_dependencies": ["docker-desktop", "interactive-user-session", "local-integration-volume"],
+  "required_service_boundaries": ["edge", "app", "database", "identity", "object-queue", "telemetry"],
+  "status": "BLOCKED",
+  "status_reason": "two failure domains, unattended lifecycle, and full restore are not accepted"
+}

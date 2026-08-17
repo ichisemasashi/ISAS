@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "profile_id": "linux-production",
+  "host_os": "linux",
+  "supported_versions": ["debian-13", "ubuntu-24.04-lts"],
+  "architectures": ["amd64", "arm64"],
+  "artifact_format": "signed-oci-or-native-package",
+  "service_manager": "systemd",
+  "isolation": "systemd-sandbox-or-rootless-oci",
+  "network_policy": "nftables-default-deny",
+  "filesystem": "ext4-or-zfs",
+  "storage_encryption": "luks2",
+  "resource_control": "cgroup-v2",
+  "forbidden_runtime_dependencies": ["mutable-latest-tag", "unconfined-root-container", "interactive-user-session"],
+  "required_service_boundaries": ["edge", "app", "database", "identity", "object-queue", "telemetry"],
+  "status": "BLOCKED",
+  "status_reason": "empty-host install, hardening, upgrade, and full restore are not accepted"
+}

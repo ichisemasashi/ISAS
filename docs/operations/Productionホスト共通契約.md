@@ -4,7 +4,7 @@
 |---|---|
 | 正本 | ユーザー確定要求：ISASはmacOS、Linux、FreeBSDのいずれでもProduction hostできること |
 | 適用範囲 | Production、Staging、release manifest、IaC／宣言構成、運用runbook |
-| 現在の状態 | 3 OSともProduction必須対象。個別profileの実装・受入は未完了のためProduction releaseは`BLOCKED` |
+| 現在の状態 | 3 OSともProduction必須対象。個別profile定義とrunbookは実装済みだが、実host受入は未完了のためProduction releaseは`BLOCKED` |
 
 ## 1. 優先順位
 
@@ -14,9 +14,9 @@
 
 | `host_os` | Production方式 | 現在の実装・受入状態 |
 |---|---|---|
-| `linux` | support対象distribution上の署名済みOCIまたはnative service、systemd等のservice manager、OS firewall、暗号化storage | 未完了（KCOMP-H4） |
-| `macos` | macOS用Production service構成、OS起動管理、sleep／update／disk／暗号化／backup対策。`local-integration`とdata・secret・profileを分離 | 未完了（KCOMP-H3） |
-| `freebsd` | FreeBSD Jail、native package／ports、rc.d、VNET／pf、ZFS、rctl | 未完了（KCOMP-H2） |
+| `linux` | support対象distribution上の署名済みOCIまたはnative service、systemd等のservice manager、OS firewall、暗号化storage | [定義](../../infra/hosts/linux/profile.json)・[runbook](Linux-Production-runbook.md)実装済み、実host受入は未完了（KCOMP-H4） |
+| `macos` | macOS用Production service構成、OS起動管理、sleep／update／disk／暗号化／backup対策。`local-integration`とdata・secret・profileを分離 | [定義](../../infra/hosts/macos/profile.json)・[runbook](macOS-Production-runbook.md)実装済み、実host受入は未完了（KCOMP-H3） |
+| `freebsd` | FreeBSD Jail、native package／ports、rc.d、VNET／pf、ZFS、rctl | [定義](../../infra/hosts/freebsd/profile.json)・[runbook](FreeBSD-Production-runbook.md)実装済み、実host受入は未完了（KCOMP-H2） |
 
 実装順は製品classの上下を意味しない。各profileはADR-0019〜0021の同じ業務、RLS、認証・失効、監査、SLO、backup／restore、release gateを満たす。
 
@@ -35,3 +35,5 @@ AWS東京region向けOpenTofu、Cognito／DynamoDB／S3／SQS／KMS adapter、AW
 - backup／PITR／全損restore、RPO／RTO、SLO、security、実端末、UT、承認者の証跡
 
 host別のStagingでinstall、reboot、upgrade、rollback、disk full、certificate更新、依存障害、backup、全損restore、共通E2Eを実行する。個別profileのrunbookと証跡がないOSをProduction対応済みと表示しない。
+
+定義は`node ops/host-profiles/check-host-profile.mjs <profile.json>`で検査する。実host受入時は同commandの第2引数へ、`ops/host-profiles/acceptance.example.json`を基にしたGit管理外の証跡台帳を渡す。全gate、異なる2つのfailure domain、二人承認が揃わない限り検査は失敗する。
