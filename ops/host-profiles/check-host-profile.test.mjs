@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validateAcceptance, validateDefinition } from "./check-host-profile.mjs";
 
-const base = { schema_version: 1, profile_id: "freebsd-production", host_os: "freebsd", supported_versions: ["15.1-RELEASE"], architectures: ["amd64"], artifact_format: "pkg", service_manager: "rc.d", isolation: "jail-vnet", network_policy: "pf-default-deny", filesystem: "zfs", storage_encryption: "geli", resource_control: "rctl", forbidden_runtime_dependencies: ["docker"], required_service_boundaries: ["edge", "app", "database", "identity", "object-queue", "telemetry"], status: "BLOCKED", status_reason: "external acceptance pending" };
+const implementation = { manifest: "manifest", jail_config: "jail", firewall_config: "pf", resource_config: "rctl", service_script: "rc", install_script: "install", backup_script: "backup", restore_script: "restore", os_dispatch: "dispatch" };
+const base = { schema_version: 1, profile_id: "freebsd-production", host_os: "freebsd", supported_versions: ["15.1-RELEASE"], architectures: ["amd64"], artifact_format: "pkg", service_manager: "rc.d", isolation: "jail-vnet", network_policy: "pf-default-deny", filesystem: "zfs", storage_encryption: "geli", resource_control: "rctl", forbidden_runtime_dependencies: ["docker"], required_service_boundaries: ["edge", "app", "database", "identity", "object-queue", "telemetry"], implementation, status: "BLOCKED", status_reason: "external acceptance pending" };
 
 test("accepts a FreeBSD Jail definition without Docker", () => assert.deepEqual(validateDefinition(base), []));
 test("rejects Docker as a FreeBSD runtime premise", () => assert.ok(validateDefinition({ ...base, forbidden_runtime_dependencies: ["linux-guest"] }).some((error) => error.includes("Docker"))));

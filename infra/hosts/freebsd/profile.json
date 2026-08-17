@@ -13,6 +13,17 @@
   "resource_control": "rctl",
   "forbidden_runtime_dependencies": ["docker", "docker-compose", "linux-guest"],
   "required_service_boundaries": ["edge", "app", "database", "identity", "object-queue", "telemetry"],
+  "implementation": {
+    "manifest": "infra/hosts/freebsd/manifest.json",
+    "jail_config": "infra/hosts/freebsd/config/jail.conf",
+    "firewall_config": "infra/hosts/freebsd/config/pf.isas.conf",
+    "resource_config": "infra/hosts/freebsd/config/rctl.conf",
+    "service_script": "infra/hosts/freebsd/rc.d/isas",
+    "install_script": "infra/hosts/freebsd/bin/install.sh",
+    "backup_script": "infra/hosts/freebsd/bin/backup.sh",
+    "restore_script": "infra/hosts/freebsd/bin/restore.sh",
+    "os_dispatch": "ops/host-profiles/install-host.sh"
+  },
   "status": "BLOCKED",
   "status_reason": "FreeBSD Staging Jail E2E and restore evidence is not recorded"
 }

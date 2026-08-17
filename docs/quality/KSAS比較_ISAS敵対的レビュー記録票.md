@@ -9,7 +9,7 @@
 | 訂正履歴 | 初版がAWS Production前提とMac非本番限定を所与として扱った判断を撤回。KCOMP-H1では要求仕様、ADR-0002／0017／0019〜0021／0023、IaC registry、runbook、管理者ガイド、roadmap、release manifest validatorを3 OS Production＋任意providerへ訂正した |
 | 手法 | 公開機能比較、正本間の矛盾探索、実装／試験／運用証跡の三点照合、障害・移行・保守・競争力の反対仮説 |
 | 総合判定 | **BLOCKED**。3 OS Production要求とprovider非依存契約はKCOMP-H1で是正したが、host別実装とProduction受入は未成立。KSAS代替製品としての同等性も未証明 |
-| 指摘集計 | High 6件、Medium 8件、Low 2件。現在はKCOMP-H1、M2、M3、M4、M6対応済、未処置11件 |
+| 指摘集計 | High 6件、Medium 8件、Low 2件。現在はKCOMP-H1、H2、M2、M3、M4、M6対応済、未処置10件 |
 
 ## 1. 結論
 
@@ -84,7 +84,7 @@ FreeBSD Production profileはDocker、Compose、OCI runtimeを要求せず、Fre
 | ID | 重要度 | 区分 | 攻撃仮説／不整合 | 要求処置 | 状態 |
 |---|---|---|---|---|---|
 | KCOMP-H1 | High | 要求逸脱 | ユーザー要求はmacOS／Linux／FreeBSD Production hostなのに、ISAS文書が無断でAWSをProduction正本、Macを非本番限定に変更している。このままでは正しい要求を満たさない構成が承認される | ユーザー要求を最上位の正本として要求仕様・ADR・IaC・runbook・roadmapを訂正し、AWS前提を必須条件から除去する | 対応済 |
-| KCOMP-H2 | High | FreeBSD | FreeBSDにはDocker Engineがなく、Docker Compose／OCI stackを実行基盤にするとdaemon・network・volume・health・image実行の入口で停止する | FreeBSD Jailを正規Production profileとして設計し、native package／ports、rc.d、VNET／pf、ZFS、rctlによるservice分離、runbook、backup／restore、E2Eを実装・受入する | 未処置 |
+| KCOMP-H2 | High | FreeBSD | FreeBSDにはDocker Engineがなく、Docker Compose／OCI stackを実行基盤にするとdaemon・network・volume・health・image実行の入口で停止する | FreeBSD Jailを正規Production profileとして設計し、native package／ports、rc.d、VNET／pf、ZFS、rctlによるservice分離、runbook、backup／restore、E2Eを実装・受入する | 対応済 |
 | KCOMP-H3 | High | macOS | 検証用Docker Desktop stackをそのまま本番化すると、user session、Desktop update、sleep、単一disk／電源、support対象外のproduction runtimeに業務を依存させる | macOS Productionを正規profileとして`local-integration`から分離し、runtime保守、auto-start、sleep、backup、監視、更新、復旧、共通SLOを受入する | 未処置 |
 | KCOMP-H4 | High | Linux | Linuxにproduction IaC、OS hardening、service manager、backup、upgrade、firewall、secret、support matrixがない | support対象distribution／version／archを定義し、empty hostからrestoreまで自動化・実証する。Linuxだけを上位hostとは扱わない | 未処置 |
 | KCOMP-H5 | High | 競争力 | 農機adapterがADRだけなのにKSAS相当のsmart agricultureを想起させると、自動日誌・収量・可変施肥を期待した導入が失敗する | capability catalogに`implemented／validated／planned／out-of-scope`を表示し、最初の実connectorを契約・sample・実機で受入する | 未処置 |
@@ -131,6 +131,8 @@ Docker公式のEngine install対象はLinux distribution群で、FreeBSDはsuppo
 4. PostgreSQL整合backup、WAL archive／PITR、暗号化したoff-host recovery set、および空のFreeBSD hostへの復旧手順。
 
 受入では、host reboot後の自動復旧、service停止検知、certificate／package更新、rollback、disk full、Jail停止・侵害時の横展開防止、backup／PITR／全損restoreを実行する。その上でRLS、認証・失効、監査chain、queue／object障害、性能SLOの共通E2Eを合格させる。単にログイン画面が出るだけでは不合格とする。
+
+**処置結果（2026-08-17）**：ADR-0019 v4に従い、FreeBSD native Jail実装を`infra/hosts/freebsd/`へ追加した。6 service境界、短い固定Jail名、VNET／epair、pf default deny、Jail別ZFS quota・secret dataset、rctl、rc.d起動／停止順、署名済みnative pkg導入、PostgreSQL base backupを含むrecovery set、WAL／object／監査／鍵参照のhash検証、restoreを実装した。`ops/host-profiles/install-host.sh`はFreeBSD／Darwin／Linuxを明示分岐し、静的validatorとshell構文検査を通過した。ユーザー指定により現段階の完了条件はOS分岐確認までとし、実FreeBSD上のE2Eは未実施であるため、`freebsd-production` profileおよびProduction releaseは引き続き`BLOCKED`とする。
 
 ### KCOMP-H3：Mac検証環境をProductionへ流用できない
 
@@ -190,7 +192,7 @@ host profileごとに次の4状態を機械可読にする。
 
 | ID | 今回追加した実装・仕様 | 状態を維持する理由 |
 |---|---|---|
-| KCOMP-H2〜H4 | 要求仕様§5.7、ADR-0019 v4、`infra/hosts/{freebsd,macos,linux}/profile.json`、host別runbook、実機受入validator | 各OSの実host、2 failure domain、backup／restore、E2E証跡がない |
+| KCOMP-H3〜H4 | 要求仕様§5.7、ADR-0019 v4、`infra/hosts/{macos,linux}/profile.json`、host別runbook、実機受入validator | macOS／Linuxの実host、2 failure domain、backup／restore、E2E証跡がない |
 | KCOMP-H5 | 要求仕様§5.8、ADR-0012 v2、[capability catalog](../product/capability-catalog.json)、[初回農機connector受入契約](../product/初回農機connector受入契約.md) | 契約済み実connector、実sample、実機受入がない |
 | KCOMP-H6 | 要求仕様§5.8、ADR-0021 v4、Production表示の強制BLOCKED、host別release manifest validator、専用tag namespace | 実UT、実CSV、DR、security、24時間監視を完了したhost別manifestがない |
 | KCOMP-M1 | 要求仕様F-94、ADR-0013 v2、[外部API最小受入契約](../product/外部API最小受入契約.md) | 実client、service identity、sandbox、rate／失効、support受入がない |

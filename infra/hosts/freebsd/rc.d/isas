@@ -1,0 +1,28 @@
+#!/bin/sh
+# PROVIDE: isas
+# REQUIRE: NETWORKING pf zfs jail
+# KEYWORD: shutdown
+. /etc/rc.subr
+
+name="isas"
+rcvar="isas_enable"
+start_cmd="isas_start"
+stop_cmd="isas_stop"
+status_cmd="isas_status"
+
+isas_start() {
+  for jail_name in isas_db isas_idp isas_objq isas_app isas_edge isas_otel; do
+    service jail start "$jail_name" || return 1
+  done
+}
+isas_stop() {
+  for jail_name in isas_edge isas_app isas_otel isas_objq isas_idp isas_db; do
+    service jail stop "$jail_name" || return 1
+  done
+}
+isas_status() {
+  jls -j isas_db >/dev/null && jls -j isas_app >/dev/null && jls -j isas_edge >/dev/null
+}
+
+load_rc_config "$name"
+run_rc_command "$1"

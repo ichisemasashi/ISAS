@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "profile_id": "freebsd-production",
+  "host_os": "freebsd",
+  "zpool": "zroot",
+  "jail_root": "/jails/isas",
+  "bridge": "bridge_isas",
+  "external_interface": "replace-at-deploy",
+  "services": [
+    { "name": "database", "jail": "isas_db", "address": "10.77.0.13", "dataset": "database", "quota": "500G", "memory": "8G", "artifact": "database.pkg" },
+    { "name": "identity", "jail": "isas_idp", "address": "10.77.0.14", "dataset": "identity", "quota": "40G", "memory": "2G", "artifact": "identity.pkg" },
+    { "name": "object-queue", "jail": "isas_objq", "address": "10.77.0.15", "dataset": "object-queue", "quota": "1T", "memory": "4G", "artifact": "object-queue.pkg" },
+    { "name": "app", "jail": "isas_app", "address": "10.77.0.12", "dataset": "app", "quota": "20G", "memory": "4G", "artifact": "app.pkg" },
+    { "name": "edge", "jail": "isas_edge", "address": "10.77.0.11", "dataset": "edge", "quota": "10G", "memory": "1G", "artifact": "edge.pkg" },
+    { "name": "telemetry", "jail": "isas_otel", "address": "10.77.0.16", "dataset": "telemetry", "quota": "200G", "memory": "4G", "artifact": "telemetry.pkg" }
+  ],
+  "start_order": ["database", "identity", "object-queue", "app", "edge", "telemetry"],
+  "stop_order": ["edge", "app", "telemetry", "object-queue", "identity", "database"]
+}

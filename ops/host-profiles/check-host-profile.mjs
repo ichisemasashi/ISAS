@@ -25,9 +25,39 @@ export function validateDefinition(value) {
   if (value?.host_os === "freebsd") {
     if (value.service_manager !== "rc.d" || value.isolation !== "jail-vnet" || value.filesystem !== "zfs" || value.resource_control !== "rctl") errors.push("FreeBSD must use rc.d, Jail/VNET, ZFS, and rctl");
     if (!value.forbidden_runtime_dependencies?.includes("docker")) errors.push("FreeBSD must explicitly forbid Docker runtime dependency");
+    for (const key of ["manifest", "jail_config", "firewall_config", "resource_config", "service_script", "install_script", "backup_script", "restore_script", "os_dispatch"])
+      if (!text(value?.implementation?.[key])) errors.push(`FreeBSD implementation.${key} is required`);
   }
   if (value?.host_os === "macos" && (value.service_manager !== "launchd" || !value.forbidden_runtime_dependencies?.includes("docker-desktop"))) errors.push("macOS Production must use launchd and forbid Docker Desktop dependency");
   if (value?.host_os === "linux" && (value.service_manager !== "systemd" || !value.network_policy?.startsWith("nftables"))) errors.push("Linux Production must use systemd and default-deny nftables");
+  return errors;
+}
+
+export async function validateFreeBsdImplementation(definition) {
+  if (definition?.host_os !== "freebsd") return [];
+  const errors = [];
+  const files = {};
+  for (const [key, file] of Object.entries(definition.implementation || {})) {
+    try { files[key] = await readFile(file, "utf8"); }
+    catch { errors.push(`FreeBSD implementation file is missing: ${key}=${file}`); }
+  }
+  if (errors.length) return errors;
+  let manifest;
+  try { manifest = JSON.parse(files.manifest); } catch { errors.push("FreeBSD manifest must be valid JSON"); return errors; }
+  if (manifest.host_os !== "freebsd") errors.push("FreeBSD manifest host_os must be freebsd");
+  for (const boundary of BOUNDARIES) if (!manifest.services?.some((item) => item.name === boundary)) errors.push(`FreeBSD manifest service is missing: ${boundary}`);
+  const required = [
+    ["jail_config", ["vnet.interface", "allow.mount = 0", "isas_db", "isas_idp", "isas_objq", "isas_app", "isas_edge", "isas_otel"]],
+    ["firewall_config", ["block in log quick", "rdr pass on $ext_if", "port 443", "<isas_edge>", "<isas_app>", "<isas_database>"]],
+    ["resource_config", ["jail:isas_db:memoryuse", "jail:isas_app:memoryuse", "jail:isas_otel:memoryuse"]],
+    ["service_script", ["# PROVIDE: isas", "service jail start", "service jail stop"]],
+    ["install_script", ["FreeBSD host required", "zfs create", "bsdinstall jail", "openssl dgst", "pkg -c", "jail-net.sh"]],
+    ["backup_script", ["pg_basebackup", "zfs send", "sha256"]],
+    ["restore_script", ["sha256 -c", "zfs receive"]],
+    ["os_dispatch", ["case \"$host_os\"", "FreeBSD)", "infra/hosts/freebsd/bin/install.sh", "Darwin)", "Linux)"]],
+  ];
+  for (const [key, tokens] of required) for (const token of tokens) if (!files[key].includes(token)) errors.push(`FreeBSD ${key} must contain ${token}`);
+  if (/docker|compose/i.test(files.install_script + files.jail_config + files.service_script)) errors.push("FreeBSD runtime implementation must not invoke Docker or Compose");
   return errors;
 }
 
@@ -48,6 +78,7 @@ async function main(argv = process.argv.slice(2)) {
   if (argv.length < 1 || argv.length > 2) return 2;
   const definition = JSON.parse(await readFile(argv[0], "utf8"));
   const errors = validateDefinition(definition);
+  errors.push(...await validateFreeBsdImplementation(definition));
   if (argv[1]) errors.push(...validateAcceptance(definition, JSON.parse(await readFile(argv[1], "utf8"))));
   if (errors.length) { console.error(`host profile: BLOCKED (${errors.length})`); errors.forEach((error) => console.error(`- ${error}`)); return 1; }
   console.log(`host profile definition: PASS ${definition.profile_id}`); return 0;

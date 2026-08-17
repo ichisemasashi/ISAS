@@ -15,4 +15,4 @@
 node ops/host-profiles/check-host-profile.mjs infra/hosts/freebsd/profile.json /secure/evidence/freebsd-acceptance.json
 ```
 
-0終了と二人承認が揃うまでKCOMP-H2は未処置、Productionは`BLOCKED`とする。
+実装の静的検査は、受入証跡を渡さずに同commandを実行して0終了することで確認する。実FreeBSD上の二人承認付き受入が揃うまで、profileとProductionは`BLOCKED`のままとする。
