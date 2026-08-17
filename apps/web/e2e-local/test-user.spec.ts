@@ -47,8 +47,12 @@ test("registered non-administrator signs in with email and password only and rec
   expect(result.instructions).toMatchObject({ status: 200, body: { instructions: [expect.objectContaining({ title: "実証圃場の生育確認" })] } });
 
   const tile = page.waitForResponse((response) => response.url().startsWith("https://cyberjapandata.gsi.go.jp/xyz/std/") && response.ok());
+  const mapWorker = page.waitForResponse((response) => new URL(response.url()).pathname === "/assets/maplibre-gl-worker.mjs" && response.ok());
+  const mapWorkerShared = page.waitForResponse((response) => new URL(response.url()).pathname === "/assets/maplibre-gl-shared.mjs" && response.ok());
   await page.locator(".side-nav").getByRole("button", { name: "圃場" }).click();
   await expect(page.locator(".field-map canvas")).toBeVisible();
   await expect(page.getByText("ローカル実証圃場").first()).toBeVisible();
   expect((await tile).headers()["content-type"]).toContain("image/png");
+  expect((await mapWorker).headers()["content-type"]).toContain("javascript");
+  expect((await mapWorkerShared).headers()["content-type"]).toContain("javascript");
 });

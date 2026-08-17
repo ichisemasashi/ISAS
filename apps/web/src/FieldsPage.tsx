@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LngLatBounds, Map, NavigationControl, type GeoJSONSource, type StyleSpecification } from "maplibre-gl";
+import { LngLatBounds, Map, NavigationControl, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { FieldCollection, FieldFeature, MvpGateway } from "./api";
 import type { AppAuthorization } from "./auth";
@@ -7,6 +7,8 @@ import type { StorageGateway } from "./storage";
 import type { OfflineMapPackRecord } from "./storage";
 import { downloadOfflineMapPack, registerOfflineMapProtocol } from "./offline-map";
 import { formatDate, formatNumber, tr } from "./i18n";
+
+setWorkerUrl("/assets/maplibre-gl-worker.mjs?v=6.3.0");
 
 const OFFLINE_STYLE: StyleSpecification = {
   version: 8,

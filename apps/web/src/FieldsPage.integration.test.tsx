@@ -17,7 +17,7 @@ vi.mock("maplibre-gl", () => {
     on(event: string, layerOrHandler: unknown, handler?: () => void) { if (event === "load") queueMicrotask(layerOrHandler as () => void); return handler; }
     remove() {}
   }
-  return { Map: MockMap, NavigationControl: class {}, LngLatBounds: class {}, addProtocol: vi.fn() };
+  return { Map: MockMap, NavigationControl: class {}, LngLatBounds: class {}, addProtocol: vi.fn(), setWorkerUrl: vi.fn() };
 });
 
 import { FieldsPage } from "./FieldsPage";
