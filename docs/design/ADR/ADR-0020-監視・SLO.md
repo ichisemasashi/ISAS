@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ） v2**（v1のSLI/SLOを維持し、ADR-0023のlocal OTel stack、profile label、PII canary、単一Mac測定の証跡限界を波及。波及レビュー残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0020.md)／[ADR-0023レビュー](レビュー記録_ADR-0023.md)） |
+| ステータス | **採用（クローズ） v3**（v2のSLI/SLOを維持。KCOMP-H1により3 OS共通のhost label／dashboard／alert契約と、AWS監視を任意adapterとする境界を追加。[レビュー記録](レビュー記録_ADR-0020.md)） |
 | 日付 | 2026-08-15 |
 | 由来 | 要求仕様5.1／5.2／5.3、ADR-0007の同期優先度、ADR-0008の法域内可観測性、ADR-0019のHA・RPO/RTO |
 | 関連 | [ADR-0002 配備モデル](ADR-0002-配備モデル-1DB-1国.md)、[ADR-0003 監査](ADR-0003-データライフサイクル-追記型-論理削除-版履歴-監査.md)、[ADR-0007 同期](ADR-0007-オフライン同期方式.md)、[ADR-0008 API](ADR-0008-API方式.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md)、[ADR-0019 インフラ・運用](ADR-0019-インフラ・運用.md)、[ADR-0021 テスト・リリース](ADR-0021-テスト・リリース方式.md)、[ADR-0023 Mac local integration](ADR-0023-Mac本番相当ローカル統合環境.md) |
@@ -37,7 +37,7 @@ collector/exporter障害で業務requestを失敗させない。process内buffer
 - availabilityは`good eligible transactions / all eligible transactions`。予定maintenanceも分母に含め、maintenanceを宣言してSLOを良く見せない。
 - latencyは成功したeligible transactionのserver受信からresponse完了まで。失敗を除外したlatencyだけで合格させず、同じscopeのavailabilityと対で判定する。
 - UI時間はnavigation/interaction開始から利用可能状態までをRUMと再現可能E2Eの両方で測る。APIだけ速くてもUI SLO合格にしない。
-- `deployment_id`、`jurisdiction`、`shard_id`、`service`、`route_template`、`priority_class`、`status_class`、`release_digest`だけを基本labelとする。URL実値、tenant/user/resource IDをlabelにしない。
+- `deployment_id`、`host_os`（`macos`／`linux`／`freebsd`）、`jurisdiction`、`shard_id`、`service`、`route_template`、`priority_class`、`status_class`、`release_digest`だけを基本labelとする。URL実値、tenant/user/resource IDをlabelにしない。
 
 ### 2.3 MVP SLO catalog
 
@@ -83,6 +83,8 @@ alertは`owner`、runbook URL、dashboard、法域、release digest、severity�
 5. **object/PWA**：upload失敗、孤立DB参照／object、署名URL失敗、cache/outbox保存失敗、Service Worker更新保留、同期前purge防止。
 6. **DR/deploy**：backup age/size/checksum、recovery set完全性、restore所要、migration version、instance digest、config drift、rollback回数。
 
+dashboard、alert、on-call通知はmacOS、Linux、FreeBSDの各Production profileで同じSLI名とseverityを使う。CloudWatch等のprovider固有実装はadapterに閉じ、AWSを使わないhostでも法域内OpenTelemetry互換signal、error budget、WAL／失効DLQ／監査chain／同期／object alertを欠落させない。
+
 weak referenceやobject孤立は日次照合し、壊れた関連を自動削除せず「関連切れ」として表示する。quarantineは件数だけでなく最古年齢を監視し、7日超をSev-2、30日超をrelease blockerにする。
 
 ### 2.6 保持・アクセス・品質
@@ -119,4 +121,4 @@ weak referenceやobject孤立は日次照合し、壊れた関連を自動削除
 - dashboardが緑でも`no_data`、cardinality超過、export失敗があれば合格にしない。
 - local dashboardの緑はsignal contractの成立を示すだけで、法域内保持、on-call通知、production trafficのerror budgetを証明しない。
 
-方式判断は完了した。採用製品、法域別保持、on-call名簿、通知provider、予測trafficは配備時入力とし、ADR-0021のrelease manifestに固定する。実ingress／実端末／実networkの測定が揃うまでは、本番releaseを承認しない。
+方式判断は完了した。`host_os`、採用製品、法域別保持、on-call名簿、通知provider、予測trafficは配備時入力とし、ADR-0021のrelease manifestに固定する。各hostの実ingress／実端末／実networkの測定が揃うまでは、そのhost profileの本番releaseを承認しない。

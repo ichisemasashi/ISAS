@@ -7,9 +7,14 @@ function readyManifest() {
   const sourceCommit = "1".repeat(40);
   const gate = () => ({ status: "pass", evidence: "artifact://evidence/123", source_commit: sourceCommit, collected_at: "2026-08-15T00:30:00Z" });
   return {
-    schema_version: 1,
+    schema_version: 2,
     release: { version: "1.0.1", source_commit: sourceCommit, created_at: "2026-08-15T00:00:00Z", status: "BLOCKED" },
-    deployment: { deployment_id: "jp-production", jurisdiction: "JP", shard_manifest_version: "42", shard_manifest_digest: `sha256:${"a".repeat(64)}` },
+    deployment: {
+      deployment_id: "jp-production", host_os: "linux", os_version: "debian-13", architecture: "amd64",
+      service_manager: "systemd", isolation: "oci", filesystem: "ext4", storage_encryption: "luks2",
+      provider: "self-hosted", region_or_site: "jp-site-a", failure_domains: ["host-a", "host-b"],
+      jurisdiction: "JP", shard_manifest_version: "42", shard_manifest_digest: `sha256:${"a".repeat(64)}`,
+    },
     artifacts: [{ name: "bff", digest: `sha256:${"b".repeat(64)}`, signature_verified: true, provenance_verified: true, sbom: "artifact://sbom/bff.spdx.json" }],
     gates: {
       unit_contract: gate(), postgres_rls: gate(), e2e_pwa: gate(), accessibility: gate(), security: gate(),

@@ -23,6 +23,7 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const EVIDENCE_URI = /^(?:artifact|https|s3):\/\/.+/;
+const PRODUCTION_HOSTS = new Set(["macos", "linux", "freebsd"]);
 
 function nonPlaceholder(value) {
   return typeof value === "string" && value.trim() !== "" && !/replace-me|example/i.test(value);
@@ -47,7 +48,7 @@ export function validateReleaseManifest(manifest, now = new Date()) {
   const add = (message) => errors.push(message);
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) return ["manifest must be an object"];
 
-  if (manifest.schema_version !== 1) add("schema_version must be 1");
+  if (manifest.schema_version !== 2) add("schema_version must be 2");
 
   const release = manifest.release ?? {};
   if (!VERSION.test(release.version ?? "")) add("release.version must be a semantic version without a v prefix");
@@ -56,8 +57,16 @@ export function validateReleaseManifest(manifest, now = new Date()) {
   if (release.status !== "READY") add("release.status must be READY");
 
   const deployment = manifest.deployment ?? {};
-  for (const key of ["deployment_id", "jurisdiction", "shard_manifest_version"]) {
+  for (const key of [
+    "deployment_id", "os_version", "architecture", "service_manager", "isolation",
+    "filesystem", "storage_encryption", "provider", "region_or_site", "jurisdiction",
+    "shard_manifest_version",
+  ]) {
     if (!nonPlaceholder(deployment[key])) add(`deployment.${key} is required and must not be a placeholder`);
+  }
+  if (!PRODUCTION_HOSTS.has(deployment.host_os)) add("deployment.host_os must be macos, linux, or freebsd");
+  if (!Array.isArray(deployment.failure_domains) || deployment.failure_domains.length < 2 || deployment.failure_domains.some((value) => !nonPlaceholder(value))) {
+    add("deployment.failure_domains must contain at least two named failure domains");
   }
   if (!DIGEST.test(deployment.shard_manifest_digest ?? "")) add("deployment.shard_manifest_digest must be sha256:<64 lowercase hex>");
 

@@ -9,9 +9,14 @@ function evidence() {
   const digest = `sha256:${"a".repeat(64)}`;
   const gate = () => ({ status: "pass", evidence: "artifact://gate/pass", source_commit: source, collected_at: "2026-08-15T00:30:00Z" });
   const release = {
-    schema_version: 1,
+    schema_version: 2,
     release: { version: "1.1.0", source_commit: source, created_at: "2026-08-15T00:00:00Z", status: "READY" },
-    deployment: { deployment_id: "jp-production", jurisdiction: "JP", shard_manifest_version: "42", shard_manifest_digest: `sha256:${"b".repeat(64)}` },
+    deployment: {
+      deployment_id: "jp-production", host_os: "macos", os_version: "15.6", architecture: "arm64",
+      service_manager: "launchd", isolation: "native-services", filesystem: "apfs", storage_encryption: "filevault",
+      provider: "self-hosted", region_or_site: "jp-site-a", failure_domains: ["mac-a", "mac-b"],
+      jurisdiction: "JP", shard_manifest_version: "42", shard_manifest_digest: `sha256:${"b".repeat(64)}`,
+    },
     artifacts: [{ name: "bff", digest, signature_verified: true, provenance_verified: true, sbom: "artifact://sbom/bff" }],
     gates: Object.fromEntries(["unit_contract", "postgres_rls", "e2e_pwa", "accessibility", "security", "supply_chain", "performance_slo", "device_encryption", "staging_acceptance", "data_migration", "user_acceptance", "operational_acceptance"].map((name) => [name, gate()])),
     quality: { no_data_count: 0, unresolved_high: 0, unresolved_medium: 0, error_budget_remaining_percent: 80, active_sev1: 0, active_sev2: 0 },

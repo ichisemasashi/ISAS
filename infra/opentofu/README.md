@@ -1,6 +1,8 @@
 # ISAS Japan Phase 1 OpenTofu
 
-このroot moduleは、日本初期配備profileをAWS東京regionへ実装する。stagingとproductionは別AWS account、別backend、別variable fileで適用し、同一stateへ混在させない。production候補profileは3 AZ、TLS ALB、ECS Fargate、RDS PostgreSQL Multi-AZ DB cluster、5系統PgBouncer、private attachment access point、quarantine／DLQ、静的shard manifest、用途別KMS、AWS Backupを採用する。
+このroot moduleは、任意の`provider=aws` adapterとして日本初期配備profileをAWS東京regionへ実装する。ISASのProduction必須hostはmacOS、Linux、FreeBSDであり、AWSは必須providerでも唯一のProduction正本でもない。adapterの位置付けと未実装hostは[Infrastructure adapter registry](../README.md)を正とする。
+
+AWS adapter内ではstagingとproductionを別AWS account、別backend、別variable fileで適用し、同一stateへ混在させない。production候補profileは3 AZ、TLS ALB、ECS Fargate、RDS PostgreSQL Multi-AZ DB cluster、5系統PgBouncer、private attachment access point、quarantine／DLQ、静的shard manifest、用途別KMS、AWS Backupを採用する。
 
 OpenTofu `1.12.5`とAWS provider `6.51.0`を固定している。upgradeはstagingの保存planと本書の受入を再実施する別changeとする。
 

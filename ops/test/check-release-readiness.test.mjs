@@ -9,7 +9,7 @@ function readyManifest() {
     source_commit: "1".repeat(40), collected_at: "2026-08-15T00:30:00Z",
   });
   return {
-    schema_version: 1,
+    schema_version: 2,
     release: {
       version: "1.0.0",
       source_commit: "1".repeat(40),
@@ -18,6 +18,16 @@ function readyManifest() {
     },
     deployment: {
       deployment_id: "jp-production",
+      host_os: "freebsd",
+      os_version: "15.0-RELEASE",
+      architecture: "amd64",
+      service_manager: "rc.d",
+      isolation: "jail-vnet",
+      filesystem: "zfs",
+      storage_encryption: "geli",
+      provider: "self-hosted",
+      region_or_site: "jp-yamagata-primary",
+      failure_domains: ["host-a", "host-b"],
       jurisdiction: "JP",
       shard_manifest_version: "42",
       shard_manifest_digest: `sha256:${"a".repeat(64)}`,
@@ -81,4 +91,13 @@ test("rejects duplicate approvers and unverifiable artifacts", () => {
   const errors = validateReleaseManifest(manifest, new Date("2026-08-15T02:00:00Z"));
   assert.ok(errors.some((error) => error.includes("signature_verified")));
   assert.ok(errors.some((error) => error.includes("distinct actors")));
+});
+
+test("rejects an unsupported or incomplete production host profile", () => {
+  const manifest = readyManifest();
+  manifest.deployment.host_os = "aws";
+  manifest.deployment.failure_domains = ["host-a"];
+  const errors = validateReleaseManifest(manifest, new Date("2026-08-15T02:00:00Z"));
+  assert.ok(errors.some((error) => error.includes("host_os")));
+  assert.ok(errors.some((error) => error.includes("failure_domains")));
 });

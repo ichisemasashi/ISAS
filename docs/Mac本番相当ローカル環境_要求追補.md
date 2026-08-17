@@ -15,7 +15,7 @@
 
 開発者または検証担当者のMac 1台で、デモfixtureではなく、production buildのWeb、Production BFFの業務core、PostgreSQL 16＋PostGIS、認証、永続session/context、object、queue、暗号化、監視、PWA offline同期を接続して反復検証できる環境を提供する。
 
-この環境は、実AWS stagingへ進む前に構成・migration・RLS・認証・同期・再起動耐性を早く検出するための**非本番integration環境**である。本番運用、法令適合、可用性、災害復旧またはAWS managed service自体の適合を証明するものではない。
+この環境は、選択したProduction host profileのStagingへ進む前に構成・migration・RLS・認証・同期・再起動耐性を早く検出するための**非本番integration環境**である。本番運用、法令適合、可用性、災害復旧またはhost／provider固有service自体の適合を証明するものではない。この非本番分類は`local-integration`だけに適用し、macOS Productionを禁止しない。
 
 ## 2. 正式用語
 
@@ -28,9 +28,9 @@
 | Local/PR環境 | unit／component test向けの高速環境。外部依存stub、単一process、揮発dataを許す。 |
 | Integration環境 | 複数componentの契約を実装相当の依存で検証する非本番環境。Mac本番相当ローカル統合環境はこの一種。 |
 | Staging環境 | production候補artifactを、本番相当のTLS、network、規模、provider service、運用手順で受入する共有環境。Mac環境で代替しない。 |
-| Production環境 | ADR-0019の本番HA profileとADR-0021のrelease gateを満たし、正式承認された法域デプロイ。 |
+| Production環境 | macOS、Linux、FreeBSDのいずれかでADR-0019の本番profileとADR-0021のrelease gateを満たし、正式承認された法域デプロイ。AWSは任意adapter。 |
 
-`Mac本番環境`、`ローカル本番`、`production on Mac`という表記は禁止する。運用画面、ログ、証跡には常に`local-integration`を含め、productionとの取り違えを防ぐ。
+`local-integration`を`Mac本番環境`、`ローカル本番`、`production on Mac`と呼ぶことは禁止する。運用画面、ログ、証跡には常に`local-integration`を含め、別途受入するmacOS Productionとの取り違えを防ぐ。
 
 ## 3. 要求範囲
 
@@ -49,7 +49,7 @@
 ### 3.2 非対象
 
 - 2 failure domain以上、standby、WAL archive／PITR、実RPO 15分／RTO 4時間、水平増減の実証
-- Cognito、DynamoDB、S3、SQS、KMS等のAWS managed serviceそのものの互換性・可用性・IAM境界の証明
+- Cognito、DynamoDB、S3、SQS、KMS等を含むhost／provider固有serviceそのものの互換性・可用性・権限境界の証明
 - HSM／Secure Enclave相当の鍵非抽出性、実端末紛失、iOS／Android実機、実provider障害の証明
 - 本番規模、実internet、実tile provider、実email／webhook、法域外部serviceを含む性能・契約試験
 - 実データ、個人データ、production credential、production endpointを用いる試験

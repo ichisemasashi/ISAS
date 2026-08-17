@@ -6,10 +6,10 @@
 | レビュー対象 | ISAS Web／BFF／DB migration／Compose／IaC、要求仕様、ADR、運用・利用者文書、release・品質証跡 |
 | 比較対象 | クボタ営農支援システムKSASの公式公開機能、FAQ、マニュアル、API開発者サイト、会員規約 |
 | ユーザー確定要求 | ISASはmacOS、LinuxまたはFreeBSDのいずれでもProduction hostできること。この要求を既存ADR・IaC・運用文書より上位の正本としてレビューする |
-| 訂正履歴 | 初版がAWS Production前提とMac非本番限定を所与として扱った判断を撤回。これらはユーザー要求ではなく、作成側が混入させた要求逸脱として再分類した |
+| 訂正履歴 | 初版がAWS Production前提とMac非本番限定を所与として扱った判断を撤回。KCOMP-H1では要求仕様、ADR-0002／0017／0019〜0021／0023、IaC registry、runbook、管理者ガイド、roadmap、release manifest validatorを3 OS Production＋任意providerへ訂正した |
 | 手法 | 公開機能比較、正本間の矛盾探索、実装／試験／運用証跡の三点照合、障害・移行・保守・競争力の反対仮説 |
-| 総合判定 | **BLOCKED**。ISASの業務coreには比較可能な実装があるが、確定要求である3系統のhost契約とProduction受入が未成立。KSAS代替製品としての同等性も未証明 |
-| 指摘集計 | High 6件、Medium 8件、Low 2件。レビュー時点では全件未処置 |
+| 総合判定 | **BLOCKED**。3 OS Production要求とprovider非依存契約はKCOMP-H1で是正したが、host別実装とProduction受入は未成立。KSAS代替製品としての同等性も未証明 |
+| 指摘集計 | High 6件、Medium 8件、Low 2件。現在はKCOMP-H1対応済、未処置15件 |
 
 ## 1. 結論
 
@@ -17,7 +17,7 @@ ISASは、圃場GIS、作業指示・日誌、農薬・在庫、CSV移行、offl
 
 1. **KSASは運営主体とサポート窓口を持つcloud serviceである。** ISASはself-hostを目指すsoftwareであり、availability、backup、security update、問い合わせ対応を導入組織が引き受ける。画面機能だけを並べても代替性は証明できない。
 2. **ISASの`v1.0.0`はProduction承認版ではない。** release note自身が`BLOCKED`と明記している。そこで列挙されたAWS固有の未完了事項は本来要求ではなく、macOS／Linux／FreeBSD Production対応から逸脱して作られた実装計画の残件である。実利用者UT、実端末、restore／DR、段階配備等のprovider非依存gateは引き続き必要である。
-3. **既存文書がユーザー要求から逸脱している。** ProductionをAWS前提、Mac Composeを非本番`local-integration`限定とした決定には、ユーザーの確定要求を変更する権限も根拠もない。Linux production runbookとFreeBSD runtimeがないことも含め、これは「新しい制約による変更」ではなく、ISAS文書・実装側の要求追跡欠陥である。
+3. **要求追跡欠陥はKCOMP-H1で訂正した。** Production必須hostをmacOS／Linux／FreeBSD、AWSを任意adapter、Mac Composeを非本番`local-integration`だけのprofileとして再定義し、要求仕様・ADR・IaC registry・runbook・roadmap・release manifestへ反映した。host別実装と受入の不足はKCOMP-H2〜H4として残る。
 
 macOS、Linux、FreeBSDはすべて**正規のProduction host対象**であり、品質上の上下関係を設けない。実装順としてLinuxを最初のreference profileにすることはできるが、それを理由にmacOSを非本番・縮退版、FreeBSDを任意対応へ格下げしてはならない。OS固有の構成と試験を分けながら、共通の業務要件、security、backup／restore、監査、release gateを3 OSすべてで満たす必要がある。
 
@@ -83,7 +83,7 @@ FreeBSD Production profileはDocker、Compose、OCI runtimeを要求せず、Fre
 
 | ID | 重要度 | 区分 | 攻撃仮説／不整合 | 要求処置 | 状態 |
 |---|---|---|---|---|---|
-| KCOMP-H1 | High | 要求逸脱 | ユーザー要求はmacOS／Linux／FreeBSD Production hostなのに、ISAS文書が無断でAWSをProduction正本、Macを非本番限定に変更している。このままでは正しい要求を満たさない構成が承認される | ユーザー要求を最上位の正本として要求仕様・ADR・IaC・runbook・roadmapを訂正し、AWS前提を必須条件から除去する | 未処置 |
+| KCOMP-H1 | High | 要求逸脱 | ユーザー要求はmacOS／Linux／FreeBSD Production hostなのに、ISAS文書が無断でAWSをProduction正本、Macを非本番限定に変更している。このままでは正しい要求を満たさない構成が承認される | ユーザー要求を最上位の正本として要求仕様・ADR・IaC・runbook・roadmapを訂正し、AWS前提を必須条件から除去する | 対応済 |
 | KCOMP-H2 | High | FreeBSD | FreeBSDにはDocker Engineがなく、Docker Compose／OCI stackを実行基盤にするとdaemon・network・volume・health・image実行の入口で停止する | FreeBSD Jailを正規Production profileとして設計し、native package／ports、rc.d、VNET／pf、ZFS、rctlによるservice分離、runbook、backup／restore、E2Eを実装・受入する | 未処置 |
 | KCOMP-H3 | High | macOS | 検証用Docker Desktop stackをそのまま本番化すると、user session、Desktop update、sleep、単一disk／電源、support対象外のproduction runtimeに業務を依存させる | macOS Productionを正規profileとして`local-integration`から分離し、runtime保守、auto-start、sleep、backup、監視、更新、復旧、共通SLOを受入する | 未処置 |
 | KCOMP-H4 | High | Linux | Linuxにproduction IaC、OS hardening、service manager、backup、upgrade、firewall、secret、support matrixがない | support対象distribution／version／archを定義し、empty hostからrestoreまで自動化・実証する。Linuxだけを上位hostとは扱わない | 未処置 |
@@ -116,6 +116,8 @@ FreeBSD Production profileはDocker、Compose、OCI runtimeを要求せず、Fre
 - 管理者guide：OSごとの起動・停止・復旧・更新・incident
 
 これらが揃う前に「3 OS対応」と記載すると、最も危険な部分だけが運用者の推測へ落ちる。
+
+**処置結果（2026-08-17）**：ユーザー確定要求を要求仕様§5.7と[Productionホスト共通契約](../operations/Productionホスト共通契約.md)へ固定し、ADR-0002／0017／0019〜0021／0023、`infra/README.md`、OpenTofu README、運用runbook、管理者ガイド、開発工程へ波及した。release manifest schema v2は`host_os`を`macos`／`linux`／`freebsd`に限定し、OS、architecture、service管理／isolation、filesystem／暗号化、provider／site、2 failure domain以上を必須検査する。AWS固有成果物は任意adapterとして残し、3 OS実装の代替にしない。
 
 ### KCOMP-H2：FreeBSDはJail前提のProduction profileが必要
 
@@ -182,7 +184,7 @@ host profileごとに次の4状態を機械可読にする。
 | 順序 | 工程 | 成果物 | 再レビュー合格条件 |
 |---:|---|---|---|
 | 1 | Product status是正 | capability catalog、README／UI／release表示 | plannedとvalidatedが混在せず、`v1.0.0`がProductionと誤認されない |
-| 2 | ユーザー要求への復帰 | 要求仕様改版、3 OS Production、単一node／HA class、host定義、RACI | macOS／Linux／FreeBSDを正規Production対象とし、AWS必須・Mac非本番限定の記述が0件 |
+| 2 | ユーザー要求への復帰 | **KCOMP-H1対応済**：要求仕様、共通host契約、ADR、IaC registry、runbook、roadmap、manifest validator | macOS／Linux／FreeBSDを正規Production対象とし、AWSを任意adapter、`local-integration`をMac非本番profileだけに限定 |
 | 3 | 配備ADR再編 | provider-neutral ADR、同格のhost profile、FreeBSD方式裁定 | AWS前提による要求逸脱0件。各OSの完了条件が同じ業務・security・復旧gateへ接続 |
 | 4 | Linux Production | IaC、install／upgrade／rollback／backup／restore／incident runbook | empty host→稼働、全損→restore、RLS／監査／SLO／securityを別担当者がPASS |
 | 5 | macOS Production | production専用profile、runtime保守、auto-start、sleep／update／disk／backup対策 | 共通SLO、再起動・全損復旧・外部監視をPASS。縮退はユーザー承認なしに許可しない |
@@ -247,4 +249,4 @@ host profileごとに次の4状態を機械可読にする。
 | FreeBSDでProduction hostする | **要求上は必須、実装は未承認**。FreeBSD Jailを前提とするProduction profileと共通運用gateの実装・受入が必要 |
 | `v1.0.0`をProduction releaseとして扱う | **不可**。baseline tagでありProductionは`BLOCKED` |
 
-High 6件を閉じるまで、実データの業務正本化、KSASからの切替、Production release、3 OS対応の対外表明を承認しない。
+未処置High 5件を閉じるまで、実データの業務正本化、KSASからの切替、Production release、3 OS対応の対外表明を承認しない。

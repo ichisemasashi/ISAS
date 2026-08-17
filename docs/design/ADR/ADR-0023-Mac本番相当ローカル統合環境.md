@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ） v2**（v1の構成判断を維持し、技術スパイクでPgBouncerをsecurity修正済み1.25.2へ更新。敵対的レビュー14件を全件処置し、残存 **High 0／Medium 0**。[レビュー記録](レビュー記録_ADR-0023.md)／[技術スパイク](../Mac本番相当ローカル環境_技術スパイク.md)） |
+| ステータス | **採用（クローズ） v3**（v2の`local-integration`構成判断を維持。KCOMP-H1により本ADRの非本番判定は当該profileだけに適用し、macOS Productionを禁止しないことを明記。[レビュー記録](レビュー記録_ADR-0023.md)） |
 | 日付 | 2026-08-16 |
 | 由来 | [要求仕様書 v1.1 §5.6](../../農業営農支援システム_要求仕様書.md#56-mac本番相当ローカル統合環境) |
 | 関連 | [ADR-0004 DB](ADR-0004-DB-PostgreSQL-PostGIS.md)、[ADR-0009 認証](ADR-0009-認証-セッション-MFA.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md)、[ADR-0019 インフラ・運用](ADR-0019-インフラ・運用.md)、[ADR-0020 監視・SLO](ADR-0020-監視・SLO.md)、[ADR-0021 テスト・リリース](ADR-0021-テスト・リリース方式.md)、[ADR-0022 配布ライセンス](ADR-0022-配布ライセンス.md)、[責任境界設計](../Mac本番相当ローカル環境_責任境界設計.md) |
@@ -14,6 +14,8 @@
 現在のMac向け手順はViteのfixtureと破棄可能なPostGIS spikeを個別に起動するもので、実BFF、OIDC、永続session/context、優先度別pool、object、失効queue、telemetry、PWA同期を一つの境界で検証できない。一方、Cognito、DynamoDB、S3、SQS、KMS、RDSをMacで忠実に再現しようとすると、重いemulator群とproductionとは異なるIAM／failure特性を「本番同等」と誤認する。
 
 このADRは、要求仕様v1.1の`local-integration`を、Mac 1台で反復可能かつ誤用しにくいIntegration環境として成立させる方式を決める。判断軸は次の順とする。
+
+本ADRはmacOS全体の配備classを決めない。`local-integration`が非本番であることと、macOSをProduction hostとして実装・受入する要求は両立する。macOS Productionは別profile、別data／secret、別起動管理、別backup／restore、別release manifestを持ち、ADR-0019〜0021の共通gateに従う。
 
 1. productionと共通化すべきdomain、認可、RLS、migration、同期protocolを迂回しない
 2. stop／restartで未同期dataを失わず、resetだけが明示的に消去する
@@ -135,7 +137,7 @@
 - KeycloakはCognitoのtoken claim、Hosted UI、risk、admin／logout挙動と完全同一ではない。
 - 単一Macの性能値はhost負荷に左右され、本番capacity planningへ使えない。
 
-これらは欠陥の黙認ではなく、`local-integration`の証拠範囲である。ADR-0021のStaging、S6/S9実機、S7実TLS／DB／network、AWS adapter、recovery set、手動security reviewを通るまでProduction releaseは`BLOCKED`のままとする。
+これらは欠陥の黙認ではなく、`local-integration`の証拠範囲である。ADR-0021の選択host用Staging、S6/S9実機、S7実TLS／DB／network、選択したprovider adapter、recovery set、手動security reviewを通るまでProduction releaseは`BLOCKED`のままとする。
 
 ## 5. 実装順序と完了条件
 

@@ -2,10 +2,13 @@
 
 本ディレクトリはADR-0019〜0021を実行する当番者向けrunbookである。設計の正本はADR、作業順と停止条件の正本は本runbook、実releaseの証跡は`ops/release-manifest.json`（未追跡の実ファイル）とartifact registryに置く。
 
+Production hostの最上位契約は[Productionホスト共通契約](Productionホスト共通契約.md)である。macOS、Linux、FreeBSDは同格の必須対象で、AWS文書は`provider=aws`を選んだ場合だけ使うadapter手順である。host別runbookが未完成のprofileは`BLOCKED`とし、AWS手順へ読み替えない。
+
 | 手順 | 用途 |
 |---|---|
-| [日本初期配備プロファイル](日本初期配備プロファイル.md) | 日本Phase 1の法域、AWS製品、認証、保持・削除、CI/CD、監視の決定値 |
-| [配備別サービス操作手順](配備別サービス操作手順.md) | 日本AWS初期配備の起動、終了、再起動、状態・log、backup、deploy commandと固定論理名。生成ARN等は署名済みmanifestから取得 |
+| [Productionホスト共通契約](Productionホスト共通契約.md) | 3 OS共通の優先順位、manifest、受入gate、provider境界 |
+| [日本初期配備プロファイル](日本初期配備プロファイル.md) | 任意のAWS adapterにおける日本Phase 1の法域、製品、認証、保持・削除、CI/CD、監視の決定値 |
+| [配備別サービス操作手順](配備別サービス操作手順.md) | 任意の日本AWS adapterの起動、終了、再起動、状態・log、backup、deploy commandと固定論理名。生成ARN等は署名済みmanifestから取得 |
 | [デプロイ・ロールバック手順](デプロイ・ロールバック手順.md) | release candidateの事前確認、migration、5%→25%→100%、停止／rollback |
 | [バックアップ・復旧手順](バックアップ・復旧手順.md) | recovery set作成、月次restore、四半期DR、RPO/RTO、実障害からの復旧 |
 | [障害対応手順](障害対応手順.md) | Sev判定、役割、write freeze、法域内連絡、事後処置 |

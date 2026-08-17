@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "release": {
     "version": "0.0.0-example",
     "source_commit": "0000000000000000000000000000000000000000",
@@ -8,6 +8,16 @@
   },
   "deployment": {
     "deployment_id": "replace-me",
+    "host_os": "replace-me",
+    "os_version": "replace-me",
+    "architecture": "replace-me",
+    "service_manager": "replace-me",
+    "isolation": "replace-me",
+    "filesystem": "replace-me",
+    "storage_encryption": "replace-me",
+    "provider": "replace-me",
+    "region_or_site": "replace-me",
+    "failure_domains": [],
     "jurisdiction": "replace-me",
     "shard_manifest_version": "replace-me",
     "shard_manifest_digest": "sha256:replace-me"
