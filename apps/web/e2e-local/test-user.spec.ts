@@ -51,6 +51,9 @@ test("registered non-administrator signs in with email and password only and rec
   const mapWorkerShared = page.waitForResponse((response) => new URL(response.url()).pathname === "/assets/maplibre-gl-shared.mjs" && response.ok());
   await page.locator(".side-nav").getByRole("button", { name: "圃場" }).click();
   await expect(page.locator(".field-map canvas")).toBeVisible();
+  await expect.poll(async () => (await page.locator(".field-map").boundingBox())?.height || 0).toBeGreaterThan(400);
+  await expect(page.locator(".field-map .maplibregl-ctrl-zoom-in")).toBeVisible();
+  await expect(page.locator('.field-map[data-fields-fitted="true"]')).toBeVisible();
   await expect(page.getByText("ローカル実証圃場").first()).toBeVisible();
   expect((await tile).headers()["content-type"]).toContain("image/png");
   expect((await mapWorker).headers()["content-type"]).toContain("javascript");

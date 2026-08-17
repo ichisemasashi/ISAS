@@ -55,6 +55,14 @@ function FieldMap({ fields, selectedId, onSelect, onBounds, backgroundStyle }: {
   const fitted = useRef(false);
   const fieldsRef = useRef(fields);
   fieldsRef.current = fields;
+  const fitAssignedFields = (value: Map, assignedFields: FieldFeature[]) => {
+    if (fitted.current) return;
+    const bounds = geometryBounds(assignedFields);
+    if (!bounds) return;
+    value.fitBounds(new LngLatBounds(bounds[0], bounds[1]), { padding: 48, maxZoom: 16, duration: 0 });
+    fitted.current = true;
+    container.current?.setAttribute("data-fields-fitted", "true");
+  };
 
   useEffect(() => {
     if (!container.current) return;
@@ -68,8 +76,7 @@ function FieldMap({ fields, selectedId, onSelect, onBounds, backgroundStyle }: {
       value.on("click", "assigned-fields-fill", (event) => { const id = event.features?.[0]?.properties?.id; if (typeof id === "string") onSelect(id); });
       value.on("mouseenter", "assigned-fields-fill", () => { value.getCanvas().style.cursor = "pointer"; });
       value.on("mouseleave", "assigned-fields-fill", () => { value.getCanvas().style.cursor = ""; });
-      const bounds = geometryBounds(fieldsRef.current);
-      if (bounds) { value.fitBounds(new LngLatBounds(bounds[0], bounds[1]), { padding: 48, maxZoom: 16, duration: 0 }); fitted.current = true; }
+      fitAssignedFields(value, fieldsRef.current);
     });
     value.on("moveend", () => {
       // MapLibre can emit moveend for its initial camera before assigned fields
@@ -84,12 +91,10 @@ function FieldMap({ fields, selectedId, onSelect, onBounds, backgroundStyle }: {
 
   useEffect(() => {
     const value = map.current;
-    if (!value?.isStyleLoaded()) return;
-    (value.getSource("assigned-fields") as GeoJSONSource | undefined)?.setData(asCollection(fields));
-    if (!fitted.current) {
-      const bounds = geometryBounds(fields);
-      if (bounds) { value.fitBounds(new LngLatBounds(bounds[0], bounds[1]), { padding: 48, maxZoom: 16, duration: 0 }); fitted.current = true; }
-    }
+    const source = value?.getSource("assigned-fields") as GeoJSONSource | undefined;
+    if (!value || !source) return;
+    source.setData(asCollection(fields));
+    fitAssignedFields(value, fields);
   }, [fields]);
 
   useEffect(() => {
