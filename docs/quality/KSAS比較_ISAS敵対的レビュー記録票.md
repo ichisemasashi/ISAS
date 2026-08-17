@@ -9,7 +9,7 @@
 | 訂正履歴 | 初版がAWS Production前提とMac非本番限定を所与として扱った判断を撤回。KCOMP-H1では要求仕様、ADR-0002／0017／0019〜0021／0023、IaC registry、runbook、管理者ガイド、roadmap、release manifest validatorを3 OS Production＋任意providerへ訂正した |
 | 手法 | 公開機能比較、正本間の矛盾探索、実装／試験／運用証跡の三点照合、障害・移行・保守・競争力の反対仮説 |
 | 総合判定 | **BLOCKED**。3 OS Production要求とprovider非依存契約はKCOMP-H1で是正したが、host別実装とProduction受入は未成立。KSAS代替製品としての同等性も未証明 |
-| 指摘集計 | High 6件、Medium 8件、Low 2件。現在はKCOMP-H1対応済、未処置15件 |
+| 指摘集計 | High 6件、Medium 8件、Low 2件。現在はKCOMP-H1、M2、M3対応済、未処置13件 |
 
 ## 1. 結論
 
@@ -90,8 +90,8 @@ FreeBSD Production profileはDocker、Compose、OCI runtimeを要求せず、Fre
 | KCOMP-H5 | High | 競争力 | 農機adapterがADRだけなのにKSAS相当のsmart agricultureを想起させると、自動日誌・収量・可変施肥を期待した導入が失敗する | capability catalogに`implemented／validated／planned／out-of-scope`を表示し、最初の実connectorを契約・sample・実機で受入する | 未処置 |
 | KCOMP-H6 | High | release | codeとlocal testのPASSを、販売中KSASと同じ「利用可能」と数えると、実data、実利用者、端末、restore、incident未検証のsystemへ業務正本を移す | host profileごとの実release manifest、実UT、実CSV rehearsal、restore／DR、security、24時間監視を完了するまでProduction表示を禁止する | 未処置 |
 | KCOMP-M1 | Medium | API | 外部API／WebhookはADR中心で、実client、公開endpoint、version運用、supportがない | 最小read-only APIから実client contract、sandbox、rate／revocation、運用窓口を受入する | 未処置 |
-| KCOMP-M2 | Medium | 分析 | 分析画面に実農機・sensor inputがなく、入力品質の低いdashboardが精密農業のように見える | source freshness、coverage、manual／machine比率を表示し、data sourceがない指標を非表示にする | 未処置 |
-| KCOMP-M3 | Medium | 機能scope | KSASのremote sensing、水管理、乾燥調製、診断supportまで無計画に追随するとcore品質が悪化する | 対象顧客jobと契約可能性で採否を決め、非対象を明示。core Production gateより前へ割り込ませない | 未処置 |
+| KCOMP-M2 | Medium | 分析 | 分析画面に実農機・sensor inputがなく、入力品質の低いdashboardが精密農業のように見える | source freshness、coverage、manual／machine比率を表示し、data sourceがない指標を非表示にする | 対応済 |
+| KCOMP-M3 | Medium | 機能scope | KSASのremote sensing、水管理、乾燥調製、診断supportまで無計画に追随するとcore品質が悪化する | 対象顧客jobと契約可能性で採否を決め、非対象を明示。core Production gateより前へ割り込ませない | 対応済 |
 | KCOMP-M4 | Medium | 文書 | `v1.0.0`というtagだけを見た利用者がProduction版と誤認できる | README最上部、UI build情報、release一覧へ`baseline／Production BLOCKED`を常時表示し、Production tag namespaceを分離する | 未処置 |
 | KCOMP-M5 | Medium | capacity | KSASの公開推奨3,000圃場と、ISASのsynthetic test／目標値は条件が違い、単純な件数比較ができない | 3,000圃場、複雑polygon、履歴、写真、同時利用者を含むhost別reference benchmarkを公開する | 未処置 |
 | KCOMP-M6 | Medium | 運用 | KSASはservice deskを公開するが、ISAS self-hostではon-call、保守契約、責任者、脆弱性窓口が導入先ごとに空欄になり得る | RACI、support時間、severity、response、EOL、security窓口を必須配備台帳にし、空欄なら稼働禁止する | 未処置 |
@@ -167,6 +167,14 @@ host profileごとに次の4状態を機械可読にする。
 - `production-authorized`：実manifest、独立承認、段階配備、監視を完了
 
 比較表、README、UI build情報、release noteは最も低い依存状態へ揃える。例えば農機連携は`designed`、Linux self-hostは未設計、Mac localは`validated for integration only`である。
+
+### KCOMP-M2：分析の入力品質表示
+
+**処置結果（2026-08-17）**：分析APIへsource freshnessに加えて作付単位のcoverageとmanual／machine入力件数・比率を追加した。画面はdata sourceのない作業実績、収量実績、資材実績を数値`0`や「欠測」の指標として描画せず、coverage欄に「データ源なし（指標は非表示）」と表示する。BFF API test、画面test、TypeScript build、i18n coverageで検証した。
+
+### KCOMP-M3：KSAS比較機能のscope
+
+**処置結果（2026-08-17）**：[KSAS比較機能scope決定](../product/KSAS比較機能scope決定.md)で対象顧客jobと採否基準を固定した。remote sensingと診断supportは契約・責任・実data受入が成立するまで`planned`、水管理と乾燥調製は現行roadmapの`out-of-scope`とし、いずれもcore Production gateより前へ割り込ませない。状態は機械可読な[capability catalog](../product/capability-catalog.json)で検査する。
 
 ## 7. ISASが維持すべき差別化候補
 

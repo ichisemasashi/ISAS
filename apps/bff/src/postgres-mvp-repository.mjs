@@ -388,8 +388,7 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
         client.query(`SELECT source, freshest_at, freshness_status, age_seconds
           FROM app.tenant_analytics_freshness ORDER BY source`),
       ]);
-      return { source: "operational_db", dwhRequired: false, generatedAt: new Date().toISOString(),
-        plans: plans.rows.map((row) => ({ cropPlanId: row.crop_plan_id, seasonId: row.season_id,
+      const planRows = plans.rows.map((row) => ({ cropPlanId: row.crop_plan_id, seasonId: row.season_id,
           fieldId: row.field_id, fieldGroupId: row.field_group_id, cropName: row.crop_name,
           varietyName: row.variety_name, plannedAreaM2: Number(row.planned_area_m2),
           targetYieldKg: row.target_yield_kg == null ? null : Number(row.target_yield_kg),
@@ -399,12 +398,30 @@ export function createPostgresMvpRepository({ uuid = randomUUID } = {}) {
           actualYieldKg: row.actual_yield_kg == null ? null : Number(row.actual_yield_kg),
           pesticideAmount: row.pesticide_amount == null ? null : Number(row.pesticide_amount),
           pesticideApplicationCount: Number(row.pesticide_application_count), freshestAt: iso(row.freshest_at),
-          missingMetrics: row.missing_metrics })),
-        materials: materials.rows.map((row) => ({ usageType: row.usage_type, chemicalId: row.chemical_id,
+          missingMetrics: row.missing_metrics }));
+      const materialRows = materials.rows.map((row) => ({ usageType: row.usage_type, chemicalId: row.chemical_id,
           materialName: row.material_name, quantity: Number(row.quantity), unit: row.unit,
-          eventCount: Number(row.event_count), freshestAt: iso(row.freshest_at) })),
+          eventCount: Number(row.event_count), freshestAt: iso(row.freshest_at) }));
+      const coverage = [
+        ["plan_progress", (plan) => plan.instructionCount > 0],
+        ["work_actual", (plan) => plan.actualWorkSeconds > 0],
+        ["yield_actual", (plan) => plan.actualYieldKg != null],
+        ["material_actual", (plan) => plan.pesticideAmount != null],
+      ].map(([metric, predicate]) => {
+        const coveredPlans = planRows.filter(predicate).length;
+        const freshestAt = planRows.filter(predicate).map((plan) => plan.freshestAt).filter(Boolean).sort().at(-1) || null;
+        return { metric, available: coveredPlans > 0, coveredPlans, totalPlans: planRows.length,
+          percent: planRows.length ? Math.round(coveredPlans * 1000 / planRows.length) / 10 : null,
+          inputMode: coveredPlans ? "manual" : "none", freshestAt };
+      });
+      const manualRecords = planRows.reduce((sum, plan) => sum + plan.instructionCount
+        + (plan.actualYieldKg == null ? 0 : 1) + plan.pesticideApplicationCount, 0)
+        + materialRows.reduce((sum, item) => sum + item.eventCount, 0);
+      return { source: "operational_db", dwhRequired: false, generatedAt: new Date().toISOString(),
+        plans: planRows, materials: materialRows,
         freshness: freshness.rows.map((row) => ({ source: row.source, freshestAt: iso(row.freshest_at),
-          status: row.freshness_status, ageSeconds: row.age_seconds == null ? null : Number(row.age_seconds) })) };
+          status: row.freshness_status, ageSeconds: row.age_seconds == null ? null : Number(row.age_seconds) })),
+        sourceProfile: { manualRecords, machineRecords: 0, manualPercent: manualRecords ? 100 : null, machinePercent: manualRecords ? 0 : null }, coverage };
     },
 
     async recordHarvestActual(client, _trusted, input) {

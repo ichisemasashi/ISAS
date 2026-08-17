@@ -174,6 +174,12 @@ describe("MVP REST and synchronization API", () => {
     assert.equal(body.plans[0].actualYieldKg, 580);
     assert.ok(body.plans[0].missingMetrics.includes("work_actual"));
     assert.equal(body.freshness[0].status, "fresh");
+    assert.deepEqual(body.sourceProfile, { manualRecords: 2, machineRecords: 0, manualPercent: 100, machinePercent: 0 });
+    assert.deepEqual(body.coverage.find((item) => item.metric === "yield_actual"), {
+      metric: "yield_actual", available: true, coveredPlans: 1, totalPlans: 1, percent: 100,
+      inputMode: "manual", freshestAt: body.coverage.find((item) => item.metric === "yield_actual").freshestAt,
+    });
+    assert.equal(body.coverage.find((item) => item.metric === "work_actual").available, false);
   });
 
   test("requires a recent MFA authentication for exports and adjudication", async () => {

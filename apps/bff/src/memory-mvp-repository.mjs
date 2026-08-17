@@ -145,8 +145,22 @@ export function createMemoryMvpRepository({ tasks = [], fields = [], workInstruc
         if (plan.actualWorkSeconds === 0) plan.missingMetrics.push("work_actual");
         if (plan.pesticideAmount == null) plan.missingMetrics.push("material_actual");
       }
+      const planRows = [...plans.values()];
+      const coverage = [
+        ["plan_progress", (plan) => plan.instructionCount > 0],
+        ["work_actual", (plan) => plan.actualWorkSeconds > 0],
+        ["yield_actual", (plan) => plan.actualYieldKg != null],
+        ["material_actual", (plan) => plan.pesticideAmount != null],
+      ].map(([metric, predicate]) => {
+        const coveredPlans = planRows.filter(predicate).length;
+        return { metric, available: coveredPlans > 0, coveredPlans, totalPlans: planRows.length,
+          percent: planRows.length ? Math.round(coveredPlans * 1000 / planRows.length) / 10 : null,
+          inputMode: coveredPlans ? "manual" : "none", freshestAt: coveredPlans ? new Date().toISOString() : null };
+      });
+      const manualRecords = planRows.reduce((sum, plan) => sum + plan.instructionCount + (plan.actualYieldKg == null ? 0 : 1), 0);
       return { source: "operational_db", dwhRequired: false, generatedAt: new Date().toISOString(),
-        plans: clone([...plans.values()]), materials: [], freshness: [{ source: "plan", status: plans.size ? "fresh" : "missing", freshestAt: new Date().toISOString() }] };
+        plans: clone(planRows), materials: [], freshness: [{ source: "plan", status: plans.size ? "fresh" : "missing", freshestAt: plans.size ? new Date().toISOString() : null }],
+        sourceProfile: { manualRecords, machineRecords: 0, manualPercent: manualRecords ? 100 : null, machinePercent: manualRecords ? 0 : null }, coverage };
     },
 
     async recordHarvestActual(_client, trusted, input) {

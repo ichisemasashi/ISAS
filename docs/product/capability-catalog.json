@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-08-17",
+  "productionAvailability": "BLOCKED",
+  "statusDefinitions": {
+    "implemented": "コードと自動testはあるが、対象hostの実運用受入は未完了",
+    "validated": "要求された実環境・実data・実利用者の受入証跡がある",
+    "planned": "計画または設計だけで、利用可能とは表示しない",
+    "out-of-scope": "現在の製品scopeには含めない"
+  },
+  "capabilities": [
+    { "id": "core-field-journal", "name": "圃場・作業指示・日誌・農薬・在庫", "status": "implemented", "phase": "Phase 1", "evidence": ["apps/web", "apps/bff"] },
+    { "id": "offline-sync", "name": "担当圃場のoffline利用と同期", "status": "implemented", "phase": "Phase 1", "evidence": ["apps/web/src/sync.ts", "apps/bff/src/sync-service.mjs"] },
+    { "id": "tenant-analytics", "name": "tenant内の計画対実績分析", "status": "implemented", "phase": "Phase 2", "evidence": ["apps/web/src/TenantAnalyticsPanel.tsx", "apps/bff/src/postgres-mvp-repository.mjs"] },
+    { "id": "machinery-file-import", "name": "ISOBUS／ISO-XML農機file取込", "status": "planned", "phase": "Phase 3", "evidence": ["docs/design/ADR/ADR-0012-農機連携アーキテクチャ.md"] },
+    { "id": "wagri-machinery-connector", "name": "農機OpenAPI（WAGRI）connector", "status": "planned", "phase": "Phase 3", "evidence": ["docs/product/初回農機connector受入契約.md"] },
+    { "id": "remote-sensing", "name": "remote sensing／生育map", "status": "planned", "phase": "Phase 3以降・契約成立後", "evidence": ["docs/product/KSAS比較機能scope決定.md"] },
+    { "id": "water-management", "name": "水管理", "status": "out-of-scope", "phase": "現行roadmap外", "evidence": ["docs/product/KSAS比較機能scope決定.md"] },
+    { "id": "drying-preparation", "name": "乾燥調製", "status": "out-of-scope", "phase": "現行roadmap外", "evidence": ["docs/product/KSAS比較機能scope決定.md"] },
+    { "id": "diagnostic-support", "name": "病害虫診断support", "status": "planned", "phase": "Phase 3以降・契約／安全責任確定後", "evidence": ["docs/product/KSAS比較機能scope決定.md"] }
+  ]
+}

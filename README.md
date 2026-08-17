@@ -22,6 +22,7 @@
 | [docs/operations/](docs/operations/README.md) | デプロイ、ロールバック、バックアップ、復旧、障害対応runbook |
 | [docs/manual/](docs/manual/README.md) | システム管理者向け／利用者向けの運用マニュアルと配布手順 |
 | [docs/release/RELEASE-1.0.0.md](docs/release/RELEASE-1.0.0.md) | version 1.0 baselineの内容、品質証跡、本番release blocker |
+| [docs/product/](docs/product/README.md) | `implemented／validated／planned／out-of-scope`を区別する製品capability catalog |
 | [spikes/](spikes/README.md) | 技術検証（PostgreSQL＋PostGIS の PoC ハーネス） |
 | [apps/web/](apps/web/) | React＋TypeScript＋PWAによるPhase 1 MVPフロントエンド |
 | [apps/bff/](apps/bff/) | ADR-0009のOIDC／Cookie session／context／AuthContext境界を担うBFFコア |
