@@ -23,6 +23,11 @@
     "shard_manifest_digest": "sha256:replace-me"
   },
   "artifacts": [],
+  "operations": {
+    "deployment_id": "replace-me",
+    "ledger_digest": "sha256:replace-me",
+    "ledger_evidence": "replace-me"
+  },
   "gates": {
     "unit_contract": { "status": "blocked", "evidence": "replace-me" },
     "postgres_rls": { "status": "blocked", "evidence": "replace-me" },

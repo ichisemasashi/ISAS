@@ -39,6 +39,7 @@ function readyManifest() {
       provenance_verified: true,
       sbom: "artifact://sbom/bff.spdx.json",
     }],
+    operations: { deployment_id: "jp-production", ledger_digest: `sha256:${"c".repeat(64)}`, ledger_evidence: "artifact://operations/jp-production.json" },
     gates: {
       unit_contract: gate(), postgres_rls: gate(), e2e_pwa: gate(), accessibility: gate(),
       security: gate(), supply_chain: gate(), performance_slo: gate(),

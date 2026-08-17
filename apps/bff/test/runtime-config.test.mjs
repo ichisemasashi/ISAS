@@ -37,16 +37,29 @@ test("production rejects shared endpoints, insecure transport, and the wrong P1 
     ISAS_DEPLOYMENT_ID: "isas-jp-prod-01",
     ISAS_DB_P0_SSLMODE: "disable",
   });
-  assert.throws(() => loadRuntimeConfig(production), /sslmode=require/);
+  const dependencies = { readDeploymentOperations: () => ({ value: {}, sha256: "a".repeat(64) }) };
+  assert.throws(() => loadRuntimeConfig(production, dependencies), /sslmode=require/);
 
   const secure = { ...production };
   for (const prefix of ["P0", "AUTH_P1", "P1", "P2", "OPS"]) secure[`ISAS_DB_${prefix}_SSLMODE`] = "require";
   secure.ISAS_DB_AUTH_P1_HOST = secure.ISAS_DB_P0_HOST;
-  assert.throws(() => loadRuntimeConfig(secure), /five distinct/);
+  assert.throws(() => loadRuntimeConfig(secure, dependencies), /five distinct/);
 
   secure.ISAS_DB_AUTH_P1_HOST = "pool-auth.internal";
   secure.ISAS_DB_P1_USER = "postgres";
-  assert.throws(() => loadRuntimeConfig(secure), /authenticate as app_user/);
+  assert.throws(() => loadRuntimeConfig(secure, dependencies), /authenticate as app_user/);
+});
+
+test("production refuses to start without a valid deployment operations ledger", () => {
+  const production = environment({ NODE_ENV: "production", ISAS_DEPLOYMENT_ID: "isas-jp-prod-01" });
+  for (const prefix of ["P0", "AUTH_P1", "P1", "P2", "OPS"]) production[`ISAS_DB_${prefix}_SSLMODE`] = "require";
+  assert.throws(() => loadRuntimeConfig(production), /ISAS_OPERATIONS_LEDGER is required/);
+  assert.throws(() => loadRuntimeConfig({ ...production, ISAS_OPERATIONS_LEDGER: "/secure/operations.json" }, {
+    readDeploymentOperations: () => { throw new Error("deployment operations ledger is invalid: contacts.security.owner is required"); },
+  }), /contacts.security.owner is required/);
+  assert.equal(loadRuntimeConfig({ ...production, ISAS_OPERATIONS_LEDGER: "/secure/operations.json" }, {
+    readDeploymentOperations: () => ({ value: {}, sha256: "b".repeat(64) }),
+  }).operationsLedgerSha256, "b".repeat(64));
 });
 
 test("HTTP header timeout cannot exceed the application request timeout", () => {

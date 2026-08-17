@@ -70,6 +70,11 @@ export function validateReleaseManifest(manifest, now = new Date()) {
   }
   if (!DIGEST.test(deployment.shard_manifest_digest ?? "")) add("deployment.shard_manifest_digest must be sha256:<64 lowercase hex>");
 
+  const operations = manifest.operations ?? {};
+  if (!DIGEST.test(operations.ledger_digest ?? "")) add("operations.ledger_digest must be sha256:<64 lowercase hex>");
+  if (!evidenceUri(operations.ledger_evidence)) add("operations.ledger_evidence must be an evidence URI");
+  if (operations.deployment_id !== deployment.deployment_id) add("operations.deployment_id must match deployment.deployment_id");
+
   if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length === 0) {
     add("artifacts must contain at least one promoted artifact");
   } else {

@@ -36,3 +36,14 @@ node ops/check-release-readiness.mjs ops/release-manifest.json
 ```
 
 exampleは意図的に`BLOCKED`であり、コピー直後の検査は失敗する。全gateと証跡を実値で埋め、検査が0終了しても、二人承認とrunbookの判断を代替しない。
+
+## 配備別の運用責任台帳
+
+Production BFFは`ISAS_OPERATIONS_LEDGER`で指定したJSONを起動時に検査する。`ops/deployment-operations.example.json`を安全な配備管理領域へコピーし、RACI、support時間、Sev 1〜4の定義・初動時間、service owner、on-call、security／脆弱性／privacy窓口、EOLを実値で埋める。
+
+```bash
+node ops/check-deployment-operations.mjs /secure/isas/operations.json isas-jp-prod-01
+export ISAS_OPERATIONS_LEDGER=/secure/isas/operations.json
+```
+
+placeholder、空欄、配備ID不一致があれば検査とBFF起動は失敗する。release manifestにも同じ台帳のSHA-256と証跡URIが必須である。repositoryのexampleを実台帳として使用しない。

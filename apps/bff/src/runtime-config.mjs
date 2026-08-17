@@ -1,3 +1,5 @@
+import { readDeploymentOperations } from "./deployment-operations.mjs";
+
 const INTEGER = /^[1-9][0-9]*$/;
 
 export const POOL_CLASSES = Object.freeze(["p0", "authP1", "p1", "p2", "ops"]);
@@ -80,7 +82,7 @@ function connection(env, prefix, deploymentProfile) {
   };
 }
 
-export function loadRuntimeConfig(env = process.env) {
+export function loadRuntimeConfig(env = process.env, dependencies = {}) {
   const environment = env.NODE_ENV || "production";
   if (!(["production", "test", "development"].includes(environment))) throw new Error("NODE_ENV is invalid");
   const deploymentProfile = env.ISAS_ENV_PROFILE || (environment === "production" ? "production" : environment);
@@ -103,6 +105,9 @@ export function loadRuntimeConfig(env = process.env) {
     const forbidden = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_WEB_IDENTITY_TOKEN_FILE", "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"];
     if (forbidden.some((name) => env[name])) throw new Error("AWS credential sources are forbidden in local-integration");
   }
+  const operations = deploymentProfile === "production"
+    ? (dependencies.readDeploymentOperations || readDeploymentOperations)(env.ISAS_OPERATIONS_LEDGER, env.ISAS_DEPLOYMENT_ID)
+    : null;
 
   const connectionTimeoutMs = integer(env, "ISAS_DB_CONNECTION_TIMEOUT_MS", 3000, { max: 30000 });
   const idleTimeoutMs = integer(env, "ISAS_DB_IDLE_TIMEOUT_MS", 30000, { max: 600000 });
@@ -149,6 +154,7 @@ export function loadRuntimeConfig(env = process.env) {
     drainTimeoutMs: integer(env, "ISAS_DRAIN_TIMEOUT_MS", 15000, { max: 120000 }),
     bodyLimitBytes: integer(env, "ISAS_BODY_LIMIT_BYTES", 11 * 1024 * 1024, { max: 16 * 1024 * 1024 }),
     readinessCacheMs: integer(env, "ISAS_READINESS_CACHE_MS", 1000, { max: 10000 }),
+    operationsLedgerSha256: operations?.sha256 || null,
     pools: Object.freeze(pools),
   });
 }

@@ -18,6 +18,7 @@ function evidence() {
       jurisdiction: "JP", shard_manifest_version: "42", shard_manifest_digest: `sha256:${"b".repeat(64)}`,
     },
     artifacts: [{ name: "bff", digest, signature_verified: true, provenance_verified: true, sbom: "artifact://sbom/bff" }],
+    operations: { deployment_id: "jp-production", ledger_digest: `sha256:${"c".repeat(64)}`, ledger_evidence: "artifact://operations/jp-production.json" },
     gates: Object.fromEntries(["unit_contract", "postgres_rls", "e2e_pwa", "accessibility", "security", "supply_chain", "performance_slo", "device_encryption", "staging_acceptance", "data_migration", "user_acceptance", "operational_acceptance"].map((name) => [name, gate()])),
     quality: { no_data_count: 0, unresolved_high: 0, unresolved_medium: 0, error_budget_remaining_percent: 80, active_sev1: 0, active_sev2: 0 },
     dr: { status: "pass", tested_at: "2026-08-01T00:00:00Z", rpo_minutes: 5, rto_minutes: 90, recovery_set_id: "rs-jp-20260801", evidence: "artifact://dr/pass" },

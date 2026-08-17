@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "deploymentId": "replace-me",
+  "support": { "timezone": "replace-me", "hours": "replace-me" },
+  "severity": {
+    "sev1": { "responseMinutes": 0, "definition": "replace-me" },
+    "sev2": { "responseMinutes": 0, "definition": "replace-me" },
+    "sev3": { "responseMinutes": 0, "definition": "replace-me" },
+    "sev4": { "responseMinutes": 0, "definition": "replace-me" }
+  },
+  "contacts": {
+    "serviceOwner": { "owner": "replace-me", "route": "replace-me" },
+    "onCall": { "owner": "replace-me", "route": "replace-me" },
+    "security": { "owner": "replace-me", "route": "replace-me" },
+    "vulnerability": { "owner": "replace-me", "route": "replace-me" },
+    "privacy": { "owner": "replace-me", "route": "replace-me" }
+  },
+  "raci": {
+    "serviceAccountable": "replace-me", "runtimeResponsible": "replace-me", "databaseResponsible": "replace-me",
+    "securityResponsible": "replace-me", "backupResponsible": "replace-me", "releaseResponsible": "replace-me"
+  },
+  "lifecycle": { "productVersion": "0.0.0", "supportEndsOn": "replace-me", "migrationNoticeDays": 0 }
+}

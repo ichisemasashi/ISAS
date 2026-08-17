@@ -9,7 +9,7 @@
 | 訂正履歴 | 初版がAWS Production前提とMac非本番限定を所与として扱った判断を撤回。KCOMP-H1では要求仕様、ADR-0002／0017／0019〜0021／0023、IaC registry、runbook、管理者ガイド、roadmap、release manifest validatorを3 OS Production＋任意providerへ訂正した |
 | 手法 | 公開機能比較、正本間の矛盾探索、実装／試験／運用証跡の三点照合、障害・移行・保守・競争力の反対仮説 |
 | 総合判定 | **BLOCKED**。3 OS Production要求とprovider非依存契約はKCOMP-H1で是正したが、host別実装とProduction受入は未成立。KSAS代替製品としての同等性も未証明 |
-| 指摘集計 | High 6件、Medium 8件、Low 2件。現在はKCOMP-H1、M2、M3、M4対応済、未処置12件 |
+| 指摘集計 | High 6件、Medium 8件、Low 2件。現在はKCOMP-H1、M2、M3、M4、M6対応済、未処置11件 |
 
 ## 1. 結論
 
@@ -94,7 +94,7 @@ FreeBSD Production profileはDocker、Compose、OCI runtimeを要求せず、Fre
 | KCOMP-M3 | Medium | 機能scope | KSASのremote sensing、水管理、乾燥調製、診断supportまで無計画に追随するとcore品質が悪化する | 対象顧客jobと契約可能性で採否を決め、非対象を明示。core Production gateより前へ割り込ませない | 対応済 |
 | KCOMP-M4 | Medium | 文書 | `v1.0.0`というtagだけを見た利用者がProduction版と誤認できる | README最上部、UI build情報、release一覧へ`baseline／Production BLOCKED`を常時表示し、Production tag namespaceを分離する | 対応済 |
 | KCOMP-M5 | Medium | capacity | KSASの公開推奨3,000圃場と、ISASのsynthetic test／目標値は条件が違い、単純な件数比較ができない | 3,000圃場、複雑polygon、履歴、写真、同時利用者を含むhost別reference benchmarkを公開する | 未処置 |
-| KCOMP-M6 | Medium | 運用 | KSASはservice deskを公開するが、ISAS self-hostではon-call、保守契約、責任者、脆弱性窓口が導入先ごとに空欄になり得る | RACI、support時間、severity、response、EOL、security窓口を必須配備台帳にし、空欄なら稼働禁止する | 未処置 |
+| KCOMP-M6 | Medium | 運用 | KSASはservice deskを公開するが、ISAS self-hostではon-call、保守契約、責任者、脆弱性窓口が導入先ごとに空欄になり得る | RACI、support時間、severity、response、EOL、security窓口を必須配備台帳にし、空欄なら稼働禁止する | 対応済 |
 | KCOMP-M7 | Medium | TCO | ISASを無料softwareとしてKSAS料金と比較すると、server、電力、backup、IdP、監視、保守者、incident工数を隠す | 100／1,000／3,000圃場の3年TCO、必要要員、停止cost、更新頻度をhost profile別に作る | 未処置 |
 | KCOMP-M8 | Medium | portability | CSV出力があっても、添付、監査、membership、作付、在庫event、位置同意を別ISASへ完全restoreできる保証がない | vendor exit用full export manifest、schema version、hash、添付、import検証、削除証明を実装する | 未処置 |
 | KCOMP-L1 | Low | 比較品質 | KSAS公開資料にないsecurity仕様を「未実装」と断定すると、不公正かつ根拠のない比較になる | `確認済み／非公開で比較不能／ISAS未受入`を分け、推測値をscoreへ入れない | 未処置 |
@@ -179,6 +179,10 @@ host profileごとに次の4状態を機械可読にする。
 ### KCOMP-M4：baselineとProduction表示の分離
 
 **処置結果（2026-08-17）**：README最上部、常時描画するWeb build banner、[release一覧](../release/README.md)に`baseline／Production BLOCKED`を固定表示した。既存`v1.0.0`はbaselineのままとし、Production承認tagを`production/v<version>` namespaceへ分離した。production release validatorとtag発行scriptは旧`v<version>`を拒否し、専用namespaceだけを受理することを自動testで確認した。
+
+### KCOMP-M6：配備別の運用責任
+
+**処置結果（2026-08-17）**：配備別運用台帳へRACI、support時間・timezone、Sev 1〜4定義と初動時間、service owner／on-call／security／脆弱性／privacy窓口、version EOLと移行通知期間を必須化した。Production BFFは`ISAS_OPERATIONS_LEDGER`を起動時に読み、空欄、placeholder、不正窓口、配備ID不一致を拒否する。release manifestも同台帳のdigestと証跡URIを要求する。意図的に不完全なexampleが検査失敗し、完全fixtureが起動・release検査を通ることを自動testで確認した。
 
 ## 7. ISASが維持すべき差別化候補
 

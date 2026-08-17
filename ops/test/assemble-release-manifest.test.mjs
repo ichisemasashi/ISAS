@@ -16,6 +16,7 @@ function readyManifest() {
       jurisdiction: "JP", shard_manifest_version: "42", shard_manifest_digest: `sha256:${"a".repeat(64)}`,
     },
     artifacts: [{ name: "bff", digest: `sha256:${"b".repeat(64)}`, signature_verified: true, provenance_verified: true, sbom: "artifact://sbom/bff.spdx.json" }],
+    operations: { deployment_id: "jp-production", ledger_digest: `sha256:${"c".repeat(64)}`, ledger_evidence: "artifact://operations/jp-production.json" },
     gates: {
       unit_contract: gate(), postgres_rls: gate(), e2e_pwa: gate(), accessibility: gate(), security: gate(),
       supply_chain: gate(), performance_slo: gate(), device_encryption: gate(), staging_acceptance: gate(),
