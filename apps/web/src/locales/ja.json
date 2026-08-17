@@ -615,5 +615,15 @@
   "securityadministrationpanel.local.first_login_admin": "この画面を閉じると仮パスワードは再表示できません。管理ロールのため、初回ログインでパスワード変更とTOTP登録が必要です。",
   "securityadministrationpanel.local.close": "表示を閉じる",
   "securityadministrationpanel.local.step_up_required": "利用者管理には直近10分以内のMFA再認証が必要です。",
-  "securityadministrationpanel.local.step_up": "MFAで再認証"
+  "securityadministrationpanel.local.step_up": "MFAで再認証",
+  "fieldspage.l200.31": "オンライン時だけeMAFF農地を取り込めます。",
+  "fieldspage.l201.32": "取込先の圃場グループを決められません。対象グループの既存圃場を選択してから再実行してください。",
+  "fieldspage.l202.33": "eMAFF農地の境界を検証して登録しています。",
+  "fieldspage.l203.34": "eMAFF農地を{0}件登録しました（登録済み{1}件）。地図を更新しました。",
+  "fieldspage.l203.35": "選択したeMAFF農地は{0}件すべて登録済みです。地図を更新しました。",
+  "fieldspage.l204.36": "このCSVには農地境界がありません。eMAFF農地ナビをズーム16以上にしてGeoJSONをダウンロードしてください。",
+  "fieldspage.l204.37": "ファイルが10 MiBを超えています。eMAFF農地ナビで表示範囲を狭めてください。",
+  "fieldspage.l204.38": "PolygonまたはMultiPolygonの農地境界が見つかりません。",
+  "fieldspage.l204.39": "eMAFF農地を登録できませんでした。ファイル形式、境界、管理者権限を確認してください。",
+  "fieldspage.l205.40": "eMAFF農地ナビから取込"
 }

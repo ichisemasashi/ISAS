@@ -615,5 +615,15 @@
   "securityadministrationpanel.local.first_login_admin": "اختبار Administrative role: change password and register TOTP at first login.",
   "securityadministrationpanel.local.close": "اختبار Close details",
   "securityadministrationpanel.local.step_up_required": "اختبار MFA reauthentication is required.",
-  "securityadministrationpanel.local.step_up": "اختبار Reauthenticate with MFA"
+  "securityadministrationpanel.local.step_up": "اختبار Reauthenticate with MFA",
+  "fieldspage.l200.31": "اختبار eMAFF import requires online access.",
+  "fieldspage.l201.32": "اختبار Select an existing field in the target field group.",
+  "fieldspage.l202.33": "اختبار Validating and registering eMAFF boundaries.",
+  "fieldspage.l203.34": "اختبار Registered {0}; {1} already existed.",
+  "fieldspage.l203.35": "اختبار All {0} eMAFF fields already existed.",
+  "fieldspage.l204.36": "اختبار CSV has no boundary; download GeoJSON at zoom 16 or higher.",
+  "fieldspage.l204.37": "اختبار File exceeds 10 MiB.",
+  "fieldspage.l204.38": "اختبار No polygon field boundary was found.",
+  "fieldspage.l204.39": "اختبار eMAFF import failed.",
+  "fieldspage.l205.40": "اختبار Import from eMAFF"
 }

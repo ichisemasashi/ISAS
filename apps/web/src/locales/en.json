@@ -615,5 +615,15 @@
   "securityadministrationpanel.local.first_login_admin": "The temporary password cannot be shown again after closing this panel. This administrative role must change it and register TOTP at first login.",
   "securityadministrationpanel.local.close": "Close details",
   "securityadministrationpanel.local.step_up_required": "User administration requires MFA reauthentication within the last 10 minutes.",
-  "securityadministrationpanel.local.step_up": "Reauthenticate with MFA"
+  "securityadministrationpanel.local.step_up": "Reauthenticate with MFA",
+  "fieldspage.l200.31": "eMAFF fields can be imported only while online.",
+  "fieldspage.l201.32": "The destination field group is ambiguous. Select an existing field in the target group and retry.",
+  "fieldspage.l202.33": "Validating and registering eMAFF field boundaries.",
+  "fieldspage.l203.34": "Registered {0} eMAFF fields ({1} already registered) and refreshed the map.",
+  "fieldspage.l203.35": "All {0} selected eMAFF fields were already registered. The map was refreshed.",
+  "fieldspage.l204.36": "This CSV has no field boundaries. In eMAFF Farm Navigator, zoom to level 16 or higher and download GeoJSON.",
+  "fieldspage.l204.37": "The file exceeds 10 MiB. Narrow the visible area in eMAFF Farm Navigator.",
+  "fieldspage.l204.38": "No Polygon or MultiPolygon field boundary was found.",
+  "fieldspage.l204.39": "Could not register the eMAFF fields. Check the file format, boundaries, and administrator permission.",
+  "fieldspage.l205.40": "Import from eMAFF Farm Navigator"
 }

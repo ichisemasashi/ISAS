@@ -7,6 +7,7 @@ import type { StorageGateway } from "./storage";
 import type { OfflineMapPackRecord } from "./storage";
 import { downloadOfflineMapPack, registerOfflineMapProtocol } from "./offline-map";
 import { formatDate, formatNumber, tr } from "./i18n";
+import { prepareEmaffImport } from "./emaff-import";
 
 setWorkerUrl("/assets/maplibre-gl-worker.mjs?v=6.3.0");
 
@@ -106,7 +107,7 @@ function FieldMap({ fields, selectedId, onSelect, onBounds, backgroundStyle }: {
   return <div ref={container} className="field-map" role="img" aria-label={tr("fieldspage.l91.2")} />;
 }
 
-export function FieldsPage({ api, storage, authorization, online }: { api: MvpGateway; storage: StorageGateway; authorization: AppAuthorization; online: boolean }) {
+export function FieldsPage({ api, storage, authorization, online, csrfToken, setNotice }: { api: MvpGateway; storage: StorageGateway; authorization: AppAuthorization; online: boolean; csrfToken: string; setNotice: (message: string) => void }) {
   const tenantId = authorization.context.tenantId;
   const [fields, setFields] = useState<FieldFeature[]>([]);
   const [mapFields, setMapFields] = useState<FieldFeature[]>([]);
@@ -116,7 +117,16 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
   const [offlinePack, setOfflinePack] = useState<OfflineMapPackRecord | null>(null);
   const [preferOffline, setPreferOffline] = useState(false);
   const [mapDownload, setMapDownload] = useState("");
+  const [emaffImport, setEmaffImport] = useState("");
+  const [mapRevision, setMapRevision] = useState(0);
   const boundsRequest = useRef<AbortController | null>(null);
+  const emaffInput = useRef<HTMLInputElement>(null);
+
+  const fetchAllFields = async (signal?: AbortSignal) => {
+    const all: FieldFeature[] = []; let cursor: string | null = null;
+    do { const page = await api.getFields(authorization.context.contextId, { limit: 500, cursor }, signal); all.push(...page.features); cursor = page.nextCursor; } while (cursor && !signal?.aborted);
+    return all;
+  };
 
   useEffect(() => {
     registerOfflineMapProtocol(storage);
@@ -130,8 +140,7 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
     const controller = new AbortController();
     storage.getFields(tenantId).then((cached) => { if (!controller.signal.aborted) { setFields(cached); setMapFields(cached); setStatus(cached.length ? tr("fieldspage.l116.4") : tr("fieldspage.l116.5")); } }).catch(() => setStatus(tr("fieldspage.l116.6")));
     if (online) (async () => {
-      const all: FieldFeature[] = []; let cursor: string | null = null;
-      do { const page = await api.getFields(authorization.context.contextId, { limit: 500, cursor }, controller.signal); all.push(...page.features); cursor = page.nextCursor; } while (cursor && !controller.signal.aborted);
+      const all = await fetchAllFields(controller.signal);
       await storage.saveFields(tenantId, all);
       if (!controller.signal.aborted) {
         boundsRequest.current?.abort();
@@ -143,10 +152,41 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
 
   const visible = useMemo(() => fields.filter((field) => !query || field.properties.name.includes(query) || field.properties.cropName?.includes(query)), [fields, query]);
   const selected = fields.find((field) => field.id === selectedId) || null;
+  const canImportEmaff = authorization.context.capabilities.includes("migration:manage");
   const useOffline = Boolean(offlinePack && (!online || preferOffline));
   const backgroundStyle: string | StyleSpecification = useOffline && offlinePack
     ? offlinePackStyle(offlinePack)
     : (online ? gsiStyle() : OFFLINE_STYLE);
+  const importEmaff = async (file?: File) => {
+    if (!file) return;
+    if (!online) { setEmaffImport(tr("fieldspage.l200.31")); return; }
+    const groups = [...new Set(fields.map((field) => field.properties.fieldGroupId))];
+    const fieldGroupId = selected?.properties.fieldGroupId || (groups.length === 1 ? groups[0] : null);
+    if (!fieldGroupId) { setEmaffImport(tr("fieldspage.l201.32")); return; }
+    setEmaffImport(tr("fieldspage.l202.33"));
+    try {
+      const prepared = prepareEmaffImport(await file.text(), fieldGroupId);
+      const mapping = { externalKey: "externalKey", name: "name", fieldGroupId: "fieldGroupId", geometryWkt: "geometryWkt", cropName: "cropName", timezone: "timezone" };
+      const staged = await api.createMigrationJob(authorization.context.contextId, csrfToken,
+        { dataset: "fields", sourceName: file.name, csv: prepared.csv, mapping }, `emaff-${Date.now().toString(36)}-${crypto.randomUUID()}`);
+      if (staged.errorCount || staged.status !== "validated") throw new TypeError("emaff_validation_failed");
+      const committed = await api.commitMigrationJob(authorization.context.contextId, csrfToken, staged.id, staged.version);
+      const all = await fetchAllFields();
+      boundsRequest.current?.abort();
+      await storage.saveFields(tenantId, all);
+      setFields(all); setMapFields(all); setMapRevision((value) => value + 1);
+      const message = committed.validCount
+        ? tr("fieldspage.l203.34", [committed.validCount, committed.duplicateCount])
+        : tr("fieldspage.l203.35", [committed.duplicateCount]);
+      setEmaffImport(message); setStatus(tr("fieldspage.l121.7", [all.length])); setNotice(message);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      const message = reason === "csv_polygon_missing" ? tr("fieldspage.l204.36")
+        : reason === "file_too_large" ? tr("fieldspage.l204.37")
+          : reason === "polygon_geometry_required" ? tr("fieldspage.l204.38") : tr("fieldspage.l204.39");
+      setEmaffImport(message); setNotice(message);
+    } finally { if (emaffInput.current) emaffInput.current.value = ""; }
+  };
   const cacheSelectedScope = async () => {
     if (!selected || !online) return;
     setMapDownload(tr("fieldspage.l134.9"));
@@ -179,11 +219,12 @@ export function FieldsPage({ api, storage, authorization, online }: { api: MvpGa
       </section>
       <div className="map-panel">
         <div className="map-cache-controls">
+          {canImportEmaff && <><button type="button" onClick={() => emaffInput.current?.click()} disabled={!online}>{tr("fieldspage.l205.40")}</button><input ref={emaffInput} hidden type="file" accept=".geojson,.json,.csv,application/geo+json,application/json,text/csv" onChange={(event) => void importEmaff(event.target.files?.[0])}/></>}
           <button type="button" onClick={cacheSelectedScope} disabled={!online || !selected}>{tr("fieldspage.l162.21")}</button>
           {offlinePack && <button type="button" onClick={() => setPreferOffline((value) => !value)}>{useOffline ? tr("fieldspage.l163.22") : tr("fieldspage.l163.23")}</button>}
-          <span role="status">{mapDownload}</span>
+          <span role="status">{emaffImport || mapDownload}</span>
         </div>
-        <FieldMap key={useOffline ? offlinePack?.packId : online ? "online" : "blank"} fields={mapFields} selectedId={selectedId} onSelect={setSelectedId} onBounds={searchBounds} backgroundStyle={backgroundStyle} />
+        <FieldMap key={`${useOffline ? offlinePack?.packId : online ? "online" : "blank"}:${mapRevision}`} fields={mapFields} selectedId={selectedId} onSelect={setSelectedId} onBounds={searchBounds} backgroundStyle={backgroundStyle} />
         <small className="map-attribution">{useOffline ? <><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>{tr("fieldspage.l167.24")} {offlinePack && formatDate(offlinePack.expiresAt, { dateStyle: "medium" })}</> : online ? <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noreferrer">{tr("fieldspage.l167.25")}</a> : tr("fieldspage.l167.26")}</small>
         {selected && <div className="field-detail"><strong>{selected.properties.name}</strong><span>{selected.properties.cropName || tr("fieldspage.l168.27")}{tr("fieldspage.l168.28")}{formatNumber(Math.round(selected.properties.areaSqm))}㎡</span></div>}
       </div>
