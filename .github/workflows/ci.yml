@@ -57,6 +57,7 @@ jobs:
         working-directory: infra/opentofu
       - run: node --test ops/test/*.test.mjs
       - run: node ops/check-ci-policy.mjs
+      - run: node ops/docker-retirement/check-docker-retirement.mjs
       - run: sh -n apps/bff/bin/run-migrations.sh ops/*.sh infra/opentofu/scripts/*.sh
 
   filesystem-security:

@@ -1,11 +1,11 @@
-# ADR-0023：Mac本番相当ローカル統合環境＝Compose＋local adapter
+# ADR-0023：Mac本番相当ローカル統合環境＝共通core＋local adapter
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ） v3**（v2の`local-integration`構成判断を維持。KCOMP-H1により本ADRの非本番判定は当該profileだけに適用し、macOS Productionを禁止しないことを明記。[レビュー記録](レビュー記録_ADR-0023.md)） |
+| ステータス | **採用（移行中） v4**（環境の責任境界と共通core／local adapterは維持。Compose orchestrationはADR-0024により撤去対象へ変更） |
 | 日付 | 2026-08-16 |
 | 由来 | [要求仕様書 v1.1 §5.6](../../農業営農支援システム_要求仕様書.md#56-mac本番相当ローカル統合環境) |
-| 関連 | [ADR-0004 DB](ADR-0004-DB-PostgreSQL-PostGIS.md)、[ADR-0009 認証](ADR-0009-認証-セッション-MFA.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md)、[ADR-0019 インフラ・運用](ADR-0019-インフラ・運用.md)、[ADR-0020 監視・SLO](ADR-0020-監視・SLO.md)、[ADR-0021 テスト・リリース](ADR-0021-テスト・リリース方式.md)、[ADR-0022 配布ライセンス](ADR-0022-配布ライセンス.md)、[責任境界設計](../Mac本番相当ローカル環境_責任境界設計.md) |
+| 関連 | [ADR-0004 DB](ADR-0004-DB-PostgreSQL-PostGIS.md)、[ADR-0009 認証](ADR-0009-認証-セッション-MFA.md)、[ADR-0017 セキュリティ](ADR-0017-セキュリティ基盤-端末暗号化-失効-脅威モデル.md)、[ADR-0019 インフラ・運用](ADR-0019-インフラ・運用.md)、[ADR-0020 監視・SLO](ADR-0020-監視・SLO.md)、[ADR-0021 テスト・リリース](ADR-0021-テスト・リリース方式.md)、[ADR-0022 配布ライセンス](ADR-0022-配布ライセンス.md)、[ADR-0024 Docker撤去](ADR-0024-Docker段階的撤去.md)、[責任境界設計](../Mac本番相当ローカル環境_責任境界設計.md) |
 
 ---
 
@@ -15,12 +15,14 @@
 
 このADRは、要求仕様v1.1の`local-integration`を、Mac 1台で反復可能かつ誤用しにくいIntegration環境として成立させる方式を決める。判断軸は次の順とする。
 
+> **v4優先規則**：以下に残るCompose／image／containerの記述は、v3までに実装された現行互換経路の記録であり、目標構成ではない。2026-08-21以後は[ADR-0024](ADR-0024-Docker段階的撤去.md)を優先し、同じ受入契約をnative process、launchd user agent、native package／application artifactで満たす。代替経路の合格前に現行経路を削除しない。
+
 本ADRはmacOS全体の配備classを決めない。`local-integration`が非本番であることと、macOSをProduction hostとして実装・受入する要求は両立する。macOS Productionは別profile、別data／secret、別起動管理、別backup／restore、別release manifestを持ち、ADR-0019〜0021の共通gateに従う。
 
 1. productionと共通化すべきdomain、認可、RLS、migration、同期protocolを迂回しない
 2. stop／restartで未同期dataを失わず、resetだけが明示的に消去する
 3. production credential／endpoint／実データへ構造的に到達させない
-4. Apple Siliconを主対象としつつ、OCI multi-archとCompose標準でhost runtimeを交換可能にする
+4. Apple Siliconを主対象としつつ、OS／architecture別native artifactと宣言的service定義でhost runtimeを交換可能にする
 5. AWS固有保証、HA、実RPO/RTOをlocalの合格へ混ぜない
 
 ## 2. 決定
@@ -28,7 +30,7 @@
 ### 2.1 Profileと共通化境界
 
 - 正式名称は**Mac本番相当ローカル統合環境**、profile IDは`local-integration`とする。ADR-0021のIntegration環境であり、Productionではない。
-- orchestrationは[Compose Specification](https://docs.docker.com/compose/compose-file/)に準拠する。標準入口はrepository rootの`compose.local.yml`と`ops/local/local-{up,status,stop,restart,reset}.sh`とする。
+- orchestrationの目標は非特権のlaunchd user agentとnative process監督とする。`compose.local.yml`と`ops/local/local-{up,status,stop,restart,reset}.sh`はADR-0024 R2完了までの互換入口であり、新機能の前提にしない。
 - Webはproduction modeでbuildした静的assets、BFFはproduction HTTP runtimeを使う。共通化するのはdomain、security middleware、AuthContext、DB transaction、同期、object port、queue port、telemetry portである。
 - `NODE_ENV=production`と配備profileを分離する。production mode buildであっても`ISAS_ENV_PROFILE=local-integration`なら非本番であり、local adapter以外へfallbackしない。
 - local固有差分は`apps/bff/runtime-adapters/local-integration.mjs`配下のadapter境界へ閉じる。route handlerやdomain serviceに`if local`を散在させず、AWS adapterと同じinterface contract testを通す。
@@ -38,7 +40,7 @@
 
 | 責務 | 採用 | 契約／理由 |
 |---|---|---|
-| Orchestration | Docker Compose v2互換 | Macで導入しやすく、宣言構成、health、volume、profile、resource limitをversion管理できる。Docker DesktopまたはColimaをhost adapterとして許す |
+| Orchestration | **目標：launchd user agent＋native process**／移行中：Docker Compose v2互換 | version管理したservice定義、health、data directory、profile、resource limitを維持する。Docker Desktop／ColimaはR2完了までの互換経路だけに限定する |
 | HTTPS ingress／Web | [Caddy 2](https://caddyserver.com/docs/automatic-https)＋mkcertでhost生成するlocal CA証明書 | `https://isas.localhost:8443`を既定とし、production-built Web配信と`/api` reverse proxyをsame-origin化。Caddy admin APIは公開しない |
 | BFF | Node.js 22系の既存Production BFF runtime＋local adapter | graceful shutdown、body／timeout／drain、health、AuthContext、RLS、同期domainをproductionと共有する |
 | OIDC／MFA | [Keycloak](https://www.keycloak.org/docs/latest/server_admin/)のサポート対象releaseをdigest固定 | authorization code＋PKCE、issuer／audience／nonce、TOTP／WebAuthn、step-up、logout／back-channel logoutを実IdPで検証する。realmはversion管理し、test userのsecret値は生成する |
@@ -98,8 +100,8 @@
 
 ### 2.8 Supply chain、platform、resource
 
-- Apple Silicon（arm64）をprimary gate、Intel（amd64）を互換gateとする。全採用imageは両architectureのdigestをlockへ記録し、architectureごとのdigest差を許容する。QEMU emulationだけをamd64合格にしない。
-- host prerequisiteはmacOS、Compose v2互換runtime、Node.js 22、mkcert、空きdisk／memoryである。最小versionと必要資源は実装spikeで測り、`ops/local/doctor`が不足を変更前に報告する。
+- Apple Silicon（arm64）をprimary gate、Intel（amd64）を互換gateとする。native artifactはarchitectureごとのdigestをlockへ記録し、QEMU emulationだけをamd64合格にしない。移行中imageのdigestは撤去完了まで維持する。
+- 目標host prerequisiteはmacOS、Node.js 22、native PostgreSQL／PostGIS／PgBouncer、mkcert、空きdisk／memoryである。Compose runtimeはR2完了までの互換前提に限る。
 - root権限、Docker socketのBFF mount、`privileged`、host network、host filesystem全体のmountを禁止する。read-only root filesystem、capability drop、non-root userを可能なserviceで強制する。
 - imageはdigest固定、source／license／SBOMを台帳化し、Critical／High vulnerability 0をacceptance条件にする。lock更新はbot任せに自動適用せず、起動・migration・E2E・security test後にreviewする。
 - local標準runtimeもADR-0022のlicense gate対象とする。Phase 1はpermissive licenseを原則とし、dashboardはPersesを採用する。AGPL／SSPL／source-available componentへ置換する場合は、利便性だけで変更せずADR-0022が要求する個別ADRと法務確認を先に行う。
@@ -130,7 +132,7 @@
 
 **残留するもの**
 
-- 全serviceは同じMac、Docker daemon、filesystem、電源にあり、HA、failure domain、RPO/RTOを証明しない。
+- 全serviceは同じMac、filesystem、電源にあり、native化後もHA、failure domain、RPO/RTOを証明しない。旧Compose経路はDocker daemonも共有する。
 - PostgreSQL session／queueはDynamoDB／SQSの条件書込、IAM、partition、visibility、managed failureを再現しない。
 - filesystem objectはS3署名、bucket policy、versioning、inventory、lifecycleを再現しない。
 - local key fileはextract可能であり、KMS/HSMのpolicy、non-exportability、監査、recoveryを証明しない。
@@ -141,7 +143,7 @@
 
 ## 5. 実装順序と完了条件
 
-1. `component-lock`、doctor、secret bootstrap、Caddy／Keycloak／PG／5 PgBouncer／telemetryのCompose foundation
+1. 【v3実装済み】`component-lock`、doctor、secret bootstrap、Caddy／Keycloak／PG／5 PgBouncer／telemetryのCompose foundation
 2. production全migration＋`local_support` migration、owner／role／RLS／trigger／pool検証
 3. BFF local adapter（session/context、queue/DLQ、object、envelope key）と起動時guard
 4. OIDC＋PKCE、MFA／step-up、logout／失効consumer、synthetic realm／tenant seed
@@ -149,5 +151,6 @@
 6. restart、dependency停止、duplicate／out-of-order、pool飽和、disk不足、key rotation、orphan回収のfault test
 7. OTel dashboard、PII canary、E2E、security／license／SBOM、arm64／amd64 gate
 8. 管理者runbookの`up/status/stop/restart/reset/backup/diagnose`と自動acceptance
+9. 【v4移行】ADR-0024 R2として同じ操作契約をlaunchd user agentとnative依存へ移し、受入合格後にCompose foundationを削除する
 
 完了は、要求仕様§5.6.2の全項目が`verify-local-environment`で測定済みPASSとなり、High／Medium security finding 0、文書の未設定0、通常stop後のsession／queue／object／outbox保持、resetの明示拒否、production非到達を実証した時とする。ADRの採用は実装完了を意味しない。

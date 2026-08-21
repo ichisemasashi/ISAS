@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "decision": "ADR-0024",
+  "target": "zero-active-docker-dependencies",
+  "phases": [
+    { "id": "R0", "status": "completed", "exit": "policy, inventory, and unregistered-dependency guard are committed" },
+    { "id": "R1", "status": "pending", "exit": "native PostgreSQL 16 and PostGIS spike runner replaces Compose" },
+    { "id": "R2", "status": "pending", "exit": "native macOS local-integration replaces Compose" },
+    { "id": "R3", "status": "pending", "exit": "native CI and release artifacts replace image builds" },
+    { "id": "R4", "status": "pending", "exit": "AWS ECS adapter is replaced or retired" },
+    { "id": "R5", "status": "pending", "exit": "tracked Docker artifacts and active commands are zero" }
+  ],
+  "dependencies": [
+    {
+      "id": "DR-LOCAL",
+      "category": "local-integration",
+      "status": "active-transitional",
+      "retirement_phase": "R2",
+      "owner": "ISAS product maintainer",
+      "paths": ["compose.local.yml", "infra/local", "ops/local"],
+      "replacement": "versioned native artifacts controlled by non-privileged macOS launchd user agents",
+      "completion_checks": ["same-origin HTTPS", "OIDC and MFA", "five PgBouncer pools", "persistent stop and restart", "explicit destructive reset", "full local acceptance"]
+    },
+    {
+      "id": "DR-SPIKES",
+      "category": "database-spikes",
+      "status": "active-transitional",
+      "retirement_phase": "R1",
+      "owner": "database maintainer",
+      "paths": ["spikes/docker-compose.yml", "spikes/run.sh"],
+      "replacement": "native PostgreSQL 16 and PostGIS runner with isolated temporary data directories",
+      "completion_checks": ["S1", "S2", "S5", "S7", "S8", "migration and rollback"]
+    },
+    {
+      "id": "DR-CI",
+      "category": "ci-release",
+      "status": "active-transitional",
+      "retirement_phase": "R3",
+      "owner": "release maintainer",
+      "paths": [".dockerignore", "apps/bff/Dockerfile", "apps/bff/Dockerfile.migration", "apps/web/Dockerfile", "infra/images/migration/Dockerfile", "infra/local/database/Dockerfile.migration", ".github/workflows/ci.yml", ".github/workflows/build-release.yml", ".github/dependabot.yml", "ops/check-ci-policy.mjs", "ops/test/check-ci-policy.test.mjs"],
+      "replacement": "OS and architecture specific native artifacts with filesystem scan, SBOM, provenance, and signatures",
+      "completion_checks": ["build once", "three host profiles", "Critical and High zero", "signed SBOM", "staging promotion without rebuild"]
+    },
+    {
+      "id": "DR-AWS",
+      "category": "optional-provider-adapter",
+      "status": "active-transitional",
+      "retirement_phase": "R4",
+      "owner": "infrastructure maintainer",
+      "paths": ["infra/opentofu"],
+      "replacement": "optional AWS Linux VM adapter using the same signed native systemd artifacts, or approved adapter retirement",
+      "completion_checks": ["provider remains optional", "staging acceptance", "two failure domains", "rollback", "full restore"]
+    }
+  ]
+}

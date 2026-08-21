@@ -2,6 +2,8 @@
 
 これはproduction releaseではなく、production buildと共通業務coreをMac 1台で結合する`local-integration` profileである。既定入口はloopback限定の`https://isas.localhost:8443`で、AWS credentialとproduction dataを使用しない。
 
+> **移行中の互換runbook**：このCompose経路はADR-0024 R2でnative process＋launchd user agentへ置換する。新しい機能や配備をDocker前提で追加しない。native代替が同じ受入suiteをPASSするまでは既存dataと回帰経路を保全し、置換後に本runbookをnative操作へ改版する。
+
 ## 初回準備
 
 Docker Desktopを起動し、Node.js 22以上とmkcertを用意する。

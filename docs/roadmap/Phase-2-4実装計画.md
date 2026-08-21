@@ -20,7 +20,7 @@
 
 | 順序 | increment | 主成果物 | 完了条件 |
 |---|---|---|---|
-| 2.0 | 契約とmodel拡張 | **実装済み**：作期／作付計画、作業依存、resource、在庫policy、分析event、位置同意。正式`0013` migration、review付きbackfill、安全rollback、owner／FORCE RLS／監査、cycle／scope検査を追加。PG14代替検証とBFF N/N-1はPASS | Docker復旧後に同じ検証をPG16で再実行してgateを閉じ、Phase 2.1へ進む |
+| 2.0 | 契約とmodel拡張 | **実装済み**：作期／作付計画、作業依存、resource、在庫policy、分析event、位置同意。正式`0013` migration、review付きbackfill、安全rollback、owner／FORCE RLS／監査、cycle／scope検査を追加。PG14代替検証とBFF N/N-1はPASS | ADR-0024 R1のnative runnerで同じ検証をPG16へ再実行してgateを閉じ、Phase 2.1へ進む |
 | 2.1 | 作付計画＋高度ガント | **実装済み**：作物・品種・面積・収量目標の投影、日offset template展開、依存、追記進捗、resource競合、PCガント／mobile同一正本 | 機能testをPASS。PG16 migration再実行と500 task p95をrelease gateで確認 |
 | 2.2 | 在庫高度化＋traceability | **実装済み**：発注点、入荷予定、二人確認棚卸し、lot／期限／評価、追記型履歴、JGAP在庫CSV | 機能・RLS・migration testをPASS。並行棚卸し負荷、単位換算profile、実JGAP帳票照合をrelease gateで確認 |
 | 2.3 | 位置ログと作業実績 | **実装済み**：多言語同意、打刻連動ON/OFF、休憩停止、短期track、在圃時間、本人表示、期限削除、閲覧監査 | PG16、実機の失効／紛失、同意拒否・休憩中0点をrelease gateで確認 |
@@ -57,7 +57,7 @@ Phase 4は「翻訳を追加すれば世界対応」と扱わず、**1対象国�
 ## 3. 各phase共通release gate
 
 1. 要求ID→ADR→model→migration→API→UI→test→runbook→証跡のtraceabilityが100%。
-2. High／Mediumの設計・security・privacy指摘0件。dependency／container／SBOM／署名／provenance PASS。
+2. High／Mediumの設計・security・privacy指摘0件。dependency／native artifact／filesystem／package scan／SBOM／署名／provenance PASS。
 3. PostgreSQL 16＋PostGISでowner、FORCE RLS、trigger、audit chain、backfill、rollback、tenant越境を実証。
 4. offline更新／未同期保持、権限失効、PWA更新、iOS／Android実機、WCAG 2.1 AAをPASS。
 5. P0 99.9%／500ms、画面別SLO、優先度pool飽和、RPO 15分／RTO 4時間を維持。
