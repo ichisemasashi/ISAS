@@ -13,4 +13,10 @@ node ops/product/check-capability-catalog.mjs docs/product/capability-catalog.js
 | `planned` | 設計・計画のみ。利用可能と案内しない |
 | `out-of-scope` | 現在の製品scope外 |
 
-農機・remote sensing等は名前だけから利用可能と推測せず、JSONの状態と証跡を確認する。
+対外提供scopeは「圃場・指示・日誌・農薬・在庫のself-host／offline core」に限定する。農機・remote sensing等は名前だけから利用可能と推測せず、JSONの状態と証跡を確認する。「KSAS同等」「KSAS全面代替」は現在表示禁止である。
+
+この比較表示を再審査できるのは、契約済み1 connectorについて実sample・実機で、取込→圃場照合→日誌候補→人の確定→監査、再送冪等、単位変換、provider停止時のfile継続を通し、次の検査をPASSした後だけである。PASS後も未提供ecosystemの明示を削除しない。
+
+```bash
+node ops/product/check-machinery-connector-acceptance.mjs /secure/evidence/connector-acceptance.json
+```

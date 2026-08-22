@@ -1,7 +1,14 @@
 {
-  "schemaVersion": 1,
-  "asOf": "2026-08-17",
+  "schemaVersion": 2,
+  "asOf": "2026-08-22",
   "productionAvailability": "BLOCKED",
+  "publicScope": "圃場・指示・日誌・農薬・在庫のself-host／offline core",
+  "comparisonClaims": {
+    "ksasEquivalent": false,
+    "status": "PROHIBITED",
+    "reason": "契約済み実connectorの実sample・実機縦切り受入がなく、農機・drone・食味収量・可変施肥・機械monitoring ecosystemを提供していない",
+    "missingEcosystem": ["農機自動日誌", "drone", "食味・収量連携", "可変施肥", "機械monitoring"]
+  },
   "statusDefinitions": {
     "implemented": "コードと自動testはあるが、対象hostの実運用受入は未完了",
     "validated": "要求された実環境・実data・実利用者の受入証跡がある",
@@ -9,7 +16,7 @@
     "out-of-scope": "現在の製品scopeには含めない"
   },
   "capabilities": [
-    { "id": "core-field-journal", "name": "圃場・作業指示・日誌・農薬・在庫", "status": "implemented", "phase": "Phase 1", "evidence": ["apps/web", "apps/bff"] },
+    { "id": "core-field-journal", "name": "圃場・作業指示・日誌・農薬・在庫のself-host／offline core", "status": "implemented", "phase": "Phase 1", "public": true, "evidence": ["apps/web", "apps/bff"] },
     { "id": "offline-sync", "name": "担当圃場のoffline利用と同期", "status": "implemented", "phase": "Phase 1", "evidence": ["apps/web/src/sync.ts", "apps/bff/src/sync-service.mjs"] },
     { "id": "tenant-analytics", "name": "tenant内の計画対実績分析", "status": "implemented", "phase": "Phase 2", "evidence": ["apps/web/src/TenantAnalyticsPanel.tsx", "apps/bff/src/postgres-mvp-repository.mjs"] },
     { "id": "machinery-file-import", "name": "ISOBUS／ISO-XML農機file取込", "status": "planned", "phase": "Phase 3", "evidence": ["docs/design/ADR/ADR-0012-農機連携アーキテクチャ.md"] },

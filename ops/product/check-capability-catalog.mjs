@@ -4,8 +4,9 @@ import { readFileSync } from "node:fs";
 export function validateCatalog(value) {
   const errors = [];
   const statuses = new Set(["implemented", "validated", "planned", "out-of-scope"]);
-  if (value?.schemaVersion !== 1) errors.push("schemaVersion must be 1");
+  if (value?.schemaVersion !== 2) errors.push("schemaVersion must be 2");
   if (value?.productionAvailability !== "BLOCKED") errors.push("productionAvailability must remain BLOCKED until release acceptance");
+  if (value?.publicScope !== "圃場・指示・日誌・農薬・在庫のself-host／offline core") errors.push("publicScope must remain limited to the approved self-host/offline core");
   if (!Array.isArray(value?.capabilities) || !value.capabilities.length) errors.push("capabilities are required");
   const ids = new Set();
   for (const item of value?.capabilities || []) {
@@ -16,6 +17,13 @@ export function validateCatalog(value) {
   }
   for (const required of ["wagri-machinery-connector", "remote-sensing", "water-management", "drying-preparation", "diagnostic-support"])
     if (!ids.has(required)) errors.push(`required comparison capability is missing: ${required}`);
+  const connector = value?.capabilities?.find(({ id }) => id === "wagri-machinery-connector");
+  const claims = value?.comparisonClaims ?? {};
+  if (claims.ksasEquivalent === true) {
+    if (connector?.status !== "validated") errors.push("KSAS equivalence requires a validated contracted machinery connector");
+    if (!Array.isArray(claims.comparisonReviewEvidence) || !claims.comparisonReviewEvidence.length) errors.push("KSAS equivalence requires comparison re-review evidence");
+    if (!Array.isArray(claims.missingEcosystem) || !claims.missingEcosystem.length) errors.push("KSAS equivalence must still disclose missing ecosystem capabilities");
+  } else if (claims.status !== "PROHIBITED") errors.push("KSAS equivalence status must remain PROHIBITED while the claim is false");
   return errors;
 }
 

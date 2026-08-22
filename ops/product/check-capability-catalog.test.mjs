@@ -13,3 +13,12 @@ test("rejects an availability-like status outside the four-state vocabulary", ()
 test("does not allow the catalog to claim Production before release acceptance", () => {
   assert.match(validateCatalog({ ...catalog, productionAvailability: "AVAILABLE" }).join("\n"), /must remain BLOCKED/);
 });
+test("blocks an unreviewed KSAS equivalence claim without a validated connector", () => {
+  const changed = structuredClone(catalog);
+  changed.comparisonClaims.ksasEquivalent = true;
+  changed.comparisonClaims.status = "ALLOWED";
+  assert.match(validateCatalog(changed).join("\n"), /validated contracted machinery connector/);
+});
+test("does not permit public scope expansion", () => {
+  assert.match(validateCatalog({ ...catalog, publicScope: "all KSAS capabilities" }).join("\n"), /publicScope/);
+});
