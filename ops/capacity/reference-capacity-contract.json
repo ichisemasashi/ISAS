@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "fixture": {
+    "fields": 3000,
+    "polygon_vertices": { "10": 750, "50": 750, "200": 750, "1000": 750 },
+    "per_field": { "journals": 36, "pesticide_records": 6, "inventory_events": 12, "audit_events": 60, "photos": 6, "photo_bytes": 2097152 }
+  },
+  "users": 100,
+  "concurrency": [20, 50, 100],
+  "runs_per_temperature": 30,
+  "temperatures": ["cold", "warm"],
+  "operations": ["field_bbox", "field_search", "field_detail", "map_pan", "journal", "photo_upload_download", "sync_pull", "analytics"],
+  "hosts": ["macos", "linux", "freebsd"],
+  "required_metrics": ["p50_ms", "p95_ms", "p99_ms", "error_rate", "db_pool_wait_ms", "cpu_percent", "memory_bytes", "disk_latency_ms", "network_ms", "object_latency_ms"]
+}
