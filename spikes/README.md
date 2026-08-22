@@ -41,7 +41,11 @@
 
 ## 実行
 
-> Docker経路はADR-0024 R1完了までの互換手順である。新規の検証はnative PostgreSQL 16＋PostGIS runnerへ移し、同じ結果を再現できてからCompose定義を削除する。
+> Docker経路はADR-0024 R1完了までの互換手順である。新規の検証は`run-native.sh`へ移した。version固定native PostgreSQL 16＋同major向けPostGISを一時data directoryで起動し、全migration／security verify、Phase 2 rollback、S1／S2／S5／S7／S8を実行する。runnerが実環境でPASSするまでCompose定義を削除しない。
+
+```bash
+ISAS_PG16_BIN=/opt/homebrew/opt/postgresql@16/bin ./spikes/run-native.sh
+```
 
 ```bash
 # Docker（PostGIS 込み。S2 を含む全スパイク）
