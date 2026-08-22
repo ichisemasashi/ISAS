@@ -2,287 +2,186 @@
 
 | 項目 | 内容 |
 |---|---|
-| レビュー日 | 2026-08-17 |
-| レビュー対象 | ISAS Web／BFF／DB migration／Compose／IaC、要求仕様、ADR、運用・利用者文書、release・品質証跡 |
-| 比較対象 | クボタ営農支援システムKSASの公式公開機能、FAQ、マニュアル、API開発者サイト、会員規約 |
-| ユーザー確定要求 | ISASはmacOS、LinuxまたはFreeBSDのいずれでもProduction hostできること。この要求を既存ADR・IaC・運用文書より上位の正本としてレビューする |
-| 訂正履歴 | 初版がAWS Production前提とMac非本番限定を所与として扱った判断を撤回。KCOMP-H1では要求仕様、ADR-0002／0017／0019〜0021／0023、IaC registry、runbook、管理者ガイド、roadmap、release manifest validatorを3 OS Production＋任意providerへ訂正した |
-| 手法 | 公開機能比較、正本間の矛盾探索、実装／試験／運用証跡の三点照合、障害・移行・保守・競争力の反対仮説 |
-| 総合判定 | **BLOCKED**。3 OS Production要求とprovider非依存契約を是正し、FreeBSD／macOS／Linuxのnative実装を追加したが、各hostのProduction受入は未成立。KSAS代替製品としての同等性も未証明 |
-| 指摘集計 | High 6件、Medium 8件、Low 2件。現在はKCOMP-H1、H2、H4、M2、M3、M4、M6対応済、KCOMP-H3は実装済・受入待ち、未処置8件 |
+| 版 | **全面再レビュー版 v2** |
+| レビュー日 | 2026-08-22 |
+| ISAS基準commit | `a15128c`（ADR-0024 Docker段階的撤去 R0完了） |
+| レビュー対象 | 要求仕様、ADR-0010〜0013／0019〜0024、Web／BFF、DB migration、3 OS Production profile、local-integration、CI／release、運用・利用者文書、製品状態台帳、品質・復旧証跡 |
+| 比較対象 | クボタ営農支援システムKSASの公式機能、FAQ、2026年版manual、Developers、service desk、会員規約 |
+| 最上位の前提 | ISASはmacOS／Linux／FreeBSDを同格のProduction host対象とし、AWSは任意adapterとする。Docker／Compose／OCI runtimeは製品要件ではなく段階的に撤去する |
+| 手法 | 公開機能差分、正本間の矛盾探索、実装・自動検査・実環境証跡の三点照合、導入失敗／権限侵害／復旧不能／競争力誤認の反対仮説 |
+| 総合判定 | **BLOCKED**。業務coreと3 OS native構成の実装量は増えたが、native配布物、実host受入、証跡真正性、実利用者・実data・DRが未成立。KSASから業務正本を切り替えられる状態ではない |
+| 現行指摘集計 | **High 5件、Medium 8件、Low 2件**。Highは全件未クローズ |
+| 次回再確認 | 各Production候補release review時、または遅くとも2026-11-22 |
 
-## 1. 結論
+---
 
-ISASは、圃場GIS、作業指示・日誌、農薬・在庫、CSV移行、offline outbox、RLS・監査という中核に実装上の強みがある。しかし、次の3点を混同すると誤った導入判断になる。
+## 1. 旧レビュー票をそのまま更新しない理由
 
-1. **KSASは運営主体とサポート窓口を持つcloud serviceである。** ISASはself-hostを目指すsoftwareであり、availability、backup、security update、問い合わせ対応を導入組織が引き受ける。画面機能だけを並べても代替性は証明できない。
-2. **ISASの`v1.0.0`はProduction承認版ではない。** release note自身が`BLOCKED`と明記している。そこで列挙されたAWS固有の未完了事項は本来要求ではなく、macOS／Linux／FreeBSD Production対応から逸脱して作られた実装計画の残件である。実利用者UT、実端末、restore／DR、段階配備等のprovider非依存gateは引き続き必要である。
-3. **要求追跡欠陥はKCOMP-H1で訂正した。** Production必須hostをmacOS／Linux／FreeBSD、AWSを任意adapter、Mac Composeを非本番`local-integration`だけのprofileとして再定義し、要求仕様・ADR・IaC registry・runbook・roadmap・release manifestへ反映した。3 OSのnative profileは実装したが、実host受入は未完である。
+2026-08-17版は、当時欠落していたFreeBSD Jail、macOS launchd、Linux systemdのProduction profileを中心に評価していた。その後、3 OSのprofile、install／backup／restore／監視script、host validatorが追加され、さらにADR-0024でDocker撤去が決定された。このため、旧票に処置追記を重ねると次の誤認が残る。
 
-macOS、Linux、FreeBSDはすべて**正規のProduction host対象**であり、品質上の上下関係を設けない。実装順としてLinuxを最初のreference profileにすることはできるが、それを理由にmacOSを非本番・縮退版、FreeBSDを任意対応へ格下げしてはならない。OS固有の構成と試験を分けながら、共通の業務要件、security、backup／restore、監査、release gateを3 OSすべてで満たす必要がある。
+1. FreeBSD／macOS／Linuxの構成定義が存在しない、という旧仮説は失効した。
+2. Docker／OCI imageをcross-host artifactの目標とする旧工程は、現在の方向性と逆である。
+3. 静的なOS分岐確認と、実hostでのProduction受入が同じ「対応済」に見える。
+4. 2026年版KSAS manualに掲載されたKSASシンプルコネクト、Marketplace、AIチャット、病害虫・雑草AI診断、生育ステージ予測等が旧比較表に十分反映されていない。
 
-## 2. 比較の証拠範囲と限界
+したがって、本票は旧IDの続票ではなく、基準commitを固定した新しいレビューである。旧票の履歴はGit履歴で保持し、現行状態の判定には本票だけを使う。
 
-### 2.1 KSAS側で確認できた公開事実
+## 2. 証拠の読み方
 
-- KSASはinternet cloudを利用し、PC／smartphoneから圃場、日誌、進捗を管理するserviceである。
-- 圃場管理、作業指示・日誌、作付計画、台帳、Excel出力、在庫、作業時間分析を公開している。
-- 対応農機による自動日誌、食味・収量、可変施肥、乾燥調製、機械monitoring、drone、remote sensing等を公開している。
-- KSAS APIは組織、圃場、機械、農薬、肥料、指示・日誌、作付計画等の取得と、一部dataの登録を公開している。農家が連携accountを作成して開始する同意境界がある。
-- FAQでは他systemからKSASへのdata移行は不可、圃場／日誌はExcel出力可能、推奨圃場数は3,000枚以内、smartphoneだけでは作付計画作成と圃場詳細設定ができないとしている。
-- 機能別PDF、PC／smartphone別manual、動画、平日service deskが公開されている。
+### 2.1 ISASの状態語
 
-### 2.2 比較してはいけないもの
+| 状態 | 本票での意味 |
+|---|---|
+| 設計済み | 要求、ADR、runbookまたはinterfaceがある |
+| 静的実装済み | code／script／設定と自動検査があるが、対象OS・実data・実依存で動かした証拠がない |
+| 統合検証済み | 指定された非本番環境で実componentを接続した証拠がある。Production合格ではない |
+| Production受入済み | 対象host、署名artifact、実依存、復旧、security、SLO、実利用者を含む証跡と二人承認がある |
 
-KSASの非公開な内部architecture、RLS、MFA、暗号鍵、backup方式、SLO実績、脆弱性、障害履歴は公開資料だけでは確認できない。このため、ISASの詳細ADRが存在することを理由に「ISASのsecurityがKSASより高い」とは判定しない。同様に、KSASの販売中機能とISASの未受入codeを「同等に完成」と数えない。
+`implemented`を「Productionで利用可能」と読み替えない。repositoryに存在する3 OS profileは**静的実装済み**であり、各`profile.json`自身が`BLOCKED`を宣言している。
 
-比較結果の`KSAS確認`は**公式公開資料から機能提供を確認した**という意味に限定し、内部品質保証を意味しない。
+### 2.2 KSAS側の証拠限界
 
-## 3. 機能・製品比較表
+KSASの公開画面・manual・FAQからは提供機能、利用条件、料金、公開support窓口を確認できる。一方、内部architecture、RLS、MFA、暗号鍵、backup方式、SLO実績、脆弱性、障害履歴は確認できない。非公開事項を「KSASにない」と断定せず、ISASの詳細設計があるだけで優越とも判定しない。
 
-| 比較軸 | ISASの現状 | KSAS公式公開情報 | 敵対的判定 |
+## 3. 現在の製品比較
+
+| 比較軸 | ISAS `a15128c` | KSAS公式公開情報（2026-08-22確認） | 敵対的判定 |
 |---|---|---|---|
-| 圃場GIS | MapLibre、PostGIS bbox、担当scope cache、eMAFF GeoJSON／境界付きCSV取込を実装 | Google Mapを使う圃場管理、住所・面積・所有者等をPC／smartphoneで管理 | coreは比較可能。ただしISASの実data精度、3,000枚級操作、地図provider契約は未受入 |
-| 作業指示・日誌 | 指示、担当、打刻補完、写真、template、前回値、訂正・差戻しを実装 | 指示から日誌化、検索・振返り、Excel出力を提供 | 手入力coreは比較可能。ISASの実利用者時間目標は未測定 |
-| 作付計画・工程 | Phase 2 migration／API／画面、高度gantt、依存・resource競合を実装したがPG16・実利用者gate未完 | 作付計画と資材費simulation、PC機能を提供 | ISASを「完成」と表示不可。運用規模とUXの実証が必要 |
-| 農薬・在庫 | 農薬鮮度、安全check、追記型在庫、lot／期限／棚卸し／JGAP CSVを実装 | 農薬・肥料台帳、group別在庫、入出庫履歴、Excel出力を提供 | ISASの食品安全設計は強いが、法令master更新運用と実帳票照合が未完 |
-| 分析 | tenant内の計画対実績、収量、作業時間、資材projectionを実装。実data／性能未受入 | 食味・収量分布、作業時間分析、生育・施肥関連機能を提供 | ISASは入力sourceが不足し、画面があっても実用分析へ到達しない危険 |
-| 農機・drone | ADR-0012とPhase 3計画のみ。実adapter／connectorなし | 対応機の自動日誌、稼働・位置・食味・収量、可変施肥、drone連携を提供 | **重大な競争力gap**。設計書を接続済みと数えない |
-| 乾燥・水管理・remote sensing | 個別の実連携なし | 乾燥調製、水管理連携、衛星／drone remote sensingを公開 | KSAS代替を名乗るならscope差を明示。短期に模倣せず優先顧客で裁定 |
-| 外部API | ADR-0013とruntime基盤はあるが実client契約・公開service受入は未完 | KSAS APIで複数台帳・日誌等の取得／登録を公開 | ISASはAPIを「提供中」と表示不可。最初の実client contractが必要 |
-| data移行 | 圃場→作業→農薬CSV、重複検査、RLS、eMAFF境界取込を実装 | FAQ上、他systemからKSASへのdata移行は不可 | ISASの差別化候補。ただし全項目round-trip、文字code、添付、履歴完全性は未証明 |
-| data出力 | 日誌、圃場台帳、農薬記録等のCSV | 圃場情報・日誌のExcel出力 | 双方にportability手段。ISASは退役時の一括export／restore契約が不足 |
-| offline | PWA cache／outbox／競合／失効を設計・実装、実機gate未完 | 公開資料から一般offline継続可否を確定できない | ISASの差別化候補だが、S6／S9未完のため販売主張不可 |
-| mobile | PWAで現場機能を統合する方針 | smartphoneで圃場確認・日誌・進捗等を提供。作付計画と圃場詳細設定はPC必須 | ISASがmobile完結性を示せれば優位。ただし高齢者を含む実UTが必要 |
-| i18n／RTL | 日英辞書、疑似RTL、法域profileを設計。native／領域reviewは残存 | 比較対象の公開日本向け資料では多言語範囲を確定できない | ISASの戦略差。ただし「全世界対応」は現時点で未達 |
-| 認可・監査 | tenant RLS、scope、失効、MFA、監査chainを詳細設計・実装 | 公開情報だけでは内部方式を比較不能 | ISAS内の本番検証だけをgateにする。KSASへの根拠なき優越主張は禁止 |
-| 導入・support | 管理者／利用者guideとrunbookはあるが、運用主体・SLA・service deskは未確定 | 機能別manual、動画、service deskを公開 | self-hostの運用負担を含むsupport modelが必要 |
-| 費用 | software licenseだけではなくhost、運用者、backup、IdP、監視、incident対応費が必要。TCO表なし | 100圃場までの無料plan、有料planを公開 | license価格だけで比較すると誤認。3年TCOと要員工数を提示する |
+| 圃場GIS | MapLibre＋PostGIS、地理院背景、担当scope、eMAFF GeoJSON／境界CSV取込を実装 | Google Mapを用いた圃場、住所、面積、所有者管理をPC／smartphoneへ提供 | ISAS coreは実装済み。ただし実農地3,000枚、実地図成果物、現地操作性は未受入 |
+| 作業指示・日誌 | 指示、担当、打刻補完、写真、template、前回値、訂正・差戻しを実装 | 指示から日誌化、絞込、振返り、Excel出力、対応農機の自動日誌を提供 | 手入力coreは比較可能。自動化と実利用者時間では未証明 |
+| 作付・工程 | 作期、作付、高度Gantt、依存、進捗、resource競合を実装 | 作付計画、資材費simulation、作業進捗、2026年manualでは作業計画体験版を掲載 | ISASはcodeを完成表示できない。PG16 native gateと実利用者受入が残る |
+| 農薬・在庫 | 鮮度、安全check、lot、期限、棚卸、調整event、JGAP CSVを実装 | 農薬DB、在庫、各種台帳、Excel出力を提供。FAQはFAMIC DBを月1回程度更新と説明 | ISASは法令masterの実更新責任者と実帳票照合が未成立 |
+| Offline／mobile | cache／outbox／競合／失効／offline mapを実装。実端末gateは未完 | smartphoneで圃場、日誌、進捗等を提供。FAQでは作付計画と圃場詳細設定にPCが必要 | ISASの差別化候補だが、iOS／Android実機と共有端末試験前には優位を主張しない |
+| 分析 | tenant内の計画対実績、収量、時間、資材、鮮度／coverageを実装 | 食味・収量、作業時間、可変施肥、生育関連機能を公開 | ISASは実農機／sensor sourceがなく、分析値の実用性を未証明 |
+| 農機・drone | ADR、受入契約、Phase 3計画。実connectorなし | 自動日誌、KSASシンプルコネクト、drone、食味・収量、可変施肥、機械monitoringを提供 | **最大の機能差**。設計書を接続済み機能として数えない |
+| 周辺ecosystem | remote sensing／診断はplanned、水管理／乾燥調製はout-of-scope | 水管理、乾燥調製、remote sensing、土壌診断、生育予測、AI診断、Marketplace、AIチャットをmanualへ掲載 | 全模倣は不要。ただし採否未分類の機能をcatalogへ反映しないと比較が再び陳腐化する |
+| 外部API | ADR-0013と最小受入契約のみ。実client／公開service受入なし | KSAS Developersを公開 | ISASはAPI提供中と表示不可 |
+| 移行 | 圃場→作業→農薬CSV、重複検査、eMAFF境界取込を実装 | FAQでは他systemからKSASへのdata移行は不可 | ISASの差別化候補。ただし実顧客CSV、添付、完全restoreは未証明 |
+| 出力・離脱 | 個別CSVとfull export仕様があるが、full export／再import実装なし | 圃場情報、日誌、作付、食味・収量等をExcel出力 | ISASのdata control主張には空ISASへの完全restoreが必要 |
+| Support | guide、runbook、RACI schema、severity定義を実装。実配備の担当者・窓口・契約は未登録 | 平日service deskと24時間AIチャットを公開 | self-host運用者が不在なら、機能があってもKSAS代替にならない |
+| 費用 | TCO仕様と計算器だけ。実見積なし | 100圃場以下無料、有料plan税込2,200円／月を公開 | OSS licenseだけで安価と主張することを禁止する |
+| Security／privacy | RLS、MFA、失効、監査、位置同意を設計・実装 | 公開資料だけでは内部方式を比較不能 | ISAS自身の実環境gateで評価し、KSASへの根拠なき優越主張をしない |
 
-## 4. Host OS適合性判定
+## 4. 現行の敵対的指摘
 
-| Host候補 | 現行実装で確認できるもの | 破壊仮説 | 判定 |
-|---|---|---|---|
-| Linux | Debian 13／Ubuntu 24.04 LTS、amd64／arm64のnative Production profile、systemd／AppArmor／nftables／LUKS2、署名済みdeb、backup／restore、更新／rollbackを実装 | 実Linuxでのempty-host構築、全損restore、障害試験、E2E、共通SLOの証跡がなければ静的検査だけをProduction承認へ昇格できる | **Production必須対象、実装済み・受入未承認** |
-| macOS | Docker Desktop非依存のnative Production profile、6つの非login service identity、launchd／pf、署名済みpkg、監視、backup／restore、rolling updateを実装 | 実Mac 2台での全損復旧、sleep／update／disk障害、E2E、共通SLOの証跡がなければ、静的検査だけをProduction承認へ昇格できる | **Production必須対象、実装済み・受入未承認**。同一SLOの実証が必要 |
-| FreeBSD | 文書・CI・runbook・実測なし | FreeBSDにはDocker Engineがなく、現行Linux image／Composeを実行基盤として流用できると仮定すると導入が停止する | **Production必須対象、現状未承認**。FreeBSD Jail上のnative service構成と、rc.d、VNET／pf、ZFS、rctlを含む運用受入が必要 |
-
-### 4.1 FreeBSD ProductionはJailを前提とする
-
-FreeBSD Production profileはDocker、Compose、OCI runtimeを要求せず、FreeBSD Jailでserviceを分離して構成する。Linux guestやvirtualizationをKCOMP-H2の代替解決案には含めない。JailはDocker互換containerとして扱わず、FreeBSDのOS-level isolationとして個別に設計・検証する。
-
-基準構成は次の責任境界とする。
-
-- 外部公開するTLS ingress／Webは`edge` Jail、BFFは`app` Jail、PostgreSQL 16＋PostGISとPgBouncerはdata用Jail、IdP、object／queue、telemetryは依存関係と権限境界に応じた専用Jailへ配置する。
-- 各componentはFreeBSD native package／portsまたは署名済みapplication artifactとしてversionを固定し、rc.dで起動順序、health check、graceful shutdown、再起動を管理する。
-- Jail networkはVNET／epair／pfで分離し、外部から到達できる入口を`edge` Jailに限定する。Jailにhost root、Docker socket、不要なdevice、host filesystem全体を渡さない。
-- dataを持つJailには分離したZFS datasetとquotaを割り当て、rctlでresource上限を設定する。ZFS snapshotだけをDB backupとは見なさず、PostgreSQL整合backup、WAL archive／PITR、暗号化したoff-host recovery setを組み合わせる。
-- ComposeはLinux／macOS用profileのartifactとして残せるが、FreeBSD Productionの起動・更新・rollback・backup・restore手順はJail manifestとrc.d設定を正本にする。
-
-## 5. 敵対的指摘一覧
-
-| ID | 重要度 | 区分 | 攻撃仮説／不整合 | 要求処置 | 状態 |
+| ID | 重要度 | 区分 | 攻撃仮説／確認事実 | 要求処置 | 状態 |
 |---|---|---|---|---|---|
-| KCOMP-H1 | High | 要求逸脱 | ユーザー要求はmacOS／Linux／FreeBSD Production hostなのに、ISAS文書が無断でAWSをProduction正本、Macを非本番限定に変更している。このままでは正しい要求を満たさない構成が承認される | ユーザー要求を最上位の正本として要求仕様・ADR・IaC・runbook・roadmapを訂正し、AWS前提を必須条件から除去する | 対応済 |
-| KCOMP-H2 | High | FreeBSD | FreeBSDにはDocker Engineがなく、Docker Compose／OCI stackを実行基盤にするとdaemon・network・volume・health・image実行の入口で停止する | FreeBSD Jailを正規Production profileとして設計し、native package／ports、rc.d、VNET／pf、ZFS、rctlによるservice分離、runbook、backup／restore、E2Eを実装・受入する | 対応済 |
-| KCOMP-H3 | High | macOS | 検証用Docker Desktop stackをそのまま本番化すると、user session、Desktop update、sleep、単一disk／電源、support対象外のproduction runtimeに業務を依存させる | macOS Productionを正規profileとして`local-integration`から分離し、runtime保守、auto-start、sleep、backup、監視、更新、復旧、共通SLOを受入する | 実装済・受入待ち |
-| KCOMP-H4 | High | Linux | Linuxにproduction IaC、OS hardening、service manager、backup、upgrade、firewall、secret、support matrixがない | support対象distribution／version／archを定義し、empty hostからrestoreまで自動化・実証する。Linuxだけを上位hostとは扱わない | 対応済 |
-| KCOMP-H5 | High | 競争力 | 農機adapterがADRだけなのにKSAS相当のsmart agricultureを想起させると、自動日誌・収量・可変施肥を期待した導入が失敗する | capability catalogに`implemented／validated／planned／out-of-scope`を表示し、最初の実connectorを契約・sample・実機で受入する | 未処置 |
-| KCOMP-H6 | High | release | codeとlocal testのPASSを、販売中KSASと同じ「利用可能」と数えると、実data、実利用者、端末、restore、incident未検証のsystemへ業務正本を移す | host profileごとの実release manifest、実UT、実CSV rehearsal、restore／DR、security、24時間監視を完了するまでProduction表示を禁止する | 未処置 |
-| KCOMP-M1 | Medium | API | 外部API／WebhookはADR中心で、実client、公開endpoint、version運用、supportがない | 最小read-only APIから実client contract、sandbox、rate／revocation、運用窓口を受入する | 未処置 |
-| KCOMP-M2 | Medium | 分析 | 分析画面に実農機・sensor inputがなく、入力品質の低いdashboardが精密農業のように見える | source freshness、coverage、manual／machine比率を表示し、data sourceがない指標を非表示にする | 対応済 |
-| KCOMP-M3 | Medium | 機能scope | KSASのremote sensing、水管理、乾燥調製、診断supportまで無計画に追随するとcore品質が悪化する | 対象顧客jobと契約可能性で採否を決め、非対象を明示。core Production gateより前へ割り込ませない | 対応済 |
-| KCOMP-M4 | Medium | 文書 | `v1.0.0`というtagだけを見た利用者がProduction版と誤認できる | README最上部、UI build情報、release一覧へ`baseline／Production BLOCKED`を常時表示し、Production tag namespaceを分離する | 対応済 |
-| KCOMP-M5 | Medium | capacity | KSASの公開推奨3,000圃場と、ISASのsynthetic test／目標値は条件が違い、単純な件数比較ができない | 3,000圃場、複雑polygon、履歴、写真、同時利用者を含むhost別reference benchmarkを公開する | 未処置 |
-| KCOMP-M6 | Medium | 運用 | KSASはservice deskを公開するが、ISAS self-hostではon-call、保守契約、責任者、脆弱性窓口が導入先ごとに空欄になり得る | RACI、support時間、severity、response、EOL、security窓口を必須配備台帳にし、空欄なら稼働禁止する | 対応済 |
-| KCOMP-M7 | Medium | TCO | ISASを無料softwareとしてKSAS料金と比較すると、server、電力、backup、IdP、監視、保守者、incident工数を隠す | 100／1,000／3,000圃場の3年TCO、必要要員、停止cost、更新頻度をhost profile別に作る | 未処置 |
-| KCOMP-M8 | Medium | portability | CSV出力があっても、添付、監査、membership、作付、在庫event、位置同意を別ISASへ完全restoreできる保証がない | vendor exit用full export manifest、schema version、hash、添付、import検証、削除証明を実装する | 未処置 |
-| KCOMP-L1 | Low | 比較品質 | KSAS公開資料にないsecurity仕様を「未実装」と断定すると、不公正かつ根拠のない比較になる | `確認済み／非公開で比較不能／ISAS未受入`を分け、推測値をscoreへ入れない | 未処置 |
-| KCOMP-L2 | Low | 鮮度 | KSAS機能・料金・規約は更新されるため、固定比較表が短期間で陳腐化する | source URL、確認日、再確認期限を記録し、release reviewごとに差分確認する | 未処置 |
+| KCOMP2-H1 | High | 配布・3 OS | 3 OSのinstall scriptは`database`、`identity`、`object-queue`、`app`、`edge`、`telemetry`のnative packageを要求するが、repositoryにそれらを生成するpipelineと成果物がない。現行`build-release.yml`はAWS ECRへ`bff`／`web`／`migration`のOCI imageだけをbuildする。静的profileを実装済みと呼んでもempty hostでは導入できない | ADR-0024 R3として、macOS arm64／amd64、Linux x86_64／aarch64、FreeBSD amd64／arm64のnative artifact build、6 serviceの構成、署名、SBOM、provenance、checksum、保管、install検証を実装する。AWS KMS／ECRを共通必須にしない | **未処置** |
+| KCOMP2-H2 | High | Release security | release validatorは`artifact://`／`https://`／`s3://`形式の文字列と任意のactor名を受理し、証跡本文のdigest、署名、発行主体、承認者identityを検証しない。tag script単体も4証跡の再検証を強制しない。書込権限を得た者が整合するJSONを作れば、二人承認や24時間監視を偽装できる | 全証跡をcontent digestと署名attestationへ束縛し、承認者をIdP／GitHub Environmentの検証済みidentityへ結ぶ。tag発行入口自身がrelease／build／delivery／bakeの検証済みdigestを要求し、保護tag rulesetと監査eventを確認する | **未処置** |
+| KCOMP2-H3 | High | Host受入 | FreeBSD Jail、macOS launchd、Linux systemdの定義は存在するが、実hostのinstall、reboot、upgrade、rollback、PITR、全損restore、E2E、SLO証跡が0件で、acceptanceはplaceholder exampleだけである。OS分岐確認をProduction対応と表示すると復旧不能な配備を販売できる | 各OSを実host 2 failure domainで受入し、同一source／migration／fixtureで12 gate、二人承認、artifact digestを記録する。完了までは状態を`静的実装済み／Production BLOCKED`に統一する | **実装済み・実受入待ち** |
+| KCOMP2-H4 | High | 業務正本化 | 実CSV rehearsal、実作業員・高齢作業員・技能実習生UT、iOS／Android、手動WCAG、独立penetration、月次restore／四半期DR、24時間監視が未実施である。local testのPASSをKSASからの切替根拠にすると、現場入力・offline・復旧で初めて欠陥が発覚する | 選択hostの隔離Stagingで実data、実端末、実利用者、security、SLO、復旧を実施し、release manifestへ同一commitの証跡を登録する | **未処置** |
+| KCOMP2-H5 | High | 製品表示 | KSASは農機自動日誌、シンプルコネクト、drone、食味・収量、可変施肥、機械monitoring等を提供するが、ISASの農機連携はplannedである。「KSAS代替」「KSAS同等」と無限定に表示すると、手入力負担と分析sourceの差を隠す | 対外scopeを「圃場・指示・日誌・農薬・在庫のself-host／offline core」に限定する。KSAS同等表示は、契約済み1 connectorを実sample・実機で縦切り受入し、未提供ecosystemを明示した後だけ再審査する | **未処置** |
+| KCOMP2-M1 | Medium | Docker撤去 | ADR-0024は採用済みだがR0のみ完了し、local-integration、DB spike、CI、任意AWS adapterの4群がactive transitionalのままである。daemon障害が開発・検証を再び停止できる | R1 native PG/PostGIS runner→R2 native local-integration→R3 native CI→R4 AWS adapter→R5物理削除の順で、代替合格後に旧経路を削除する | **着手済み（R0完了、R1〜R5未処置）** |
+| KCOMP2-M2 | Medium | 製品状態台帳 | `capability-catalog.json`は2026-08-17時点の9機能だけで、eMAFF取込、管理者security、CSV、作付／在庫高度化、位置・分析、3 OS profile、Docker撤去、KSAS 2026追加機能を網羅しない。validatorも`asOf`鮮度、evidence path存在、状態根拠を検査しない | capabilityを業務・platform・運用に分けて網羅し、`designed／static-implemented／integration-validated／production-authorized`を表現する。確認期限とevidence digestをCI検査する | **未処置** |
+| KCOMP2-M3 | Medium | API・農機 | 外部APIと初回農機connectorは受入契約までで、実client、service identity、sandbox、実sample、rate／失効、supportがない | 最小read-only APIと1実connectorを別incrementで実装し、tenant／scope、同意、再送、単位、停止時継続、監査を実証する | **設計済み・未実装** |
+| KCOMP2-M4 | Medium | GIS・offline map | eMAFF importとoffline map codeはあるが、実日本PMTiles／NOTICE／SBOM、端末容量、地理院停止時の縮退、実農地境界精度を実環境で受入していない | 選択hostで実成果物を署名・配布し、担当scope、Range再認可、容量上限、失効、地図停止、現地境界照合を実機確認する | **実装済み・実受入待ち** |
+| KCOMP2-M5 | Medium | Capacity | 3,000圃場benchmarkは仕様だけで、3 OSの同一fixture結果がない。KSASの推奨件数をISASの処理能力として引用できない | 複雑polygon、履歴、写真、同時20／50／100利用者を含む実測を3 OS別に公開し、ISAS SLOへの合否だけを判定する | **未処置** |
+| KCOMP2-M6 | Medium | TCO | 3年TCO計算器はあるが9組合せが仮値で、host、予備機、電力、backup、IdP、監視、保守者、incident、停止costを比較できない | macOS／Linux／FreeBSD×100／1,000／3,000圃場の実見積、要員、更新頻度、停止costを承認する | **未処置** |
+| KCOMP2-M7 | Medium | Portability | full export仕様はあるがexport／import code、attachment、監査chain、別の空ISASへのrestore、削除証明がない | snapshot manifest、全dataset／object、hash、再import、RLS、監査chain、二人承認付き削除証明を実装・実証する | **未処置** |
+| KCOMP2-M8 | Medium | Support | 運用台帳schemaと起動時検査はあるが、実配備のservice owner、on-call、security／privacy窓口、保守時間、EOL、契約、費用の承認証跡がない | Production候補ごとに実名ではなく検証可能な組織identity／連絡経路を登録し、訓練・引継ぎ・不在時escalationを演習する | **実装済み・実運用受入待ち** |
+| KCOMP2-L1 | Low | 文書整合 | 運用文書の一部にAWS固有commandが一般Production手順のように残り、`v<version>`と`production/v<version>`の表記揺れもある | host-neutral入口から選択adapterへ分岐させ、tag namespace、artifact語、Docker移行表示を全文scanで統一する | **未処置** |
+| KCOMP2-L2 | Low | 比較鮮度 | KSASは2026-07-22にも更新され、manual掲載機能と料金・規約は変化する。Markdownの確認日だけでは期限超過をCIで検出できない | source URL、確認日、再確認日、確認範囲、hashまたはsnapshot IDを機械可読台帳にし、release reviewで期限切れを拒否する | **本票で暫定対応、CI未実装** |
 
-## 6. High指摘の攻撃詳細
+## 5. High指摘の破壊経路
 
-### KCOMP-H1：配備正本がユーザーの確定要求を無断変更している
+### 5.1 KCOMP2-H1：native host定義と配布物が接続されていない
 
-ユーザーの確定要求は、ISASをmacOS、LinuxまたはFreeBSDでhostできることである。それにもかかわらず、ISAS要求仕様§5.6とADR-0023はMacを非本番Integrationへ限定し、ADR-0019と開発工程はAWS serviceをProduction前提として採用した。これはユーザー要求の変更ではなく、作成側による要求逸脱である。AWSの採用判断とMacの非本番限定を、過去に文書化されたという理由で正当化してはならない。
+3 OSのmanifestは6 serviceを列挙するが、release buildは3 OCI imageだけを生成する。名前、粒度、署名方式、registry、architectureのどれも一致しない。`install.sh`の静的検査がPASSしても、入力となるpackageを生成できないためempty host installは開始できない。これは単なる受入不足ではなく、buildからinstallまでの実装欠落である。
 
-是正では、macOS／Linux／FreeBSDをすべてProduction対象へ戻し、AWS固有構成を必須の正本から外す。AWS artifactを残す場合は、3 OS self-host要件を置換しない任意adapterとして明示する。単なる文言置換ではなく、次の正本を同時に変更する必要がある。
+再レビューでは、各native packageについてsource commit、OS／architecture、dependency lock、SBOM、provenance、signature、install先、service entrypointを一つのbuild manifestへ固定し、実hostがそのmanifest以外を拒否することを確認する。
 
-- 要求仕様：self-host Production class、許容host、単一node／HA class、責任分担
-- ADR-0002／0019／0020／0021／0023：3 OS Productionを正本とするprovider-neutral interfaceとhost別profile
-- threat model：host root、Docker socket、hypervisor、backup媒体、operator端末
-- deployment：secret、TLS、IdP、object、queue、telemetry、backup、upgrade
-- release manifest：`host_os`、kernel、runtime、filesystem、encryption、failure domain、support期限
-- 管理者guide：OSごとの起動・停止・復旧・更新・incident
+### 5.2 KCOMP2-H2：JSONの整合性は証拠の真正性ではない
 
-これらが揃う前に「3 OS対応」と記載すると、最も危険な部分だけが運用者の推測へ落ちる。
+現行validatorは日付、status、URI形式、actorの重複を検査している。しかし、実際の証拠本文を取得してhash／署名／発行者まで検査しない限り、値が実測由来とは証明できない。承認者も任意文字列であり、二人の実identityを保証しない。
 
-**処置結果（2026-08-17）**：ユーザー確定要求を要求仕様§5.7と[Productionホスト共通契約](../operations/Productionホスト共通契約.md)へ固定し、ADR-0002／0017／0019〜0021／0023、`infra/README.md`、OpenTofu README、運用runbook、管理者ガイド、開発工程へ波及した。release manifest schema v2は`host_os`を`macos`／`linux`／`freebsd`に限定し、OS、architecture、service管理／isolation、filesystem／暗号化、provider／site、2 failure domain以上を必須検査する。AWS固有成果物は任意adapterとして残し、3 OS実装の代替にしない。
+Production tag発行では、CI Environment承認だけに暗黙依存せず、承認event ID、repository／workflow／run identity、OIDC subject、artifact／evidence digestを署名attestationへ含める。tag作成scriptを直接呼び出して検証を迂回できない権限設計も必要である。
 
-### KCOMP-H2：FreeBSDはJail前提のProduction profileが必要
+### 5.3 KCOMP2-H3／H4：静的実装と現場受入を分離する
 
-Docker公式のEngine install対象はLinux distribution群で、FreeBSDはsupported platform表にない。現行imageは`linux/amd64`／`linux/arm64`を前提とするため、FreeBSD hostでの`docker compose up`を受入手順にできない。「Jailはcontainerだから同じ」という読み替えも、network、health check、filesystem permission、resource制御、package更新、support責任を未検証のままにする。
+FreeBSD／macOS／Linuxの実装追加は前進であり、旧レビューの「何もない」という指摘は解消した。しかし、実行できるpackageと実host証跡がない現在は`Production対応済み`ではない。同様に、BFF／Webの多数の自動testは、実CSVの崩れ、高齢作業員の操作、端末storage eviction、圏外復帰、証明書更新、全損restoreを代替しない。
 
-解決案はFreeBSD Jailによるnative Production profileに固定する。最初の技術spikeでは、少なくとも次を実装して計測する。
+公開状態は依存する最も低い状態へ揃える。業務coreが自動test済みでも、hostと運用が未受入なら製品全体は`Production BLOCKED`である。
 
-1. `edge`、`app`、data、IdP、object／queue、telemetryのJail manifestと、Jail間通信を必要最小限に制限するVNET／epair／pf ruleset。
-2. FreeBSD native package／portsまたは署名済みapplication artifactのversion固定、provenance／SBOM確認、rc.dによる起動順序、health check、graceful shutdown、restart。
-3. JailごとのZFS dataset／quotaとrctl、secret分離、host filesystem／deviceへの不要なaccess拒否。
-4. PostgreSQL整合backup、WAL archive／PITR、暗号化したoff-host recovery set、および空のFreeBSD hostへの復旧手順。
+### 5.4 KCOMP2-H5：比較対象を「機能数」ではなく顧客jobで限定する
 
-受入では、host reboot後の自動復旧、service停止検知、certificate／package更新、rollback、disk full、Jail停止・侵害時の横展開防止、backup／PITR／全損restoreを実行する。その上でRLS、認証・失効、監査chain、queue／object障害、性能SLOの共通E2Eを合格させる。単にログイン画面が出るだけでは不合格とする。
+KSAS ecosystemを短期に模倣すると、ISASのself-host、offline、data control、移行、監査という主目的を損なう。比較上必要なのは全機能追随ではなく、対象顧客jobと非対象を正確に表示することである。
 
-**処置結果（2026-08-17）**：ADR-0019 v4に従い、FreeBSD native Jail実装を`infra/hosts/freebsd/`へ追加した。6 service境界、短い固定Jail名、VNET／epair、pf default deny、Jail別ZFS quota・secret dataset、rctl、rc.d起動／停止順、署名済みnative pkg導入、PostgreSQL base backupを含むrecovery set、WAL／object／監査／鍵参照のhash検証、restoreを実装した。`ops/host-profiles/install-host.sh`はFreeBSD／Darwin／Linuxを明示分岐し、静的validatorとshell構文検査を通過した。ユーザー指定により現段階の完了条件はOS分岐確認までとし、実FreeBSD上のE2Eは未実施であるため、`freebsd-production` profileおよびProduction releaseは引き続き`BLOCKED`とする。
+最初の競争力実証は、圃場・指示・日誌・農薬・在庫を圏外でも記録し、自組織が復旧・移行できることに置く。農機は、実際の顧客が使う1形式を取込→圃場照合→日誌候補→人の確定→監査まで通してから拡大する。
 
-### KCOMP-H3：Mac検証環境をProductionへ流用できない
+## 6. 旧指摘との対応関係
 
-現行Mac profileはsynthetic data、loopback入口、単一Mac、Docker DesktopのLinux VMを意図した検証用構成にすぎない。これはmacOSをProduction対象外にしてよい理由ではなく、macOS Production profileが欠落している証拠である。さらにDocker公式support scopeはDocker Desktopをproduction runtimeとして対象外にしているため、Docker Desktopだけを正規runtimeにするならISAS側がruntime障害まで保守する必要がある。別runtimeまたはnative service構成も含めて比較し、macOS上で共通Production gateを満たす方式を選定する。
+| 旧ID | 現在の扱い |
+|---|---|
+| KCOMP-H1 | 要求仕様で3 OS Production＋任意providerへ訂正済み。再発防止はADR-0024と本票前提で継続確認 |
+| KCOMP-H2／H3／H4 | 3 OSの静的実装は完了。実host受入不足をKCOMP2-H3へ再定義 |
+| KCOMP-H5 | KCOMP2-H5へ再定義。catalog追加だけでは実connector不足を閉じない |
+| KCOMP-H6 | KCOMP2-H4へ再定義。Production BLOCKED表示は維持できている |
+| KCOMP-M1 | KCOMP2-M3へ継続 |
+| KCOMP-M2／M3／M4／M6 | 実装上の旧要求処置は反映済み。ただしcatalog鮮度・実運用はKCOMP2-M2／M8で再評価 |
+| KCOMP-M5／M7／M8 | KCOMP2-M5／M6／M7へ継続 |
+| KCOMP-L1 | 比較不能事項の区分を本票§2.2へ維持 |
+| KCOMP-L2 | KCOMP2-L2へ継続 |
 
-macOS Productionでは、少なくとも次の構成classを要件に照らして評価する。
+## 7. 推奨是正順序
 
-- **single-node class**：暗号化外部backupと代替Macへのrestoreを必須にする。HA／SLOを下げる場合はユーザーの明示承認が必要で、実装側が一方的に縮退させない。
-- **externalized state class**：MacはWeb／BFF nodeに限定し、DB、object、queue、IdP、backupを別failure domainへ置く。これは「Mac 1台host」ではなく分散配備である。
-
-どちらも`local-integration`とは別profile、別data、別secret、別tag／manifestを使用する。
-
-**処置結果（2026-08-17）**：ADR-0019 v4とmacOS Production runbookに従い、Docker Desktop／対話login非依存のnative実装を`infra/hosts/macos/`へ追加した。`macos-production`専用root、6つの非login service identity、loopback分離とedge 443だけを公開するpf、`RunAtLoad`／`KeepAlive`付きlaunchd、signed pkg検証、FileVault／sleep事前検査、PostgreSQL base backupを含むoff-host recovery set、hash検証restore、片系drain付きrolling update、liveness／readinessと共通P0 SLO監視を実装した。host dispatcherのDarwin分岐、profile validator、shell構文、全plistを静的検査した。実Mac 2台の全損restore／E2E／SLOは未実施のため、`macos-production` profileとProduction releaseは引き続き`BLOCKED`とする。
-
-### KCOMP-H4：Linux Production profileが欠落している
-
-OCI stackの自然な実行基盤はLinuxだが、現在のrepositoryにはself-host Productionのgolden pathがない。AWS adapterをlocal adapterへ差し替えただけでは、OS update、daemon restart、disk full、certificate renewal、firewall、log rotation、backup整合、restore、secret rotationを所有できない。
-
-Linux profileは、特定distributionのsupport期間、x86_64／arm64、minimum CPU／RAM／disk、LUKS等の暗号化、SELinux／AppArmor、systemd、nftables／Docker chain、rootless可否、UPS、NTP、registry、署名検証をversion固定する。最小hostからのinstallと、全損hostへのrestoreを別担当者が再現して初めてProduction対応になる。Linuxを先に実装しても、macOS／FreeBSDより上位の製品classにはしない。
-
-**処置結果（2026-08-17）**：ADR-0019 v4とLinux Production runbookに従い、Debian 13／Ubuntu 24.04 LTS、x86_64／aarch64のnative実装を`infra/hosts/linux/`へ追加した。最低8 CPU／32 GiB／1 TiB、LUKS2、AppArmor、cgroup v2、NTP、UPS証跡をpreflightで検査し、6つの非login service identity、systemd sandbox／起動順／自動復旧、nftables default deny、暗号化systemd credential、分離journald、証明書更新timerを実装した。version固定deb、detached signature、SBOM、provenanceを検証し、empty-host bootstrap、PostgreSQL base backup／WAL／identity／object・queueを含むrecovery set、hash検証restore、片系rolling update／rollbackを実装した。ユーザー指定により現段階の完了条件はLinuxを含むOS分岐確認までとし、profile validator、shell構文、FreeBSD／Darwin／Linux dispatcherを静的検査した。実Linux上のE2Eは未実施であるため、`linux-production` profileおよびProduction releaseは引き続き`BLOCKED`とする。
-
-### KCOMP-H5：KSASとの差は農機ecosystemで拡大する
-
-KSASの差別化は単なる日誌画面ではなく、対応農機からの自動日誌、食味・収量、可変施肥、機械monitoring、drone、乾燥調製を一体化したecosystemにある。ISASのADR-0012は安全な設計だが、Phase 3計画であり実connectorはない。ADRの存在を製品機能として数えると、導入後に手入力負担が残り、分析dataも集まらない。
-
-最初の目標はKSAS全体の模倣ではない。実顧客が所有する1種類のmachine／file formatについて、取込、圃場照合、日誌候補、人の確定、再送、単位、監査まで縦に通す。その後にKSAS API連携を検討する場合は、農家の明示連携、利用条件、rate、data保持、再配布をconnector台帳で承認する。
-
-### KCOMP-H6：実装済みと運用可能を分ける
-
-ISAS文書は未承認を比較的正直に記録しているが、repository tag、画面の完成度、ADRのクローズ数だけを見る利用者はProduction準備済みと誤認できる。KSASの公開中機能との比較では、この認知差がさらに大きくなる。
-
-host profileごとに次の4状態を機械可読にする。
-
-- `designed`：ADR／contractのみ
-- `implemented`：codeとcomponent testあり
-- `validated`：指定host上の実data／実依存／運用試験を合格
-- `production-authorized`：実manifest、独立承認、段階配備、監視を完了
-
-比較表、README、UI build情報、release noteは最も低い依存状態へ揃える。例えば農機連携は`designed`、Linux self-hostは`implemented`だが未受入、Mac localは`validated for integration only`である。
-
-### KCOMP-M2：分析の入力品質表示
-
-**処置結果（2026-08-17）**：分析APIへsource freshnessに加えて作付単位のcoverageとmanual／machine入力件数・比率を追加した。画面はdata sourceのない作業実績、収量実績、資材実績を数値`0`や「欠測」の指標として描画せず、coverage欄に「データ源なし（指標は非表示）」と表示する。BFF API test、画面test、TypeScript build、i18n coverageで検証した。
-
-### KCOMP-M3：KSAS比較機能のscope
-
-**処置結果（2026-08-17）**：[KSAS比較機能scope決定](../product/KSAS比較機能scope決定.md)で対象顧客jobと採否基準を固定した。remote sensingと診断supportは契約・責任・実data受入が成立するまで`planned`、水管理と乾燥調製は現行roadmapの`out-of-scope`とし、いずれもcore Production gateより前へ割り込ませない。状態は機械可読な[capability catalog](../product/capability-catalog.json)で検査する。
-
-### KCOMP-M4：baselineとProduction表示の分離
-
-**処置結果（2026-08-17）**：README最上部、常時描画するWeb build banner、[release一覧](../release/README.md)に`baseline／Production BLOCKED`を固定表示した。既存`v1.0.0`はbaselineのままとし、Production承認tagを`production/v<version>` namespaceへ分離した。production release validatorとtag発行scriptは旧`v<version>`を拒否し、専用namespaceだけを受理することを自動testで確認した。
-
-### KCOMP-M6：配備別の運用責任
-
-**処置結果（2026-08-17）**：配備別運用台帳へRACI、support時間・timezone、Sev 1〜4定義と初動時間、service owner／on-call／security／脆弱性／privacy窓口、version EOLと移行通知期間を必須化した。Production BFFは`ISAS_OPERATIONS_LEDGER`を起動時に読み、空欄、placeholder、不正窓口、配備ID不一致を拒否する。release manifestも同台帳のdigestと証跡URIを要求する。意図的に不完全なexampleが検査失敗し、完全fixtureが起動・release検査を通ることを自動testで確認した。
-
-## 6.1 未クローズ指摘の実装進捗（2026-08-17）
-
-状態を`対応済`へ変更していない項目には、次の成果物と外部gateが残る。成果物の追加だけを受入完了とみなさない。
-
-| ID | 今回追加した実装・仕様 | 状態を維持する理由 |
-|---|---|---|
-| KCOMP-H3 | `infra/hosts/macos/`のnative実装、launchd／pf、署名済みpkg検査、監視、backup／restore、rolling update、静的validator | 実Mac 2台の全損restore、障害試験、E2E、共通SLO、二人承認の証跡がないため`実装済・受入待ち` |
-| KCOMP-H5 | 要求仕様§5.8、ADR-0012 v2、[capability catalog](../product/capability-catalog.json)、[初回農機connector受入契約](../product/初回農機connector受入契約.md) | 契約済み実connector、実sample、実機受入がない |
-| KCOMP-H6 | 要求仕様§5.8、ADR-0021 v4、Production表示の強制BLOCKED、host別release manifest validator、専用tag namespace | 実UT、実CSV、DR、security、24時間監視を完了したhost別manifestがない |
-| KCOMP-M1 | 要求仕様F-94、ADR-0013 v2、[外部API最小受入契約](../product/外部API最小受入契約.md) | 実client、service identity、sandbox、rate／失効、support受入がない |
-| KCOMP-M5 | 要求仕様§5.2.3、ADR-0019 v4、[host別reference benchmark仕様](host別reference-benchmark仕様.md) | 3 OS上の同一fixtureによる公開実測結果がない |
-| KCOMP-M7 | 要求仕様§5.8、ADR-0019 v4、[3年TCO入力仕様](../operations/3年TCO入力仕様.md)と計算器 | 9組合せの実見積、人件費、停止costが未入力 |
-| KCOMP-M8 | 要求仕様F-85／§5.3、ADR-0003 v10、[vendor exit full export仕様](../operations/vendor-exit-full-export仕様.md) | 完全export／import実装と空ISASへのrestore・削除証明がない |
-
-## 7. ISASが維持すべき差別化候補
-
-敵対的レビューはKSASの機能表をそのまま模倣する提案ではない。次のISAS特性は、実証できれば明確な価値になる。
-
-1. **self-hostとdata control**：cloud vendor依存を避け、法域・組織がdata、鍵、保持、削除を管理できる。ただし運用能力とTCOを隠さない。
-2. **移行入口**：KSAS FAQが他systemからの移行不可とする一方、ISASはCSVとeMAFF境界取込を持つ。完全性とrollbackを実dataで示す。
-3. **offline first**：圏外での日誌、農薬事前警告、未同期状態、競合・失効を一貫して扱う。実機のdata loss試験を通す。
-4. **tenant／scope securityと監査可能性**：設計の詳細ではなく、越境拒否、権限失効、監査chain、restore後整合を第三者試験で示す。
-5. **多言語・RTLとprivacy**：技能実習生を含む利用者、位置同意、短期保持を実利用者と法務が受入する。
-6. **open adapter境界**：特定メーカーへcoreを結合せず、署名adapterとfile importを継続できる。ただし最初の実connectorなしに価値を主張しない。
-
-## 8. 是正工程と再レビューgate
-
-| 順序 | 工程 | 成果物 | 再レビュー合格条件 |
+| 順序 | 工程 | 閉じる主指摘 | 完了条件 |
 |---:|---|---|---|
-| 1 | Product status是正 | capability catalog、README／UI／release表示 | plannedとvalidatedが混在せず、`v1.0.0`がProductionと誤認されない |
-| 2 | ユーザー要求への復帰 | **KCOMP-H1対応済**：要求仕様、共通host契約、ADR、IaC registry、runbook、roadmap、manifest validator | macOS／Linux／FreeBSDを正規Production対象とし、AWSを任意adapter、`local-integration`をMac非本番profileだけに限定 |
-| 3 | 配備ADR再編 | provider-neutral ADR、同格のhost profile、FreeBSD方式裁定 | AWS前提による要求逸脱0件。各OSの完了条件が同じ業務・security・復旧gateへ接続 |
-| 4 | Linux Production | IaC、install／upgrade／rollback／backup／restore／incident runbook | empty host→稼働、全損→restore、RLS／監査／SLO／securityを別担当者がPASS |
-| 5 | macOS Production | production専用profile、runtime保守、auto-start、sleep／update／disk／backup対策 | 共通SLO、再起動・全損復旧・外部監視をPASS。縮退はユーザー承認なしに許可しない |
-| 6 | FreeBSD Production | Jail manifest、native package／ports、rc.d、VNET／pf、ZFS／rctl、install／運用／復旧runbook | 空のFreeBSD hostから構築し、reboot、network分離、resource制御、upgrade／rollback、backup／PITR／全損restore、securityをE2E PASS |
-| 7 | Cross-host artifact | linux/amd64／arm64署名image、SBOM、provenance、compatibility matrix | 同一source／migration／contract test、host固有差分がmanifest化済み |
-| 8 | Core実受入 | 実CSV、3,000圃場benchmark、実端末、UT、法令master、DR | host別manifestへ実証跡を登録しProduction blocker 0件 |
-| 9 | 最初の農機縦切り | 1実format／connector、日誌候補、監査、運用 | 実sample・実機または契約済sandboxで再送／停止／単位／圃場照合PASS |
-| 10 | 製品support | SLA、service desk／on-call、security窓口、EOL、3年TCO | 配備台帳の責任者・連絡先・費用に空欄0件 |
+| 1 | 製品状態と比較表示の再同期 | H5、M2、L1、L2 | catalogが全機能・host・運用状態を網羅し、KSAS同等の無限定表示がない |
+| 2 | Docker撤去R1 | M1 | native PG16＋PostGIS runnerでmigration／S1／S2／S5／S7／S8を再現しCompose spikeを削除 |
+| 3 | Native supply chain | H1 | 3 OS×architectureの署名package、SBOM、provenance、build-once manifestを生成・install |
+| 4 | Release evidence hardening | H2 | 署名証跡、検証済み承認identity、保護tag、迂回不能なtag発行を実証 |
+| 5 | Docker撤去R2〜R5 | M1 | local、CI、AWS adapterをnative化しactive Docker依存0件 |
+| 6 | 3 OS host受入 | H3、M4、M5 | 各OSの2 failure domain、全損restore、E2E、SLO、3,000圃場benchmarkを二人承認 |
+| 7 | 実data・実利用者・DR | H4、M8 | 実CSV、実端末、実UT、WCAG、penetration、月次restore、四半期DRをPASS |
+| 8 | Portability・TCO | M6、M7 | full export→空ISAS restore、削除証明、9組合せTCOを承認 |
+| 9 | 最小API・農機縦切り | H5、M3 | 実clientと1実connectorを契約済みsample／実機で受入 |
 
-## 9. 再レビューで提出する証拠
+## 8. 再レビュー提出物
 
-1. 変更後の要求仕様とADR差分。host／runtime／failure domainの用語が一意であること。
-2. 各hostのmachine-readable manifest：OS、kernel、arch、container runtime、filesystem、暗号化、resource、component digest、migration set。
-3. Linux、Mac、FreeBSD採用方式それぞれのinstall、reboot、upgrade、rollback、disk full、certificate更新、backup、bare-metal相当restore結果。
-4. tenant越境、MFA／失効、監査chain、queue／object障害、未同期PWA更新、写真回収、RPO／RTOのhost別結果。
-5. 3,000圃場と複雑polygon、日誌履歴、写真、同時利用者を含む性能data。KSAS値との優劣ではなくISAS SLOへの合否を示す。
-6. 作業員、高齢作業員、技能実習生の実UTと、manualだけで管理者が復旧できる運用演習。
-7. 機能状態catalogと、公開比較資料の根拠URL・確認日・承認者。
-8. 3年TCO、運用要員、support時間、security連絡先、EOL／migration policy。
+1. 3 OS native build manifestと、実際に生成したpackage／signature／SBOM／provenance。
+2. 各hostのinstall、reboot、start／stop、upgrade、rollback、backup、PITR、全損restore、security、E2E、SLO証跡。
+3. content digestと署名に束縛されたrelease／delivery／bake証跡、検証済み二者承認、保護tag event。
+4. Docker撤去台帳でR1〜R5が完了し、active dependencyが0件である検査結果。
+5. 実CSV、実端末、実ユーザーUT、手動WCAG、独立penetration、PWA data保持結果。
+6. 実日本PMTiles／NOTICE／SBOM、3,000圃場benchmark、実地図境界照合。
+7. full exportから空ISASへのrestore、削除証明、3年TCO、実運用台帳。
+8. 最初の外部API clientと農機connectorの契約・sample・再送・監査証跡。
 
-## 10. 参照資料
+## 9. 参照資料
 
-### ISAS正本
+### 9.1 ISAS正本
 
-- [農業営農支援システム 要求仕様書](../農業営農支援システム_要求仕様書.md)
-- [ADR-0012 農機連携](../design/ADR/ADR-0012-農機連携アーキテクチャ.md)
-- [ADR-0013 外部API／Webhook](../design/ADR/ADR-0013-外部API-Webhook.md)
+- [要求仕様書](../農業営農支援システム_要求仕様書.md)
+- [開発工程](../開発工程.md)
 - [ADR-0019 インフラ・運用](../design/ADR/ADR-0019-インフラ・運用.md)
 - [ADR-0021 テスト・リリース](../design/ADR/ADR-0021-テスト・リリース方式.md)
-- [ADR-0023 Mac本番相当ローカル統合環境](../design/ADR/ADR-0023-Mac本番相当ローカル統合環境.md)
-- [Phase 2〜4実装計画](../roadmap/Phase-2-4実装計画.md)
-- [開発工程](../開発工程.md)
-- [Release 1.0.0](../release/RELEASE-1.0.0.md)
-- [Productionリリース承認 敵対的レビュー](Productionリリース承認_敵対的レビュー.md)
-- [システム管理者運用ガイド](../manual/システム管理者運用ガイド.md)
+- [ADR-0024 Docker段階的撤去](../design/ADR/ADR-0024-Docker段階的撤去.md)
+- [Productionホスト共通契約](../operations/Productionホスト共通契約.md)
+- [capability catalog](../product/capability-catalog.json)
+- [host別reference benchmark仕様](host別reference-benchmark仕様.md)
+- [vendor exit full export仕様](../operations/vendor-exit-full-export仕様.md)
+- [Release一覧](../release/README.md)
 
-### KSAS公式公開資料（2026-08-17確認）
+### 9.2 KSAS公式公開資料
 
-- [KSASとは／初めての方へ](https://agriculture.kubota.co.jp/ksas/beginner/)
-- [KSAS機能紹介](https://agriculture.kubota.co.jp/ksas/function/)
-- [KSAS FAQ](https://agriculture.kubota.co.jp/ksas/faq/)
-- [KSASマニュアル一覧](https://agriculture.kubota.co.jp/ksas/member/03.html)
-- [KSAS作業日誌](https://agriculture.kubota.co.jp/ksas/function/02.html)
-- [KSAS在庫管理・作業時間分析](https://agriculture.kubota.co.jp/ksas/versionup/vol30.html)
-- [KSAS API開発者向けサイト](https://developers.ksas.kubota.co.jp/)
-- [KSASサービス利用契約に関する会員規約](https://agriculture.kubota.co.jp/ksas/terms/)
+| 資料 | URL | 2026-08-22に確認した範囲 | 次回確認期限 |
+|---|---|---|---|
+| 機能紹介 | <https://agriculture.kubota.co.jp/ksas/function/> | 圃場、日誌、進捗、作付、帳票、農機、drone、収量、可変施肥、乾燥、monitoring | 2026-11-22 |
+| FAQ | <https://agriculture.kubota.co.jp/ksas/faq/> | 移行不可、Excel出力、smartphone制約、3,000圃場、料金、農薬DB更新 | 2026-11-22 |
+| 2026年manual一覧 | <https://agriculture.kubota.co.jp/ksas/member/03.html> | PC／smartphone機能、AI診断、remote sensing、Marketplace、AIチャット、生育予測 | 2026-11-22 |
+| KSAS Developers | <https://developers.ksas.kubota.co.jp/> | API開発者サイトの公開 | 2026-11-22 |
+| Service desk | <https://agriculture.kubota.co.jp/ksas/member/04.html> | 平日窓口、24時間AI chat | 2026-11-22 |
+| 会員規約 | <https://agriculture.kubota.co.jp/ksas/terms/> | 機械・位置情報、料金、Marketplace、service変更条件 | 2026-11-22 |
 
-### Runtime公式資料（2026-08-17確認）
-
-- [Docker Engine supported installation platforms](https://docs.docker.com/engine/install/)
-- [Docker Desktop for Mac requirements](https://docs.docker.com/desktop/setup/install/mac-install/)
-- [Docker Desktop support scope](https://docs.docker.com/support/)
-
-## 11. 最終判定
+## 10. 最終判定
 
 | 判定対象 | 結果 |
 |---|---|
-| ISAS業務coreをKSAS比較のpilotへ使う | **条件付き可**。synthetic／隔離data、非Production表示、手入力coreにscopeを限定 |
-| ISASをKSAS同等の完成製品と表示する | **不可**。農機ecosystem、実API、support、実受入に重大差 |
-| LinuxでProduction hostする | **要求上は必須、実装は未承認**。Production artifactと実運用gateが必要 |
-| macOSでProduction hostする | **要求上は必須、実装は未承認**。`local-integration`とは別のProduction profileが必要 |
-| FreeBSDでProduction hostする | **要求上は必須、実装は未承認**。FreeBSD Jailを前提とするProduction profileと共通運用gateの実装・受入が必要 |
-| `v1.0.0`をProduction releaseとして扱う | **不可**。baseline tagでありProductionは`BLOCKED` |
+| ISAS業務coreを隔離pilotで評価する | **条件付き可**。synthetic／複製data、非Production表示、手入力core、復旧可能な範囲に限定 |
+| ISASをKSAS同等または全面代替と表示する | **不可**。農機ecosystem、support、実受入、native配布、APIに重大差がある |
+| macOS／Linux／FreeBSDでProduction hostする | **要求上は対象、現状は全て不可**。静的profileはあるがnative配布物と実host受入がない |
+| Docker非依存製品と表示する | **不可**。R0のみ完了し4依存群が移行中 |
+| `v1.0.0`をProduction releaseとして扱う | **不可**。baselineでありProductionは`BLOCKED` |
+| KSASから実データの業務正本を移す | **不可**。High 5件と実移行／復旧gateが未クローズ |
 
-未処置High 5件を閉じるまで、実データの業務正本化、KSASからの切替、Production release、3 OS対応の対外表明を承認しない。
+High 5件が全て閉じ、選択hostのProduction manifestが署名済み実証跡と二人承認を持つまで、KSASからの切替、Production tag、3 OS対応済みの対外表示を承認しない。
