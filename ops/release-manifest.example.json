@@ -40,7 +40,8 @@
     "staging_acceptance": { "status": "blocked", "evidence": "replace-me" },
     "data_migration": { "status": "blocked", "evidence": "replace-me" },
     "user_acceptance": { "status": "blocked", "evidence": "replace-me" },
-    "operational_acceptance": { "status": "blocked", "evidence": "replace-me" }
+    "operational_acceptance": { "status": "blocked", "evidence": "replace-me" },
+    "business_cutover_acceptance": { "status": "blocked", "evidence": "replace-me" }
   },
   "quality": {
     "no_data_count": 1,

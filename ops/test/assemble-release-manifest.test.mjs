@@ -21,6 +21,7 @@ function readyManifest() {
       unit_contract: gate(), postgres_rls: gate(), e2e_pwa: gate(), accessibility: gate(), security: gate(),
       supply_chain: gate(), performance_slo: gate(), device_encryption: gate(), staging_acceptance: gate(),
       data_migration: gate(), user_acceptance: gate(), operational_acceptance: gate(),
+      business_cutover_acceptance: gate(),
     },
     quality: { no_data_count: 0, unresolved_high: 0, unresolved_medium: 0, error_budget_remaining_percent: 80, active_sev1: 0, active_sev2: 0 },
     dr: { status: "pass", tested_at: "2026-08-01T00:00:00Z", rpo_minutes: 5, rto_minutes: 90, recovery_set_id: "rs-jp-20260801", evidence: "artifact://dr/20260801" },

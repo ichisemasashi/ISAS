@@ -45,6 +45,7 @@ function readyManifest() {
       security: gate(), supply_chain: gate(), performance_slo: gate(),
       device_encryption: gate(), staging_acceptance: gate(), data_migration: gate(),
       user_acceptance: gate(), operational_acceptance: gate(),
+      business_cutover_acceptance: gate(),
     },
     quality: {
       no_data_count: 0, unresolved_high: 0, unresolved_medium: 0,

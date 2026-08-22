@@ -17,6 +17,7 @@ const REQUIRED_GATES = [
   "data_migration",
   "user_acceptance",
   "operational_acceptance",
+  "business_cutover_acceptance",
 ];
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
