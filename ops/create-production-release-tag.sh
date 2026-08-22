@@ -1,8 +1,15 @@
 #!/bin/sh
 set -eu
 
-[ "$#" -eq 1 ] || { echo "usage: $0 BAKE_EVIDENCE" >&2; exit 64; }
-evidence_file=$1
+[ "$#" -eq 6 ] || { echo "usage: $0 RELEASE BUILD DELIVERY_STATE BAKE_EVIDENCE AUTHORIZATION TRUSTED_PUBLIC_KEY" >&2; exit 64; }
+release_file=$1
+build_file=$2
+delivery_file=$3
+evidence_file=$4
+authorization_file=$5
+trusted_public_key=$6
+node ops/check-production-release.mjs "$release_file" "$build_file" "$delivery_file" "$evidence_file"
+node ops/check-production-tag-authorization.mjs "$release_file" "$build_file" "$delivery_file" "$evidence_file" "$authorization_file" "$trusted_public_key"
 tag_name=$(jq -er '.tag.name' "$evidence_file")
 target_commit=$(jq -er '.tag.target_commit' "$evidence_file")
 case "$tag_name" in production/v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "invalid production tag namespace" >&2; exit 64 ;; esac

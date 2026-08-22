@@ -154,10 +154,11 @@ gh workflow run finalize-production.yml \
   -f build_run_id=<build-run-id> \
   -f release_manifest_s3_uri=s3://<production-ops-evidence>/releases/v1.1.0.json \
   -f production_deployment_manifest_s3_uri=s3://<production-ops-evidence>/releases/deployment-manifest.json \
-  -f production_bake_evidence_s3_uri=s3://<production-ops-evidence>/releases/v1.1.0-production-bake.json
+  -f production_bake_evidence_s3_uri=s3://<production-ops-evidence>/releases/v1.1.0-production-bake.json \
+  -f tag_authorization_s3_uri=s3://<production-ops-evidence>/releases/v1.1.0.authorization.json
 ```
 
-workflowは24時間経過と全blocking alarmの`OK`を再検査し、stable slotへ同じtask definitionを反映してtrafficをstable 100%／canary 0%へ戻す。その後、release／build／delivery／24時間証跡のcommit・digest、`prepared→5→25→100→finalized`、各観測時間・transaction、最終二者承認を再検証する。すべてPASSした場合だけ`v<release.version>`のannotated tagを対象commitへ作りoriginへpushする。既存tag、24時間未満、signal欠落、承認者重複、manifest差し替えではtagを作らない。
+workflowは24時間経過と全blocking alarmの`OK`を再検査し、stable slotへ同じtask definitionを反映してtrafficをstable 100%／canary 0%へ戻す。その後、release／build／delivery／24時間証跡のcommit・digest、`prepared→5→25→100→finalized`、各観測時間・transactionを再検証する。さらに署名authorizationをpin済み公開鍵で検証し、4ファイルの実digest、GitHub `production-release` Environmentの異なる二者、activeな`production/v*` ruleset snapshot、`production_tag_authorized` audit event snapshotが一致する場合だけ`production/v<release.version>`のannotated tagを対象commitへ作りoriginへpushする。既存tag、24時間未満、signal欠落、承認者重複、manifest差し替え、署名不正ではtagを作らない。
 
 ## 6. dashboard・alertの操作
 
