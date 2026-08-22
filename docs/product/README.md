@@ -8,9 +8,10 @@ node ops/product/check-capability-catalog.mjs docs/product/capability-catalog.js
 
 | 状態 | 表示上の意味 |
 |---|---|
-| `implemented` | codeと自動testがある。実運用受入は別gate |
-| `validated` | 指定された実環境・実data・実利用者の証跡がある |
-| `planned` | 設計・計画のみ。利用可能と案内しない |
+| `designed` | 要求・設計・計画のみ。利用可能と案内しない |
+| `static-implemented` | code・設定・自動testがある。実運用受入は別gate |
+| `integration-validated` | 指定された非本番実環境で統合検証済み |
+| `production-authorized` | Production release manifestと承認証跡が成立 |
 | `out-of-scope` | 現在の製品scope外 |
 
 対外提供scopeは「圃場・指示・日誌・農薬・在庫のself-host／offline core」に限定する。農機・remote sensing等は名前だけから利用可能と推測せず、JSONの状態と証跡を確認する。「KSAS同等」「KSAS全面代替」は現在表示禁止である。
@@ -20,3 +21,5 @@ node ops/product/check-capability-catalog.mjs docs/product/capability-catalog.js
 ```bash
 node ops/product/check-machinery-connector-acceptance.mjs /secure/evidence/connector-acceptance.json
 ```
+
+各capabilityを`business`、`platform`、`operations`へ分類し、証拠はrepository相対pathとそのbyte列のSHA-256で固定する。validatorは必須capability、3分類、確認期限、path存在、digest一致を検査するため、実装変更後は同じ変更のreviewでdigestと`asOf`／`reviewDueAt`を更新する。期限切れや証拠差替えのままCIを通してはならない。

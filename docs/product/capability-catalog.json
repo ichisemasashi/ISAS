@@ -1,29 +1,50 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "asOf": "2026-08-22",
+  "reviewDueAt": "2026-11-22",
   "productionAvailability": "BLOCKED",
   "publicScope": "圃場・指示・日誌・農薬・在庫のself-host／offline core",
+  "statusDefinitions": {
+    "designed": "要求・設計・計画だけで利用可能ではない",
+    "static-implemented": "code・設定・自動testがあるが指定実環境の受入前",
+    "integration-validated": "指定した非本番実環境で統合検証済み",
+    "production-authorized": "Production release manifestと承認証跡が成立",
+    "out-of-scope": "現在の製品scope外"
+  },
   "comparisonClaims": {
     "ksasEquivalent": false,
     "status": "PROHIBITED",
     "reason": "契約済み実connectorの実sample・実機縦切り受入がなく、農機・drone・食味収量・可変施肥・機械monitoring ecosystemを提供していない",
     "missingEcosystem": ["農機自動日誌", "drone", "食味・収量連携", "可変施肥", "機械monitoring"]
   },
-  "statusDefinitions": {
-    "implemented": "コードと自動testはあるが、対象hostの実運用受入は未完了",
-    "validated": "要求された実環境・実data・実利用者の受入証跡がある",
-    "planned": "計画または設計だけで、利用可能とは表示しない",
-    "out-of-scope": "現在の製品scopeには含めない"
-  },
   "capabilities": [
-    { "id": "core-field-journal", "name": "圃場・作業指示・日誌・農薬・在庫のself-host／offline core", "status": "implemented", "phase": "Phase 1", "public": true, "evidence": ["apps/web", "apps/bff"] },
-    { "id": "offline-sync", "name": "担当圃場のoffline利用と同期", "status": "implemented", "phase": "Phase 1", "evidence": ["apps/web/src/sync.ts", "apps/bff/src/sync-service.mjs"] },
-    { "id": "tenant-analytics", "name": "tenant内の計画対実績分析", "status": "implemented", "phase": "Phase 2", "evidence": ["apps/web/src/TenantAnalyticsPanel.tsx", "apps/bff/src/postgres-mvp-repository.mjs"] },
-    { "id": "machinery-file-import", "name": "ISOBUS／ISO-XML農機file取込", "status": "planned", "phase": "Phase 3", "evidence": ["docs/design/ADR/ADR-0012-農機連携アーキテクチャ.md"] },
-    { "id": "wagri-machinery-connector", "name": "農機OpenAPI（WAGRI）connector", "status": "planned", "phase": "Phase 3", "evidence": ["docs/product/初回農機connector受入契約.md"] },
-    { "id": "remote-sensing", "name": "remote sensing／生育map", "status": "planned", "phase": "Phase 3以降・契約成立後", "evidence": ["docs/product/KSAS比較機能scope決定.md"] },
-    { "id": "water-management", "name": "水管理", "status": "out-of-scope", "phase": "現行roadmap外", "evidence": ["docs/product/KSAS比較機能scope決定.md"] },
-    { "id": "drying-preparation", "name": "乾燥調製", "status": "out-of-scope", "phase": "現行roadmap外", "evidence": ["docs/product/KSAS比較機能scope決定.md"] },
-    { "id": "diagnostic-support", "name": "病害虫診断support", "status": "planned", "phase": "Phase 3以降・契約／安全責任確定後", "evidence": ["docs/product/KSAS比較機能scope決定.md"] }
+    { "id": "field-gis", "category": "business", "name": "圃場GIS", "status": "static-implemented", "phase": "Phase 1", "public": true, "evidence": [{ "path": "apps/bff/migrations/0003_field_gis.sql", "digest": "sha256:372e32274483905d6d5767a8575372d511ca248e4ba6a95db037e26626c3170a" }] },
+    { "id": "emaff-import", "category": "business", "name": "eMAFF農地境界取込", "status": "static-implemented", "phase": "Phase 1", "public": true, "evidence": [{ "path": "apps/web/src/emaff-import.ts", "digest": "sha256:e931e7610a520163d5d6008855b7775dbb2305d76f82794b94f278d84150089c" }] },
+    { "id": "work-journal", "category": "business", "name": "作業指示・日誌", "status": "static-implemented", "phase": "Phase 1", "public": true, "evidence": [{ "path": "apps/bff/migrations/0004_work_management.sql", "digest": "sha256:70a42b6d802cbd9376b33547276f9b9d2be37dbf4fbabe181c4dad4800543c2e" }] },
+    { "id": "pesticide-inventory", "category": "business", "name": "農薬・在庫core", "status": "static-implemented", "phase": "Phase 1", "public": true, "evidence": [{ "path": "apps/bff/migrations/0007_pesticide_inventory.sql", "digest": "sha256:7095d7ddcbc10e0089ca0240bd0cde9aa8d5087a8d0d9cb9637b9bea4e3e3a41" }] },
+    { "id": "csv-migration", "category": "business", "name": "CSV移行・出力", "status": "static-implemented", "phase": "Phase 1", "evidence": [{ "path": "apps/bff/migrations/0008_data_migration.sql", "digest": "sha256:3e714c5812147466fbff6956d9fdb4d8b4b2756b16ad0b32a303b427d93b6868" }] },
+    { "id": "advanced-planning", "category": "business", "name": "作付計画・高度Gantt", "status": "static-implemented", "phase": "Phase 2", "evidence": [{ "path": "apps/bff/migrations/0014_advanced_planning.sql", "digest": "sha256:ce7b1bc8bb6dfb240131f216f20309037c910b5ff1a01a1b4f575030d9f66964" }] },
+    { "id": "inventory-traceability", "category": "business", "name": "在庫高度化・traceability", "status": "static-implemented", "phase": "Phase 2", "evidence": [{ "path": "apps/bff/migrations/0015_inventory_traceability.sql", "digest": "sha256:edf7cfa0e5649c3d02d9fc6d0f91b222772e464fd255d279e31e09462a320f0b" }] },
+    { "id": "location-work-actuals", "category": "business", "name": "位置log・作業実績", "status": "static-implemented", "phase": "Phase 2", "evidence": [{ "path": "apps/bff/migrations/0016_location_work_actuals.sql", "digest": "sha256:246da01032252b542423237710925ac5f0f99dc1a099680accc12bd59ae0ba9c" }] },
+    { "id": "tenant-analytics", "category": "business", "name": "tenant内分析", "status": "static-implemented", "phase": "Phase 2", "evidence": [{ "path": "apps/bff/migrations/0017_tenant_operational_analytics.sql", "digest": "sha256:41f29411736a1cbbcae52cb1a9e2791b0e1db95d30ebf598a58193d4ccf3ca21" }] },
+    { "id": "offline-sync", "category": "platform", "name": "offline cache・outbox・同期", "status": "static-implemented", "phase": "Phase 1", "evidence": [{ "path": "apps/web/src/sync.ts", "digest": "sha256:8bf96a178a6dbaaf4ce6e46ba09721db09acfe257906bcbfbd27fdb9b9c9f0b6" }] },
+    { "id": "i18n", "category": "platform", "name": "i18n L1-L2", "status": "static-implemented", "phase": "Phase 2", "evidence": [{ "path": "apps/web/src/i18n.ts", "digest": "sha256:16d9c1e0a49d7aaf2c6502176846bea26cca2246dec941d0906151e81896e767" }] },
+    { "id": "security-administration", "category": "platform", "name": "管理者security操作", "status": "static-implemented", "phase": "Phase 1", "evidence": [{ "path": "apps/bff/migrations/0011_security_administration.sql", "digest": "sha256:a726b7dcff2c04d86163749f5b0506bebdca2c487b5bcba85905f36219a299da" }] },
+    { "id": "production-bff-runtime", "category": "platform", "name": "Production BFF runtime", "status": "static-implemented", "phase": "Phase 1", "evidence": [{ "path": "apps/bff/src/http-runtime.mjs", "digest": "sha256:c46b70af205efc94268d49576c2a07995f95b3c917c778216d00e56920249450" }] },
+    { "id": "macos-native-profile", "category": "platform", "name": "macOS native Production profile", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "infra/hosts/macos/profile.json", "digest": "sha256:12bfc5180cd2efc2828e0dc46bdbea37ea8be2ca63fc7f82e5e9389a6ea40f1f" }] },
+    { "id": "linux-native-profile", "category": "platform", "name": "Linux native Production profile", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "infra/hosts/linux/profile.json", "digest": "sha256:522cb9540d83343261b9401d60104361aff8ec2660c6fc9ad4829dfb272703d1" }] },
+    { "id": "freebsd-native-profile", "category": "platform", "name": "FreeBSD Jail Production profile", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "infra/hosts/freebsd/profile.json", "digest": "sha256:15266ae32fc01c2ca158318f5cb80e7194a812791f33b13f557ee3afa8c111bb" }] },
+    { "id": "native-artifact-supply", "category": "platform", "name": "3 OS native artifact供給", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "ops/native-artifacts/native-artifact-contract.json", "digest": "sha256:34ddff1d70b28951c3263dbfe67d521435736967166619ba984ec3c0c79a23c1" }] },
+    { "id": "docker-retirement", "category": "platform", "name": "Docker段階的撤去", "status": "designed", "phase": "R0完了・R1-R5進行中", "evidence": [{ "path": "ops/docker-retirement/docker-retirement-inventory.json", "digest": "sha256:506887e44ff8e50bbb55634de64f9ce4d2269661e8f8fc4e02db3703e487a75f" }] },
+    { "id": "external-read-api", "category": "platform", "name": "外部read-only API", "status": "designed", "phase": "Phase 3", "evidence": [{ "path": "docs/product/初回農機connector受入契約.md", "digest": "sha256:6e15c373dbbbf6524eec52d7e0bad584464ad5b8c41bbc4bc4d9dc5a076a786b" }] },
+    { "id": "wagri-machinery-connector", "category": "platform", "name": "農機OpenAPI connector", "status": "designed", "phase": "Phase 3", "evidence": [{ "path": "docs/product/初回農機connector受入契約.md", "digest": "sha256:6e15c373dbbbf6524eec52d7e0bad584464ad5b8c41bbc4bc4d9dc5a076a786b" }] },
+    { "id": "remote-sensing", "category": "business", "name": "remote sensing・生育map", "status": "designed", "phase": "Phase 3以降", "evidence": [{ "path": "docs/product/KSAS比較機能scope決定.md", "digest": "sha256:df6cb385bd9f16ffb5a85fbb5a933fdf916ea5274f6844750c7c45891ef8e9a9" }] },
+    { "id": "water-management", "category": "business", "name": "水管理", "status": "out-of-scope", "phase": "現行roadmap外", "evidence": [{ "path": "docs/product/KSAS比較機能scope決定.md", "digest": "sha256:df6cb385bd9f16ffb5a85fbb5a933fdf916ea5274f6844750c7c45891ef8e9a9" }] },
+    { "id": "drying-preparation", "category": "business", "name": "乾燥調製", "status": "out-of-scope", "phase": "現行roadmap外", "evidence": [{ "path": "docs/product/KSAS比較機能scope決定.md", "digest": "sha256:df6cb385bd9f16ffb5a85fbb5a933fdf916ea5274f6844750c7c45891ef8e9a9" }] },
+    { "id": "diagnostic-support", "category": "business", "name": "病害虫診断support", "status": "designed", "phase": "Phase 3以降", "evidence": [{ "path": "docs/product/KSAS比較機能scope決定.md", "digest": "sha256:df6cb385bd9f16ffb5a85fbb5a933fdf916ea5274f6844750c7c45891ef8e9a9" }] },
+    { "id": "signed-release-security", "category": "operations", "name": "署名release・tag認可", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "ops/check-production-tag-authorization.mjs", "digest": "sha256:07d44d0b6fe6027ae8377df406832531b30da8229482b523f1db6f5ca9d3354d" }] },
+    { "id": "business-cutover", "category": "operations", "name": "業務正本切替受入", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "ops/check-business-cutover-acceptance.mjs", "digest": "sha256:ec4745c049ceb3bf4bc455cca2fe30fc81be53fba1fdcd520bb2ee1ab09cd856" }] },
+    { "id": "backup-dr", "category": "operations", "name": "Backup・restore・DR受入", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "ops/recovery/check-operational-acceptance.mjs", "digest": "sha256:1a9a7c82cda7d4d5ef373ba2e2468d7d2c8e4d15332a4d07119ceaa4a6bbbeba" }] },
+    { "id": "operations-guide", "category": "operations", "name": "管理者運用guide", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "docs/manual/システム管理者運用ガイド.md", "digest": "sha256:0405d1b0023664a4a07944ca47e1740b4dd00180415cfa9d8558e7713f49ed36" }] }
   ]
 }
