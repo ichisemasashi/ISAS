@@ -77,7 +77,7 @@ KSASの公開画面・manual・FAQからは提供機能、利用条件、料金�
 | KCOMP2-M4 | Medium | GIS・offline map | eMAFF importとoffline map codeはあるが、実日本PMTiles／NOTICE／SBOM、端末容量、地理院停止時の縮退、実農地境界精度を実環境で受入していない | 選択hostで実成果物を署名・配布し、担当scope、Range再認可、容量上限、失効、地図停止、現地境界照合を実機確認する | **実装済み・実受入待ち** |
 | KCOMP2-M5 | Medium | Capacity | 3,000圃場benchmarkは仕様だけで、3 OSの同一fixture結果がない。KSASの推奨件数をISASの処理能力として引用できない | 複雑polygon、履歴、写真、同時20／50／100利用者を含む実測を3 OS別に公開し、ISAS SLOへの合否だけを判定する | **同一fixture・証跡gate実装済み・3 OS実測待ち** |
 | KCOMP2-M6 | Medium | TCO | 3年TCO計算器はあるが9組合せが仮値で、host、予備機、電力、backup、IdP、監視、保守者、incident、停止costを比較できない | macOS／Linux／FreeBSD×100／1,000／3,000圃場の実見積、要員、更新頻度、停止costを承認する | **見積・承認gate実装済み・実見積待ち** |
-| KCOMP2-M7 | Medium | Portability | full export仕様はあるがexport／import code、attachment、監査chain、別の空ISASへのrestore、削除証明がない | snapshot manifest、全dataset／object、hash、再import、RLS、監査chain、二人承認付き削除証明を実装・実証する | **未処置** |
+| KCOMP2-M7 | Medium | Portability | full export仕様はあるがexport／import code、attachment、監査chain、別の空ISASへのrestore、削除証明がない | snapshot manifest、全dataset／object、hash、再import、RLS、監査chain、二人承認付き削除証明を実装・実証する | **bundle core実装済み・実DB／object restore実証待ち** |
 | KCOMP2-M8 | Medium | Support | 運用台帳schemaと起動時検査はあるが、実配備のservice owner、on-call、security／privacy窓口、保守時間、EOL、契約、費用の承認証跡がない | Production候補ごとに実名ではなく検証可能な組織identity／連絡経路を登録し、訓練・引継ぎ・不在時escalationを演習する | **実装済み・実運用受入待ち** |
 | KCOMP2-L1 | Low | 文書整合 | 運用文書の一部にAWS固有commandが一般Production手順のように残り、`v<version>`と`production/v<version>`の表記揺れもある | host-neutral入口から選択adapterへ分岐させ、tag namespace、artifact語、Docker移行表示を全文scanで統一する | **未処置** |
 | KCOMP2-L2 | Low | 比較鮮度 | KSASは2026-07-22にも更新され、manual掲載機能と料金・規約は変化する。Markdownの確認日だけでは期限超過をCIで検出できない | source URL、確認日、再確認日、確認範囲、hashまたはsnapshot IDを機械可読台帳にし、release reviewで期限切れを拒否する | **本票で暫定対応、CI未実装** |

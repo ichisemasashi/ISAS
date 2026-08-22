@@ -1,4 +1,4 @@
-# vendor exit full export仕様（KCOMP-M8）
+# vendor exit full export仕様（KCOMP2-M7）
 
 CSV単体では完了としない。1 tenantを停止時点へ固定し、次のdatasetを同一snapshotから出力する。
 
@@ -10,4 +10,6 @@ CSV単体では完了としない。1 tenantを停止時点へ固定し、次の
 
 top-level manifestにはexport schema version、source release／migration、tenant、snapshot時刻、各fileのmedia type・record count・byte count・SHA-256、attachment object key mapping、第三者dataの除外理由を記録する。別の空ISASへimportし、件数、hash、参照整合、RLS範囲、添付download、監査chainを検証する。原配備の削除はrestore検証と二人承認後だけ行い、対象、日時、消去方式、backup失効予定、legal hold、実行者・確認者を削除証明へ残す。
 
-現状はこの完全export／import経路と実restore証跡がないため`未処置`である。部分CSVをvendor exit完了と表示しない。
+bundle coreは`apps/bff/src/portability.mjs`を正本とする。`PORTABILITY_DATASETS`の全datasetを1つのfrozen tenant snapshotからNDJSON化し、添付本体をobject storageから取得する。manifestは各fileの件数・byte数・SHA-256、object key mapping、第三者dataの除外理由を保持する。restoreは空targetだけを受け入れ、全datasetと添付をtransactionへ投入した後、件数、hash、参照整合、RLS、添付download、監査chainが全てPASSしなければrollbackする。削除証明はrestore PASS、legal holdなし、backup失効日、消去方式、異なる二者を必須とする。
+
+自動testはbundle改変拒否、全dataset／object round-trip、restore検証、二者削除証明を確認する。ただし、選択hostの実PostgreSQL、実object storage、別の空ISASを用いたrestoreと原配備の削除は未実施である。実adapterを接続した受入証跡が成立するまで、部分CSVやunit testをvendor exit完了と表示しない。
