@@ -1,10 +1,29 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "currency": "JPY",
   "pricedAt": "replace-me",
-  "profiles": [
-    { "hostOs": "macos", "fieldCount": 100, "oneTime": "replace-me", "monthly": "replace-me", "annual": "replace-me", "downtime": "replace-me", "updateCount36Months": "replace-me" },
-    { "hostOs": "linux", "fieldCount": 1000, "oneTime": "replace-me", "monthly": "replace-me", "annual": "replace-me", "downtime": "replace-me", "updateCount36Months": "replace-me" },
-    { "hostOs": "freebsd", "fieldCount": 3000, "oneTime": "replace-me", "monthly": "replace-me", "annual": "replace-me", "downtime": "replace-me", "updateCount36Months": "replace-me" }
-  ]
+  "profiles": [],
+  "profileTemplate": {
+    "hostOs": "macos|linux|freebsd",
+    "fieldCount": "100|1000|3000",
+    "assumptions": { "service_owner": "replace-me", "maintainer_fte": "replace-me" },
+    "frequencies36Months": { "os_updates": "replace-me", "application_updates": "replace-me", "restore_dr_drills": "replace-me", "incidents": "replace-me" },
+    "costs": {
+      "primary_host": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "spare_host": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "storage": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "power": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "network": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "backup": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "idp": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "monitoring": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "maintenance_labor": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "security_updates": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "restore_dr": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "incidents": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "planned_downtime": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } },
+      "unplanned_downtime": { "amount": "replace-me", "quote": { "uri": "replace-me", "digest": "replace-me", "validUntil": "replace-me" } }
+    }
+  },
+  "approvals": []
 }
