@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "services": ["database", "identity", "object-queue", "app", "edge", "telemetry"],
+  "targets": [
+    { "host_os": "macos", "architectures": ["arm64", "amd64"], "format": "pkg", "runner_labels": ["self-hosted", "macos"] },
+    { "host_os": "linux", "architectures": ["x86_64", "aarch64"], "format": "deb", "runner_labels": ["self-hosted", "linux"] },
+    { "host_os": "freebsd", "architectures": ["amd64", "arm64"], "format": "pkg", "runner_labels": ["self-hosted", "freebsd"] }
+  ],
+  "service_payloads": {
+    "database": { "sources": ["apps/bff/migrations", "infra/local/database/migrations"], "executable_env": "ISAS_DATABASE_EXECUTABLE" },
+    "identity": { "sources": ["infra/local/keycloak"], "executable_env": "ISAS_IDENTITY_EXECUTABLE" },
+    "object-queue": { "sources": ["apps/bff/src", "apps/bff/runtime-adapters"], "executable_env": "ISAS_OBJECT_QUEUE_EXECUTABLE" },
+    "app": { "sources": ["apps/bff/bin", "apps/bff/src", "apps/bff/runtime-adapters", "apps/bff/package.json", "apps/bff/package-lock.json"], "executable_env": "ISAS_APP_EXECUTABLE" },
+    "edge": { "sources": ["apps/web/dist", "infra/local/caddy"], "executable_env": "ISAS_EDGE_EXECUTABLE" },
+    "telemetry": { "sources": ["infra/local/telemetry"], "executable_env": "ISAS_TELEMETRY_EXECUTABLE" }
+  },
+  "required_attestations": ["sha256", "signature", "sbom-spdx-json", "provenance-slsa-v1"]
+}
