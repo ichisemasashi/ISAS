@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "finding": "KCOMP2-M1",
+  "phase": "R1",
+  "recorded_at": "2026-08-22T12:10:00+09:00",
+  "runtime_profile": "native-macos-arm64",
+  "command": "ISAS_PG16_BIN=/opt/homebrew/opt/postgresql@16/bin ./spikes/run-native.sh",
+  "components": {
+    "postgresql": "16.15",
+    "postgis": "3.6.4",
+    "proj": "9.6.2"
+  },
+  "checks": {
+    "all_versioned_migrations": "PASS",
+    "production_auth_context_security": "PASS",
+    "versioned_verify_sql": "PASS",
+    "rollback_0017_through_0013": "PASS",
+    "S1": "PASS",
+    "S2": "PASS",
+    "S5": "PASS",
+    "S7_tests": "15/15 PASS",
+    "S8": "PASS"
+  },
+  "result": "PASS",
+  "retired_paths": [
+    "spikes/docker-compose.yml",
+    "spikes/run.sh"
+  ]
+}

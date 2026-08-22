@@ -118,42 +118,13 @@ psql "$DATABASE_URL" -f apps/bff/migrations/0015_inventory_traceability.sql
 
 業務表はすべて`ENABLE/FORCE ROW LEVEL SECURITY`である。tenant policyをpermissive基底、field scopeと競合裁定capabilityをrestrictive条件にしてAND合成する。アプリ接続は必ず`app_user`を使う。
 
-ローカル検証は次の順で再現できる。`00_common.sql`は検証DBのschema/roleを再作成するため、本番DBでは実行しない。
+ローカル検証はnative runnerで再現する。runnerは一時clusterだけを使用し、`00_common.sql`を本番DBへ適用しない。
 
 ```bash
-cd spikes && docker compose up -d && cd ..
-PGPASSWORD=spike psql -h 127.0.0.1 -p 55432 -U postgres -d spike \
-  -f spikes/00_common.sql \
-  -f apps/bff/migrations/0000_auth_context_v1.sql \
-  -f apps/bff/migrations/0001_mvp_sync.sql \
-  -f apps/bff/migrations/0002_conflict_fields.sql \
-  -f apps/bff/migrations/0003_field_gis.sql \
-  -f apps/bff/migrations/0004_work_management.sql \
-  -f apps/bff/migrations/0005_journal_capture.sql \
-  -f apps/bff/migrations/0006_journal_review.sql \
-  -f apps/bff/migrations/0007_pesticide_inventory.sql \
-  -f apps/bff/migrations/0008_data_migration.sql \
-  -f apps/bff/migrations/0009_field_bbox_prefilter.sql \
-  -f apps/bff/migrations/0010_identity_runtime.sql \
-  -f apps/bff/migrations/0011_security_administration.sql \
-  -f apps/bff/migrations/0012_attachment_object_storage.sql \
-  -f apps/bff/migrations/0013_phase2_data_model.sql \
-  -f apps/bff/migrations/0014_advanced_planning.sql \
-  -f apps/bff/migrations/0015_inventory_traceability.sql \
-  -f apps/bff/migrations/verify/0000_auth_context_v1_verify.sql \
-  -f apps/bff/migrations/verify/0001_mvp_sync_verify.sql \
-  -f apps/bff/migrations/verify/0003_field_gis_verify.sql \
-  -f apps/bff/migrations/verify/0006_work_journal_verify.sql \
-  -f apps/bff/migrations/verify/0007_pesticide_inventory_verify.sql \
-  -f apps/bff/migrations/verify/0008_data_migration_verify.sql \
-  -f apps/bff/migrations/verify/0009_field_bbox_prefilter_verify.sql \
-  -f apps/bff/migrations/verify/0010_identity_runtime_verify.sql \
-  -f apps/bff/migrations/verify/0011_security_administration_verify.sql \
-  -f apps/bff/migrations/verify/0012_attachment_object_storage_verify.sql \
-  -f apps/bff/migrations/verify/0013_phase2_data_model_verify.sql \
-  -f apps/bff/migrations/verify/0014_advanced_planning_verify.sql \
-  -f apps/bff/migrations/verify/0015_inventory_traceability_verify.sql
+ISAS_PG16_BIN=/opt/homebrew/opt/postgresql@16/bin ./spikes/run-native.sh
 ```
+
+PostgreSQL 16と同major向けPostGISが前提である。全migration／verify、rollback 0017〜0013、S1／S2／S5／S8、S7の完了後に一時processとdataを自動削除する。
 
 ## AWS production adapterの保証条件
 
@@ -183,4 +154,4 @@ npm test
 npm run check
 ```
 
-2026-08-16時点でBFF 88テスト、Web 47テスト、本番Web build、PostgreSQL 16.4＋PostGIS 3.4.3上のAuthContext正式migration 12群＋MVP RLS 6群＋圃場GIS 4群＋作業指示・日誌8群＋農薬・在庫7群＋データ移行・CSV 6群＋bbox 3群＋identity runtimeがPASSしている。Phase 2 modelは`0013`、作付計画・高度ガントは`0014`、在庫高度化・traceabilityは`0015`へ追加した。PG14代替環境で0013専用verify 10群、0014の5群、0015の6群、review mapping backfill、安全rollbackがPASSした。`security_invoker`を含む正式なPG16再実行はDocker daemon復旧後のgateとする。Cognito／DynamoDB／KMS／SQS adapter、法域内OpenTelemetry、CI scan／署名、段階配備は実装済みだが、実AWS stagingへのapplyと受入はcredential・DNS・課金承認待ちである。
+2026-08-22時点で、native PostgreSQL 16.15＋PostGIS 3.6.4上の全version付きmigration／verify、rollback 0017〜0013、S1／S2／S5／S8、S7 15件がPASSしている。Cognito／DynamoDB／KMS／SQS adapter、法域内OpenTelemetry、CI scan／署名、段階配備は実装済みだが、実AWS stagingへのapplyと受入はcredential・DNS・課金承認待ちである。

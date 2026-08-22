@@ -4,7 +4,7 @@
   "target": "zero-active-docker-dependencies",
   "phases": [
     { "id": "R0", "status": "completed", "exit": "policy, inventory, and unregistered-dependency guard are committed" },
-    { "id": "R1", "status": "pending", "exit": "native PostgreSQL 16 and PostGIS spike runner replaces Compose" },
+    { "id": "R1", "status": "completed", "exit": "native PostgreSQL 16 and PostGIS spike runner accepted; Compose spike removed" },
     { "id": "R2", "status": "pending", "exit": "native macOS local-integration replaces Compose" },
     { "id": "R3", "status": "pending", "exit": "native CI and release artifacts replace image builds" },
     { "id": "R4", "status": "pending", "exit": "AWS ECS adapter is replaced or retired" },
@@ -24,12 +24,13 @@
     {
       "id": "DR-SPIKES",
       "category": "database-spikes",
-      "status": "active-transitional",
+      "status": "removed",
       "retirement_phase": "R1",
       "owner": "database maintainer",
       "paths": ["spikes/docker-compose.yml", "spikes/run.sh"],
       "replacement": "native PostgreSQL 16 and PostGIS runner with isolated temporary data directories",
-      "completion_checks": ["S1", "S2", "S5", "S7", "S8", "migration and rollback"]
+      "completion_checks": ["S1", "S2", "S5", "S7", "S8", "migration and rollback"],
+      "acceptance_evidence": ["ops/docker-retirement/evidence/R1-native-pg-acceptance.json"]
     },
     {
       "id": "DR-CI",

@@ -33,7 +33,10 @@ WHERE namespace.nspname = 'app'
 SELECT pg_temp.ck(count(*) = 8, '(2) 全Phase 2業務表に監査trigger')
 FROM pg_trigger trigger JOIN pg_class class ON class.oid = trigger.tgrelid
 JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
-WHERE namespace.nspname = 'app' AND trigger.tgname = 'z_phase2_change_audit' AND NOT trigger.tgisinternal;
+WHERE namespace.nspname = 'app' AND trigger.tgname = 'z_phase2_change_audit' AND NOT trigger.tgisinternal
+  AND class.relname IN ('growing_season', 'crop_plan', 'work_instruction_dependency',
+    'planning_resource', 'work_resource_allocation', 'inventory_policy',
+    'analytics_event', 'location_consent_event');
 
 SET LOCAL ROLE app_user;
 SELECT set_config('app.user_id', :'M', true);

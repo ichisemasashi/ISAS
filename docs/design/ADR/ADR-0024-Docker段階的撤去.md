@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ v1、撤去工程は進行中）** |
+| ステータス | **採用（クローズ v2、R1完了・R2以降進行中）** |
 | 日付 | 2026-08-21 |
 | 由来 | ユーザー確定要求「Dockerをプロジェクトから段階的に撤去する」 |
 | 関連 | [ADR-0019](ADR-0019-インフラ・運用.md)、[ADR-0021](ADR-0021-テスト・リリース方式.md)、[ADR-0023](ADR-0023-Mac本番相当ローカル統合環境.md)、[Productionホスト共通契約](../../operations/Productionホスト共通契約.md) |
@@ -37,6 +37,8 @@ macOS Productionはlaunchd、Linux Productionはsystemd、FreeBSD ProductionはJ
 | R5 | 最終撤去 | tracked Docker／Compose artifactとactive commandが0件、管理者ガイドの標準手順がnativeのみ、全回帰gate PASS |
 
 各phaseは代替経路の同等以上の検証がPASSしてから旧経路を削除する。Dockerが動くことを新経路の合格条件にせず、旧経路の削除だけで機能を失わせない。
+
+2026-08-22にR1を完了した。native macOS arm64上のPostgreSQL 16.15＋PostGIS 3.6.4で全migration／verify、rollback 0017〜0013、S1／S2／S5／S8、S7 15件を合格後、`spikes/docker-compose.yml`と`spikes/run.sh`を削除した。R2以降の旧経路は各phase合格まで保持する。
 
 ## 4. 帰結
 

@@ -26,6 +26,13 @@ trap cleanup EXIT INT TERM
 "$PG16_BIN/pg_ctl" -D "$DATA_DIR" -o "-p $PORT -h 127.0.0.1 -k $SOCKET_DIR" -w start >/dev/null
 PSQL="$PG16_BIN/psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p $PORT -U postgres"
 
+restart_fresh_cluster() {
+  "$PG16_BIN/pg_ctl" -D "$DATA_DIR" -m fast -w stop >/dev/null
+  rm -rf -- "$DATA_DIR"
+  "$PG16_BIN/initdb" -D "$DATA_DIR" --username=postgres --auth-local=trust --auth-host=trust --no-locale --encoding=UTF8 >/dev/null
+  "$PG16_BIN/pg_ctl" -D "$DATA_DIR" -o "-p $PORT -h 127.0.0.1 -k $SOCKET_DIR" -w start >/dev/null
+}
+
 $PSQL -d postgres <<'SQL' >/dev/null
 CREATE ROLE auth_context_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 CREATE ROLE app_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
@@ -66,6 +73,10 @@ for version in 0017 0016 0015 0014 0013; do
 done
 
 echo "native PostgreSQL gate: S1 S2 S5 S8"
+# Migration/rollback databases retain objects owned by the production roles.
+# Spikes deliberately recreate those global roles, so isolate them in a fresh
+# ephemeral cluster just as the retired container path used an isolated DBMS.
+restart_fresh_cluster
 $PSQL -d postgres -c 'CREATE DATABASE spike' >/dev/null
 for sql in S1_partition_rls_unique.sql S2_spatial_rls.sql S5_audit_chain.sql S8_auth_context.sql; do
   $PSQL -d postgres -c 'DROP DATABASE IF EXISTS spike WITH (FORCE)' >/dev/null

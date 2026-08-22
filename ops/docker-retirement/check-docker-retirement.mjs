@@ -24,7 +24,13 @@ export function validateInventory(value) {
   const errors = [];
   if (value?.schema_version !== 1 || value?.decision !== "ADR-0024" || value?.target !== "zero-active-docker-dependencies") errors.push("inventory identity is invalid");
   if (!Array.isArray(value?.phases) || value.phases.map((item) => item.id).join(",") !== PHASES.join(",")) errors.push("retirement phases must be ordered R0 through R5");
-  if (value?.phases?.[0]?.status !== "completed" || value?.phases?.slice(1).some((item) => item.status !== "pending")) errors.push("only R0 may be completed in the initial inventory");
+  let pendingSeen = false;
+  for (const phase of value?.phases || []) {
+    if (!new Set(["completed", "pending"]).has(phase.status)) errors.push(`${phase.id} phase status is invalid`);
+    if (phase.status === "pending") pendingSeen = true;
+    if (phase.status === "completed" && pendingSeen) errors.push(`${phase.id} cannot be completed before an earlier phase`);
+  }
+  if (value?.phases?.[0]?.status !== "completed") errors.push("R0 must remain completed");
   const ids = new Set();
   for (const item of value?.dependencies || []) {
     if (!text(item.id) || ids.has(item.id)) errors.push(`dependency id is missing or duplicated: ${item.id}`); else ids.add(item.id);
@@ -32,6 +38,7 @@ export function validateInventory(value) {
     if (!PHASES.includes(item.retirement_phase) || item.retirement_phase === "R0") errors.push(`${item.id} retirement_phase is invalid`);
     for (const key of ["category", "owner", "replacement"]) if (!text(item[key])) errors.push(`${item.id} ${key} is required`);
     for (const key of ["paths", "completion_checks"]) if (!Array.isArray(item[key]) || item[key].length === 0 || item[key].some((entry) => !text(entry))) errors.push(`${item.id} ${key} must be a non-empty string array`);
+    if (item.status === "removed" && (!Array.isArray(item.acceptance_evidence) || item.acceptance_evidence.length === 0 || item.acceptance_evidence.some((entry) => !text(entry)))) errors.push(`${item.id} removed dependency requires acceptance_evidence`);
   }
   return errors;
 }
@@ -61,6 +68,16 @@ export async function findUnregisteredDependencies(root, inventory) {
       try { await stat(resolve(root, path)); } catch { errors.push(`registered active dependency is missing: ${item.id}=${path}`); }
     }
   }
+  for (const item of inventory.dependencies.filter((entry) => entry.status === "removed")) {
+    for (const path of item.paths) {
+      try { await stat(resolve(root, path)); errors.push(`removed dependency still exists: ${item.id}=${path}`); } catch (error) {
+        if (error?.code !== "ENOENT") errors.push(`cannot verify removed dependency: ${item.id}=${path}`);
+      }
+    }
+    for (const path of item.acceptance_evidence) {
+      try { await stat(resolve(root, path)); } catch { errors.push(`acceptance evidence is missing: ${item.id}=${path}`); }
+    }
+  }
   return errors;
 }
 
@@ -76,7 +93,7 @@ async function main() {
     errors.forEach((error) => console.error(`- ${error}`));
     return 1;
   }
-  console.log("Docker retirement R0: PASS (inventory complete; unregistered dependencies rejected)");
+  console.log("Docker retirement: PASS (phase order, inventory, and unregistered-dependency guard)");
   return 0;
 }
 

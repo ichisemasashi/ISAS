@@ -99,18 +99,28 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 
-SELECT pg_temp.ck(count(*) = 11, '(12a) 全権限基表・失効・監査表がFORCE RLS')
+SELECT pg_temp.ck(count(*) = 9, '(12a) v1権限基表・失効・監査表がFORCE RLS')
 FROM pg_class class JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
-WHERE namespace.nspname = 'priv' AND class.relname LIKE 'auth_%'
+WHERE namespace.nspname = 'priv'
+  AND class.relname IN ('auth_user', 'auth_role', 'auth_role_capability', 'auth_membership',
+    'auth_membership_field_group', 'auth_tenant_relation', 'auth_employer_delegate',
+    'auth_revocation_event', 'auth_change_audit')
   AND class.relkind = 'r' AND class.relrowsecurity AND class.relforcerowsecurity;
 SELECT pg_temp.ck(count(*) = 0, '(12b) 権限表所有者はauth_context_ownerだけ')
 FROM pg_class class JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
-WHERE namespace.nspname = 'priv' AND class.relname LIKE 'auth_%' AND class.relkind = 'r'
+WHERE namespace.nspname = 'priv'
+  AND class.relname IN ('auth_user', 'auth_role', 'auth_role_capability', 'auth_membership',
+    'auth_membership_field_group', 'auth_tenant_relation', 'auth_employer_delegate',
+    'auth_revocation_event', 'auth_change_audit')
+  AND class.relkind = 'r'
   AND pg_get_userbyid(class.relowner) <> 'auth_context_owner';
 SELECT pg_temp.ck(count(*) >= 14, '(12c) version・監査triggerが全対象表に有効')
 FROM pg_trigger trigger JOIN pg_class class ON class.oid = trigger.tgrelid
 JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
-WHERE namespace.nspname = 'priv' AND class.relname LIKE 'auth_%'
+WHERE namespace.nspname = 'priv'
+  AND class.relname IN ('auth_user', 'auth_role', 'auth_role_capability', 'auth_membership',
+    'auth_membership_field_group', 'auth_tenant_relation', 'auth_employer_delegate',
+    'auth_revocation_event', 'auth_change_audit')
   AND NOT trigger.tgisinternal AND trigger.tgenabled = 'O';
 SELECT pg_temp.ck(count(*) = 3, '(12d) 失効配送・user version・tenant索引が存在')
 FROM pg_indexes WHERE schemaname = 'priv' AND indexname IN

@@ -4,7 +4,7 @@
 |---|---|
 | 対象 | Phase 2.0 作期・作付計画、作業依存、resource、在庫policy、分析event、位置情報同意 |
 | 正式migration | `apps/bff/migrations/0013_phase2_data_model.sql` |
-| 状態 | 実装済み。PostgreSQL 14.24代替環境で、PG15+専用`security_invoker`指定だけ互換置換してmigration・検証10群・backfill・安全rollbackをPASS。正式なPostgreSQL 16＋PostGIS再実行はDocker daemon復旧後のrelease gate |
+| 状態 | 実装済み。2026-08-22にnative PostgreSQL 16.15＋PostGIS 3.6.4で、`security_invoker`を含む全migration・検証10群・backfill・安全rollbackをPASS |
 | 互換性 | expand-only。既存`work_instruction`にはnullableな`crop_plan_id`だけを追加し、旧BFFのread/writeを維持する |
 
 ## 正本と不変条件
