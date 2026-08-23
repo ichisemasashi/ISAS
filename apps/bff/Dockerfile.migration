@@ -1,4 +1,4 @@
-FROM postgres:16.4-bookworm@sha256:e62fbf9d3e2b49816a32c400ed2dba83e3b361e6833e624024309c35d334b412
+FROM postgres:18.6-bookworm@sha256:7d2695c3aa88e792e8b3b233e7e4adb296a20412c6c0ca361e3edaaacfada108
 COPY apps/bff/migrations /isas/migrations
 COPY --chmod=0555 apps/bff/bin/run-migrations.sh /isas/run-migrations.sh
 USER postgres
