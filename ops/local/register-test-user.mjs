@@ -6,6 +6,8 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "../..");
+const DATA_ROOT = process.env.ISAS_NATIVE_DATA_ROOT || resolve(process.env.HOME, "Library/Application Support/ISAS/local-integration");
+const ENV_FILE = process.env.ISAS_LOCAL_ENV || resolve(DATA_ROOT, "secrets/runtime.env");
 const ORIGIN = "https://isas.localhost:8443";
 const ISSUER = `${ORIGIN}/oidc/realms/isas-local`;
 const REALM = "isas-local";
@@ -54,7 +56,7 @@ function base32Secret(bytes = 20) {
 }
 
 function provisionSecrets(username) {
-  const directory = resolve(ROOT, ".local/secrets/test-users");
+  const directory = resolve(DATA_ROOT, "secrets/test-users");
   const path = resolve(directory, `${username}.env`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
@@ -112,8 +114,7 @@ async function provisionKeycloak(options, user, runtime) {
   if (!types.has("password") || (requiresMfa ? !types.has("otp") : types.has("otp"))) throw new Error("test user authentication policy does not match its role");
 }
 
-function provisionDatabase(options, user) {
-  const compose = ["compose", "--project-directory", ROOT, "--env-file", resolve(ROOT, ".local/secrets/runtime.env"), "-f", resolve(ROOT, "compose.local.yml")];
+function provisionDatabase(options, user, runtime) {
   const sql = `\\set ON_ERROR_STOP on
 BEGIN;
 SET ROLE auth_context_owner;
@@ -139,11 +140,16 @@ SELECT CASE WHEN EXISTS (
     AND s.field_group_id=:'FIELD_GROUP_ID'::uuid
 ) THEN 'test-user-ready' ELSE 'invalid' END;
 `;
-  const args = [...compose, "exec", "-T", "database", "psql", "-X", "-At", "-v", "ON_ERROR_STOP=1",
+  const args = ["-X", "-At", "-v", "ON_ERROR_STOP=1",
     "-v", `USER_ID=${user.USER_ID}`, "-v", `ISSUER=${ISSUER}`, "-v", `DISPLAY_NAME=${options.displayName}`,
     "-v", `ROLE_KEY=${options.role}`, "-v", `TENANT_ID=${TENANT_ID}`, "-v", `FIELD_GROUP_ID=${FIELD_GROUP_ID}`,
-    "-v", `ASSIGNMENT_ID=${SYNTHETIC_ASSIGNMENT_ID}`, "-U", "postgres", "-d", "isas"];
-  const output = execFileSync("docker", args, { input: sql, encoding: "utf8", stdio: ["pipe", "pipe", "inherit"] });
+    "-v", `ASSIGNMENT_ID=${SYNTHETIC_ASSIGNMENT_ID}`, "-h", "127.0.0.1", "-p", "55433", "-U", "postgres", "-d", "isas"];
+  const output = execFileSync(process.env.ISAS_PSQL || "psql", args, {
+    input: sql,
+    encoding: "utf8",
+    env: { ...process.env, PGPASSWORD: runtime.POSTGRES_PASSWORD },
+    stdio: ["pipe", "pipe", "inherit"],
+  });
   if (!output.trimEnd().endsWith("test-user-ready")) throw new Error("database test user verification failed");
 }
 
@@ -153,13 +159,13 @@ export async function main(argv = process.argv.slice(2)) {
     process.stdout.write("usage: ops/local/register-test-user.sh [--username name] [--display-name name] [--role worker]\n");
     return;
   }
-  const runtime = readEnvironment(resolve(ROOT, ".local/secrets/runtime.env"));
-  for (const key of ["KEYCLOAK_ADMIN", "KEYCLOAK_ADMIN_PASSWORD"]) if (!runtime[key]) throw new Error(`${key} is required`);
+  const runtime = readEnvironment(ENV_FILE);
+  for (const key of ["KEYCLOAK_ADMIN", "KEYCLOAK_ADMIN_PASSWORD", "POSTGRES_PASSWORD"]) if (!runtime[key]) throw new Error(`${key} is required`);
   const secrets = provisionSecrets(options.username);
   for (const key of ["USER_ID", "USERNAME", "PASSWORD", "TOTP_SECRET"]) if (!secrets.values[key]) throw new Error(`${secrets.path} is missing ${key}`);
   if (secrets.values.USERNAME !== options.username) throw new Error(`${secrets.path} belongs to another username`);
   await provisionKeycloak(options, secrets.values, runtime);
-  provisionDatabase(options, secrets.values);
+  provisionDatabase(options, secrets.values, runtime);
   process.stdout.write(`test user ready: ${options.username} (${options.role}, ${MFA_ROLES.has(options.role) ? "password + TOTP" : "email/username + password"})\ncredentials: ${secrets.path}\n`);
 }
 

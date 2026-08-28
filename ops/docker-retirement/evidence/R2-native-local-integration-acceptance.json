@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "finding": "KCOMP2-M1",
+  "phase": "R2",
+  "recorded_at": "2026-08-28T18:00:00+09:00",
+  "runtime_profile": "local-integration",
+  "host": {
+    "os": "darwin",
+    "architecture": "arm64",
+    "service_manager": "launchd user agents"
+  },
+  "components": {
+    "postgresql": "16.15",
+    "postgis": "3.6.4",
+    "pgbouncer": "1.25.2",
+    "caddy": "2.11.4",
+    "java": "21.0.12.1",
+    "keycloak": "26.7.1",
+    "otel_collector_contrib": "0.133.0"
+  },
+  "checks": {
+    "host_and_component_doctor": "12/12 PASS",
+    "native_configuration_tests": "8/8 PASS",
+    "launchd_user_agents": "10/10 live processes",
+    "loopback_only_https_ingress": "PASS",
+    "database_postgis_rls_owner_audit": "PASS",
+    "five_isolated_pgbouncer_pools": "PASS",
+    "oidc_mfa_session_and_business_e2e": "4/4 PASS on Chromium and WebKit",
+    "stop_start_persistence": "PASS",
+    "explicit_destructive_reset_guard": "PASS"
+  },
+  "commands": [
+    "node ops/local/doctor.mjs",
+    "node --test ops/local/*.test.mjs",
+    "ops/local/verify-local-environment.sh",
+    "ops/local/verify-local-environment.sh --full",
+    "ops/local/local-stop.sh && ops/local/local-up.sh"
+  ],
+  "result": "PASS",
+  "retired_paths": [
+    "compose.local.yml",
+    "infra/local/caddy/Caddyfile",
+    "infra/local/database/Dockerfile.migration",
+    "infra/local/database/run-migrations.sh",
+    "infra/local/telemetry/otel.yml",
+    "infra/local/telemetry/prometheus.yml",
+    "infra/local/telemetry/perses.yml",
+    "ops/local/compose-config.test.mjs"
+  ],
+  "remaining_phases": ["R3", "R4", "R5"]
+}

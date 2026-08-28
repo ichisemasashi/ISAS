@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-const localCertificate = new X509Certificate(readFileSync(resolve(import.meta.dirname, "../../.local/tls/isas.localhost.pem")));
+const dataRoot = process.env.ISAS_NATIVE_DATA_ROOT || resolve(process.env.HOME || "", "Library/Application Support/ISAS/local-integration");
+const localCertificate = new X509Certificate(readFileSync(resolve(dataRoot, "tls/isas.localhost.pem")));
 const localCertificateSpki = createHash("sha256")
   .update(localCertificate.publicKey.export({ type: "spki", format: "der" }))
   .digest("base64");

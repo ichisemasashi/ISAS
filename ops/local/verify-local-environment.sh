@@ -12,7 +12,7 @@ OPS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$OPS_DIR/../.." && pwd)
 . "$OPS_DIR/common.sh"
 
-CA_FILE="$REPO_ROOT/.local/tls/rootCA.pem"
+CA_FILE="$ISAS_NATIVE_DATA_ROOT/tls/rootCA.pem"
 ORIGIN=https://isas.localhost:8443
 TMP_ROOT=${TMPDIR:-/tmp}/isas-local-verify-$$
 mkdir -m 700 "$TMP_ROOT"
@@ -22,19 +22,17 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 pass() { printf 'PASS: %s\n' "$*"; }
 
 node "$OPS_DIR/doctor.mjs" >/dev/null
-local_compose config --quiet
 [ -r "$CA_FILE" ] || fail "local CA is missing; run ops/local/local-up.sh"
-pass "host prerequisites and Compose configuration"
+pass "host prerequisites and native component lock"
 
-for service in caddy web bff database pgbouncer-p0 pgbouncer-auth-p1 pgbouncer-p1 pgbouncer-p2 pgbouncer-ops keycloak; do
-  local_compose ps "$service" | grep -q '(healthy)' || fail "$service is not healthy"
+for service in edge bff database pgbouncer-p0 pgbouncer-auth-p1 pgbouncer-p1 pgbouncer-p2 pgbouncer-ops keycloak telemetry; do
+  local_service_running "$service" || fail "$service launchd user agent is not running"
+  [ -n "$(local_service_pid "$service")" ] || fail "$service launchd user agent has no live process"
 done
-local_compose ps --status running --services | grep -qx 'otel-collector' || fail "otel-collector is not running"
-local_compose ps -a migration | grep -q 'Exited (0)' || fail "migration did not exit successfully"
-published=$(local_compose ps | grep -- '->' || true)
-[ "$(printf '%s\n' "$published" | grep -c .)" = 1 ] || fail "exactly one host port must be published"
-printf '%s\n' "$published" | grep -q '127.0.0.1:8443->8443/tcp' || fail "TLS ingress must bind only 127.0.0.1:8443"
-pass "service health, migration, and loopback-only ingress"
+lsof -nP -iTCP:8443 -sTCP:LISTEN | grep -q '127.0.0.1:8443' || fail "TLS ingress must bind 127.0.0.1:8443"
+if lsof -nP -iTCP:8443 -sTCP:LISTEN | grep -q '\*:8443'; then fail "TLS ingress must not bind all interfaces"; fi
+curl --silent --show-error --fail http://127.0.0.1:9464/metrics >/dev/null || fail "native telemetry metrics endpoint is unavailable"
+pass "launchd service health, telemetry, and loopback-only ingress"
 
 "$OPS_DIR/verify-database.sh" >/dev/null
 pass "PostGIS, RLS, owner, audit trigger, and five isolated pools"

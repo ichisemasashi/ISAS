@@ -79,10 +79,15 @@ test("local-integration separates production build mode and blocks cloud credent
     AWS_REGION: ""
   });
   const hosts = { P0: "pgbouncer-p0", AUTH_P1: "pgbouncer-auth-p1", P1: "pgbouncer-p1", P2: "pgbouncer-p2", OPS: "pgbouncer-ops" };
-  for (const [name, host] of Object.entries(hosts)) local[`ISAS_DB_${name}_HOST`] = host;
-  assert.equal(loadRuntimeConfig(local).deploymentProfile, "local-integration");
+  const nativePorts = { P0: "6430", AUTH_P1: "6431", P1: "6432", P2: "6433", OPS: "6434" };
+  const native = Object.fromEntries(Object.keys(hosts).flatMap((name) => [
+    [`ISAS_DB_${name}_HOST`, "127.0.0.1"],
+    [`ISAS_DB_${name}_PORT`, nativePorts[name]],
+  ]));
+  assert.equal(loadRuntimeConfig({ ...local, ...native }).deploymentProfile, "local-integration");
+  assert.throws(() => loadRuntimeConfig({ ...local, ...Object.fromEntries(Object.entries(hosts).map(([name, host]) => [`ISAS_DB_${name}_HOST`, host])) }), /native loopback allowlist/);
   assert.throws(() => loadRuntimeConfig({ ...local, AWS_PROFILE: "production" }), /credential sources are forbidden/);
-  assert.throws(() => loadRuntimeConfig({ ...local, ISAS_DB_P2_HOST: "prod.example" }), /outside the allowlist/);
+  assert.throws(() => loadRuntimeConfig({ ...local, ISAS_DB_P2_HOST: "prod.example" }), /native loopback allowlist/);
 });
 
 test("structured logger removes secret fields and embedded database URLs", () => {

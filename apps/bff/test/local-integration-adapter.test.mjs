@@ -7,10 +7,11 @@ function fixture(overrides = {}) {
     config: { deploymentProfile: "local-integration", origin: "https://isas.localhost:8443" },
     env: {
       KEYCLOAK_ISSUER: "https://isas.localhost:8443/oidc/realms/isas-local",
-      LOCAL_OBJECT_ROOT: "/var/lib/isas/objects",
-      LOCAL_SESSION_KEY_FILE: "/run/isas/secrets/session.key",
-      LOCAL_OBJECT_KEY_FILE: "/run/isas/secrets/object.key",
-      LOCAL_OFFLINE_RECOVERY_KEY_FILE: "/run/isas/secrets/offline-recovery.key"
+      ISAS_LOCAL_RUNTIME_ROOT: "/Users/test/ISAS/.local",
+      LOCAL_OBJECT_ROOT: "/Users/test/ISAS/.local/objects",
+      LOCAL_SESSION_KEY_FILE: "/Users/test/ISAS/.local/secrets/session.key",
+      LOCAL_OBJECT_KEY_FILE: "/Users/test/ISAS/.local/secrets/object.key",
+      LOCAL_OFFLINE_RECOVERY_KEY_FILE: "/Users/test/ISAS/.local/secrets/offline-recovery.key"
     },
     ...overrides
   };
@@ -19,7 +20,7 @@ function fixture(overrides = {}) {
 test("local adapter accepts only isolated endpoints and mounts", () => {
   assert.equal(validateLocalEnvironment(fixture()), true);
   const invalid = fixture(); invalid.env = { ...invalid.env, LOCAL_OBJECT_ROOT: "/tmp/objects" };
-  assert.throws(() => validateLocalEnvironment(invalid), /isolated volume/);
+  assert.throws(() => validateLocalEnvironment(invalid), /isolated runtime root/);
 });
 
 test("local adapter cannot run in production profile", () => {

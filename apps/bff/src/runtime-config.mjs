@@ -127,8 +127,9 @@ export function loadRuntimeConfig(env = process.env, dependencies = {}) {
     throw new Error("Priority pools must use five distinct PgBouncer endpoints");
   }
   if (deploymentProfile === "local-integration") {
-    const expectedHosts = new Set(["pgbouncer-p0", "pgbouncer-auth-p1", "pgbouncer-p1", "pgbouncer-p2", "pgbouncer-ops"]);
-    if (POOL_CLASSES.some((name) => !expectedHosts.has(new URL(pools[name].connectionString).hostname))) throw new Error("local-integration database host is outside the allowlist");
+    const hosts = POOL_CLASSES.map((name) => new URL(pools[name].connectionString).hostname);
+    const nativeLoopback = hosts.every((host) => host === "127.0.0.1");
+    if (!nativeLoopback) throw new Error("local-integration database host is outside the native loopback allowlist");
   }
   if (pools.p1.expectedRole !== "app_user") throw new Error("ISAS_DB_P1 must authenticate as app_user");
 

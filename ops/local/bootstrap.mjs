@@ -6,9 +6,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const secretDir = resolve(root, ".local/secrets");
-const tlsDir = resolve(root, ".local/tls");
-const objectDir = resolve(root, ".local/objects");
+const dataRoot = process.env.ISAS_NATIVE_DATA_ROOT || resolve(process.env.HOME, "Library/Application Support/ISAS/local-integration");
+const secretDir = resolve(dataRoot, "secrets");
+const tlsDir = resolve(dataRoot, "tls");
+const objectDir = resolve(dataRoot, "objects");
 const envFile = resolve(secretDir, "runtime.env");
 
 function secret(bytes = 32) { return randomBytes(bytes).toString("base64url"); }
@@ -43,9 +44,9 @@ if (!existsSync(envFile)) {
     ISAS_DB_P2_PASSWORD: secret(),
     ISAS_DB_OPS_PASSWORD: secret(),
     ACTOR_PSEUDONYM_KEY: secret(48),
-    LOCAL_SESSION_KEY_FILE: "/run/isas/secrets/session.key",
-    LOCAL_OBJECT_KEY_FILE: "/run/isas/secrets/object.key",
-    LOCAL_OFFLINE_RECOVERY_KEY_FILE: "/run/isas/secrets/offline-recovery.key",
+    LOCAL_SESSION_KEY_FILE: resolve(secretDir, "session.key"),
+    LOCAL_OBJECT_KEY_FILE: resolve(secretDir, "object.key"),
+    LOCAL_OFFLINE_RECOVERY_KEY_FILE: resolve(secretDir, "offline-recovery.key"),
     KEYCLOAK_ISSUER: "https://isas.localhost:8443/oidc/realms/isas-local",
     KEYCLOAK_CLIENT_ID: "isas-bff"
   };

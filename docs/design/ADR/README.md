@@ -87,7 +87,7 @@
 | ADR | タイトル | 由来 | 優先 | 関連 |
 |---|---|---|---|---|
 | [ADR-0022](ADR-0022-配布ライセンス.md) | 配布ライセンス＝MIT、第三者コード・データは個別条件を維持 | **採用（クローズ v1）** | P1 | 1.3／#13 |
-| [ADR-0024](ADR-0024-Docker段階的撤去.md) | Docker段階的撤去＝native artifact／OS service managerへ統一 | **採用（クローズ v1、撤去中）** | P1 | 要求仕様5.6.6 |
+| [ADR-0024](ADR-0024-Docker段階的撤去.md) | Docker段階的撤去＝native artifact／OS service managerへ統一 | **採用（クローズ v3、R1・R2完了）** | P1 | 要求仕様5.6.6 |
 
 ---
 

@@ -5,7 +5,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 function localEnvironment() {
   const values: Record<string, string> = {};
-  const path = resolve(import.meta.dirname, "../../../.local/secrets/runtime.env");
+  const dataRoot = process.env.ISAS_NATIVE_DATA_ROOT || resolve(process.env.HOME || "", "Library/Application Support/ISAS/local-integration");
+  const path = resolve(dataRoot, "secrets/runtime.env");
   for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
     const separator = line.indexOf("=");
     if (separator > 0) values[line.slice(0, separator)] = line.slice(separator + 1);
@@ -38,20 +39,34 @@ function totp(secret: string, now = Date.now()) {
 
 const env = localEnvironment();
 
-async function completeLogin(page: Page, totpOffsetMs = 0) {
+const applicationUrl = (url: URL) => url.origin === "https://isas.localhost:8443" && !url.pathname.startsWith("/oidc/");
+
+async function nextTotpWindow(page: Page) {
+  await page.waitForTimeout(30_500 - (Date.now() % 30_000));
+}
+
+async function completeLogin(page: Page, requireNextWindow = false) {
   const username = page.locator("#username");
   if (await username.count()) await username.fill("local-operator");
   await page.locator("#password").fill(env.LOCAL_OPERATOR_PASSWORD);
   await page.locator("#kc-login").click();
   await page.locator("#otp").waitFor({ state: "visible" });
-  // Keycloak rejects reuse of the current TOTP. Its configured one-step
-  // look-ahead accepts the next time window for an immediate step-up.
-  await page.locator("#otp").fill(totp(env.LOCAL_OPERATOR_TOTP_SECRET, Date.now() + totpOffsetMs));
-  await page.locator("#kc-login").click();
-  await page.waitForURL("https://isas.localhost:8443/**");
+  if (requireNextWindow) await nextTotpWindow(page);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.locator("#otp").fill(totp(env.LOCAL_OPERATOR_TOTP_SECRET));
+    await page.locator("#kc-login").click();
+    try {
+      await page.waitForURL(applicationUrl, { timeout: 5_000 });
+      return;
+    } catch {
+      if (attempt === 1 || !(await page.locator("#otp").isVisible())) throw new Error("Keycloak did not accept a fresh local TOTP");
+      await nextTotpWindow(page);
+    }
+  }
 }
 
 test("authorization code PKCE login requires TOTP and step-up preserves same subject", async ({ page, context }) => {
+  test.setTimeout(120_000);
   const observedOrigins = new Set<string>();
   page.on("request", (request) => observedOrigins.add(new URL(request.url()).origin));
   await page.goto("/api/bff/login?return_to=%2F");
@@ -106,7 +121,7 @@ test("authorization code PKCE login requires TOTP and step-up preserves same sub
   await expect(page.getByText("ローカル実証圃場").first()).toBeVisible();
 
   await page.goto("/api/bff/login?step_up=1&return_to=%2F");
-  await completeLogin(page, 30_000);
+  await completeLogin(page, true);
   const steppedUp = await page.evaluate(async () => (await fetch("/api/bff/session", { cache: "no-store" })).json());
   expect(steppedUp.user.id).toBe(session.body.user.id);
   expect(steppedUp.user.authenticationLevel).toBe("mfa");
@@ -118,12 +133,12 @@ test("authorization code PKCE login requires TOTP and step-up preserves same sub
     const securityResponse = await fetch("/api/v1/security-admin", { credentials: "include", cache: "no-store", headers: { "X-ISAS-Context": context.contextId } });
     const duplicateResponse = await fetch("/api/v1/security-admin/local-test-users", { method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, "X-ISAS-Context": context.contextId },
-      body: JSON.stringify({ username: "test-worker", email: "duplicate@example.test", displayName: "重複確認", roleKey: "worker" }) });
+      body: JSON.stringify({ username: "duplicate-check", email: "local-operator@invalid.example", displayName: "重複確認", roleKey: "worker" }) });
     return { security: { status: securityResponse.status, body: await securityResponse.json() },
       duplicate: { status: duplicateResponse.status, body: await duplicateResponse.json() } };
   }, { csrfToken: steppedUp.csrfToken, tenantId: steppedUp.tenants[0].id });
   expect(privileged.security).toMatchObject({ status: 200, body: { localTestUserRegistration: true } });
-  expect(privileged.duplicate).toMatchObject({ status: 409, body: { type: "username_conflict" } });
+  expect(privileged.duplicate).toMatchObject({ status: 409, body: { type: "email_conflict" } });
 
   const logout = await page.evaluate(async (csrfToken) => {
     const response = await fetch("/api/bff/logout", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken }, body: "{}" });

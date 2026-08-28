@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
 
 const VERSION = 1;
 
@@ -8,8 +9,9 @@ function aad(profile, purpose, recordId) {
   return Buffer.from(JSON.stringify({ profile, purpose, recordId }), "utf8");
 }
 
-export function readLocalKey(path) {
-  if (!path?.startsWith("/run/isas/secrets/")) throw new Error("local key path is outside the secret mount");
+export function readLocalKey(path, { secretRoot = "/run/isas/secrets" } = {}) {
+  const child = relative(resolve(secretRoot), resolve(path || ""));
+  if (!child || child.startsWith("..") || isAbsolute(child)) throw new Error("local key path is outside the secret mount");
   const value = readFileSync(path, "utf8").trim();
   const key = Buffer.from(value, "base64url");
   if (key.length !== 32) throw new Error("local key must be 256 bits");

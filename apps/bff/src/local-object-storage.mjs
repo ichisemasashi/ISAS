@@ -7,9 +7,9 @@ const SHA256 = /^[0-9a-f]{64}$/;
 
 function storageConflict(message) { return Object.assign(new Error(message), { code: "idempotency_conflict" }); }
 
-export function createLocalObjectStorage({ root, crypto, origin, clock = () => Date.now(), downloadTtlSeconds = 60 }) {
+export function createLocalObjectStorage({ root, allowedRoot = "/var/lib/isas/objects", crypto, origin, clock = () => Date.now(), downloadTtlSeconds = 60 }) {
   const storageRoot = resolve(root || "");
-  if (!storageRoot.startsWith("/var/lib/isas/objects") || !crypto?.seal || !crypto?.open || new URL(origin).origin !== origin) throw new Error("local object storage configuration is invalid");
+  if (storageRoot !== resolve(allowedRoot) || !crypto?.seal || !crypto?.open || new URL(origin).origin !== origin) throw new Error("local object storage configuration is invalid");
   const downloads = new Map();
   const pathFor = (key) => {
     const path = resolve(storageRoot, key);

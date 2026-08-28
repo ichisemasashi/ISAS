@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-export function createLocalMapStorage({ root, clock = () => Date.now() }) {
+export function createLocalMapStorage({ root, allowedRoot = "/var/lib/isas/objects", clock = () => Date.now() }) {
   const archive = resolve(root || "", "maps/japan.pmtiles");
-  if (!archive.startsWith("/var/lib/isas/objects/")) throw new Error("local map path is outside the object volume");
+  if (resolve(root || "") !== resolve(allowedRoot)) throw new Error("local map path is outside the object volume");
   let metadata;
   async function load() {
     const bytes = await readFile(archive);

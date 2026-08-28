@@ -1,9 +1,0 @@
-FROM imresamu/postgis@sha256:6da75969915039b7356058b4310d43fde88c275ada982c2dfee29da68445ff4d
-USER root
-COPY apps/bff/migrations /isas/application-migrations
-COPY infra/local/database/migrations /isas/local-migrations
-COPY --chmod=0555 infra/local/database/run-migrations.sh /isas/run-migrations.sh
-RUN find /isas/application-migrations /isas/local-migrations -type d -exec chmod 0555 {} + \
-    && find /isas/application-migrations /isas/local-migrations -type f -exec chmod 0444 {} +
-USER postgres
-ENTRYPOINT ["/isas/run-migrations.sh"]

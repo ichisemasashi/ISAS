@@ -2,8 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const root = resolve(import.meta.dirname, "../..");
-const envFile = resolve(root, ".local/secrets/runtime.env");
+const envFile = process.env.ISAS_LOCAL_ENV || resolve(process.env.HOME, "Library/Application Support/ISAS/local-integration/secrets/runtime.env");
 const origin = "https://isas.localhost:8443";
 const realmName = "isas-local";
 
@@ -113,31 +112,36 @@ await responseJson(await admin(`/users/${encodeURIComponent(users[0].id)}`, {
   body: JSON.stringify({ ...users[0], email: "local-operator@invalid.example", emailVerified: true, firstName: "Local", lastName: "Operator", enabled: true }),
 }), "update local operator profile");
 let credentials = await responseJson(await admin(`/users/${encodeURIComponent(users[0].id)}/credentials`), "read local operator credentials");
-if (!credentials.some((credential) => credential.type === "otp")) {
-  const imported = await admin("/partialImport", {
-    method: "POST",
-    body: JSON.stringify({
-      ifResourceExists: "OVERWRITE",
-      users: [{
-        id: "10000000-0000-4000-8000-000000000001",
-        username: "local-operator",
-        enabled: true,
-        email: "local-operator@invalid.example",
-        emailVerified: true,
-        firstName: "Local",
-        lastName: "Operator",
-        credentials: [
-          { type: "password", value: env.LOCAL_OPERATOR_PASSWORD, temporary: false },
-          { id: "30000000-0000-4000-8000-000000000001", type: "otp", userLabel: "ISAS local TOTP", secretData: JSON.stringify({ value: env.LOCAL_OPERATOR_TOTP_SECRET }), credentialData: JSON.stringify({ subType: "totp", digits: 6, counter: 0, period: 30, algorithm: "HmacSHA1", secretEncoding: "BASE32" }) },
-        ],
-      }],
-    }),
-  });
-  await responseJson(imported, "provision local operator MFA");
-  const refreshed = await responseJson(await admin("/users?username=local-operator&exact=true"), "refresh local operator");
-  if (refreshed.length !== 1) throw new Error("local operator reconcile failed");
-  credentials = await responseJson(await admin(`/users/${encodeURIComponent(refreshed[0].id)}/credentials`), "verify local operator credentials");
+for (const credential of credentials.filter(({ type }) => type === "otp")) {
+  await responseJson(await admin(`/users/${encodeURIComponent(users[0].id)}/credentials/${encodeURIComponent(credential.id)}`, { method: "DELETE" }), "remove stale local operator OTP");
 }
+const imported = await admin("/partialImport", {
+  method: "POST",
+  body: JSON.stringify({
+    ifResourceExists: "OVERWRITE",
+    users: [{
+      id: "10000000-0000-4000-8000-000000000001",
+      username: "local-operator",
+      enabled: true,
+      email: "local-operator@invalid.example",
+      emailVerified: true,
+      firstName: "Local",
+      lastName: "Operator",
+      credentials: [
+        { type: "password", value: env.LOCAL_OPERATOR_PASSWORD, temporary: false },
+        { id: "30000000-0000-4000-8000-000000000001", type: "otp", userLabel: "ISAS local TOTP", secretData: JSON.stringify({ value: env.LOCAL_OPERATOR_TOTP_SECRET }), credentialData: JSON.stringify({ subType: "totp", digits: 6, counter: 0, period: 30, algorithm: "HmacSHA1", secretEncoding: "BASE32" }) },
+      ],
+    }],
+  }),
+});
+await responseJson(imported, "provision local operator MFA");
+const refreshed = await responseJson(await admin("/users?username=local-operator&exact=true"), "refresh local operator");
+if (refreshed.length !== 1) throw new Error("local operator reconcile failed");
+await responseJson(await admin(`/users/${encodeURIComponent(refreshed[0].id)}/reset-password`, {
+  method: "PUT",
+  body: JSON.stringify({ type: "password", value: env.LOCAL_OPERATOR_PASSWORD, temporary: false }),
+}), "reset local operator password");
+credentials = await responseJson(await admin(`/users/${encodeURIComponent(refreshed[0].id)}/credentials`), "verify local operator credentials");
 const types = new Set(credentials.map((credential) => credential.type));
 if (!types.has("password") || !types.has("otp")) throw new Error("local operator must have password and OTP credentials");
 
