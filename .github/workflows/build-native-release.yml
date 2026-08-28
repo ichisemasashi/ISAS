@@ -37,7 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Require native runner identity
-        run: test "$(uname -s)" = "$(case '${{ matrix.host_os }}' in macos) echo Darwin;; linux) echo Linux;; freebsd) echo FreeBSD;; esac)"
+        run: |
+          test "$(uname -s)" = "$(case '${{ matrix.host_os }}' in macos) echo Darwin;; linux) echo Linux;; freebsd) echo FreeBSD;; esac)"
+          command -v trivy
+      - name: Filesystem vulnerability, secret, and misconfiguration gate
+        if: matrix.service == 'database'
+        run: trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --ignore-unfixed=false --exit-code 1 .
       - name: Build Web payload once per runner workspace
         if: matrix.service == 'edge'
         run: corepack enable && corepack prepare pnpm@11.19.0 --activate && pnpm install --frozen-lockfile && pnpm build
@@ -53,6 +58,8 @@ jobs:
             ops/native-artifacts/native-artifact-contract.json \
             '${{ matrix.host_os }}' '${{ matrix.architecture }}' '${{ matrix.service }}' \
             '${{ inputs.version }}' native-output "$RUNNER_TEMP/native-signing.pem"
+      - name: Reject host metadata in release payload
+        run: test -z "$(find native-output \( -name '._*' -o -name '.DS_Store' \) -print -quit)"
       - name: Install and verify on the disposable native host
         env: { ISAS_EPHEMERAL_NATIVE_RUNNER: "YES" }
         run: ops/native-artifacts/verify-native-package.sh '${{ matrix.host_os }}' '${{ inputs.version }}' native-output/*.${{ matrix.host_os == 'linux' && 'deb' || 'pkg' }} "$RUNNER_TEMP/native-signing.pub"

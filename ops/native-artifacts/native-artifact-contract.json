@@ -11,8 +11,8 @@
     "identity": { "sources": ["infra/local/keycloak"], "executable_env": "ISAS_IDENTITY_EXECUTABLE" },
     "object-queue": { "sources": ["apps/bff/src", "apps/bff/runtime-adapters"], "executable_env": "ISAS_OBJECT_QUEUE_EXECUTABLE" },
     "app": { "sources": ["apps/bff/bin", "apps/bff/src", "apps/bff/runtime-adapters", "apps/bff/package.json", "apps/bff/package-lock.json"], "executable_env": "ISAS_APP_EXECUTABLE" },
-    "edge": { "sources": ["apps/web/dist", "infra/local/caddy"], "executable_env": "ISAS_EDGE_EXECUTABLE" },
-    "telemetry": { "sources": ["infra/local/telemetry"], "executable_env": "ISAS_TELEMETRY_EXECUTABLE" }
+    "edge": { "sources": ["apps/web/dist"], "executable_env": "ISAS_EDGE_EXECUTABLE" },
+    "telemetry": { "sources": ["infra/local/native"], "executable_env": "ISAS_TELEMETRY_EXECUTABLE" }
   },
   "required_attestations": ["sha256", "signature", "sbom-spdx-json", "provenance-slsa-v1"]
 }

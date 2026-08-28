@@ -26,6 +26,10 @@ export function validateCiPolicy(files) {
   for (const required of ["provenance: mode=max", "sbom: true", "cosign sign", "cosign attest", "environment: staging", "steps.build.outputs.digest"]) {
     if (!files.release.includes(required)) errors.push(`release build is missing supply-chain control: ${required}`);
   }
+  const native = (files.additionalWorkflows || []).find((workflow) => workflow.includes("Build native release matrix")) || "";
+  for (const required of ["self-hosted, ephemeral", "trivy fs --scanners vuln,secret,misconfig", "package-native-artifact.sh", "verify-native-package.sh", "assemble-native-manifest.mjs", "Reject host metadata in release payload"]) {
+    if (!native.includes(required)) errors.push(`native release build is missing supply-chain control: ${required}`);
+  }
   const delivery = (files.additionalWorkflows || []).join("\n");
   for (const required of ["progressive-deploy.sh 5", "progressive-deploy.sh 25", "progressive-deploy.sh 100", "monitor-progressive-delivery.sh", "environment: production-canary", "environment: production", "FINALIZE_MIN_AGE_SECONDS: \"86400\""]) {
     if (!delivery.includes(required)) errors.push(`delivery workflows are missing progressive control: ${required}`);
@@ -42,6 +46,7 @@ export async function loadPolicyFiles(root = ".") {
     ci: await read(".github/workflows/ci.yml"),
     release: await read(".github/workflows/build-release.yml"),
     additionalWorkflows: await Promise.all([
+      read(".github/workflows/build-native-release.yml"),
       read(".github/workflows/deploy-staging.yml"),
       read(".github/workflows/promote-production.yml"),
       read(".github/workflows/finalize-production.yml"),

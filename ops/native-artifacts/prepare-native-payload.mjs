@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import process from "node:process";
 
 const [contractFile, hostOs, architecture, service, version, output] = process.argv.slice(2);
@@ -24,7 +24,15 @@ await mkdir(resolve(prefix, "bin"), { recursive: true });
 await mkdir(resolve(prefix, "share"), { recursive: true });
 for (const source of spec.sources) {
   const absolute = resolve(source);
-  await cp(absolute, resolve(prefix, "share", source), { recursive: true, force: false, errorOnExist: true });
+  await cp(absolute, resolve(prefix, "share", source), {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
+    filter: (path) => {
+      const name = basename(path);
+      return !name.startsWith("._") && name !== ".DS_Store";
+    },
+  });
 }
 const launcher = `#!/bin/sh
 set -eu

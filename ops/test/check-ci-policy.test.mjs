@@ -15,4 +15,5 @@ test("policy rejects mutable actions and base images", () => {
   };
   assert.ok(validateCiPolicy(files).some((error) => error.includes("not pinned")));
   assert.ok(validateCiPolicy(files).some((error) => error.includes("base image")));
+  assert.ok(validateCiPolicy(files).some((error) => error.includes("native release build")));
 });
