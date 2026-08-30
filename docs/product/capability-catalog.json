@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
-  "asOf": "2026-08-22",
-  "reviewDueAt": "2026-11-22",
+  "asOf": "2026-08-31",
+  "reviewDueAt": "2026-11-30",
   "productionAvailability": "BLOCKED",
   "publicScope": "圃場・指示・日誌・農薬・在庫のself-host／offline core",
   "statusDefinitions": {
@@ -35,7 +35,7 @@
     { "id": "linux-native-profile", "category": "platform", "name": "Linux native Production profile", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "infra/hosts/linux/profile.json", "digest": "sha256:522cb9540d83343261b9401d60104361aff8ec2660c6fc9ad4829dfb272703d1" }] },
     { "id": "freebsd-native-profile", "category": "platform", "name": "FreeBSD Jail Production profile", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "infra/hosts/freebsd/profile.json", "digest": "sha256:15266ae32fc01c2ca158318f5cb80e7194a812791f33b13f557ee3afa8c111bb" }] },
     { "id": "native-artifact-supply", "category": "platform", "name": "3 OS native artifact供給", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "ops/native-artifacts/native-artifact-contract.json", "digest": "sha256:bcc7d522a28e338b458c1cd0203606c482f9ccc1c864793a71d84610f748b77d" }] },
-    { "id": "docker-retirement", "category": "platform", "name": "Docker段階的撤去", "status": "static-implemented", "phase": "R1・R2完了、R3-R5進行中", "evidence": [{ "path": "ops/docker-retirement/docker-retirement-inventory.json", "digest": "sha256:3fd41f24fd755b80a955bb404a6b58017a5f150f7241aa12e84ff2a70d8ef810" }] },
+    { "id": "docker-retirement", "category": "platform", "name": "Docker段階的撤去", "status": "static-implemented", "phase": "R1・R2完了、R3実runner受入待ち、R4-R5順序待ち", "evidence": [{ "path": "ops/docker-retirement/docker-retirement-inventory.json", "digest": "sha256:3fd41f24fd755b80a955bb404a6b58017a5f150f7241aa12e84ff2a70d8ef810" }] },
     { "id": "external-read-api", "category": "platform", "name": "外部read-only API", "status": "static-implemented", "phase": "Phase 3", "evidence": [{ "path": "apps/bff/src/external-read-api.mjs", "digest": "sha256:9bb820d97ce7fec6b443d262b9c4d36bb32f67fa047cdfbecf5db4e638888bdf" }] },
     { "id": "wagri-machinery-connector", "category": "platform", "name": "農機OpenAPI generic connector", "status": "static-implemented", "phase": "Phase 3・provider固有受入前", "evidence": [{ "path": "apps/bff/src/machinery-connector.mjs", "digest": "sha256:0f68cbde4cd79dcd4c99ebfbf8c1e695e992fb51a9d494d64bb29758e92ba080" }] },
     { "id": "remote-sensing", "category": "business", "name": "remote sensing・生育map", "status": "designed", "phase": "Phase 3以降", "evidence": [{ "path": "docs/product/KSAS比較機能scope決定.md", "digest": "sha256:df6cb385bd9f16ffb5a85fbb5a933fdf916ea5274f6844750c7c45891ef8e9a9" }] },
@@ -45,6 +45,6 @@
     { "id": "signed-release-security", "category": "operations", "name": "署名release・tag認可", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "ops/check-production-tag-authorization.mjs", "digest": "sha256:07d44d0b6fe6027ae8377df406832531b30da8229482b523f1db6f5ca9d3354d" }] },
     { "id": "business-cutover", "category": "operations", "name": "業務正本切替受入", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "ops/check-business-cutover-acceptance.mjs", "digest": "sha256:ec4745c049ceb3bf4bc455cca2fe30fc81be53fba1fdcd520bb2ee1ab09cd856" }] },
     { "id": "backup-dr", "category": "operations", "name": "Backup・restore・DR受入", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "ops/recovery/check-operational-acceptance.mjs", "digest": "sha256:1a9a7c82cda7d4d5ef373ba2e2468d7d2c8e4d15332a4d07119ceaa4a6bbbeba" }] },
-    { "id": "operations-guide", "category": "operations", "name": "管理者運用guide", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "docs/manual/システム管理者運用ガイド.md", "digest": "sha256:53ea9bc051d15c8cfdcb42b33b66d9f84c916c550865b7bfdc5c0fd5f4d27703" }] }
+    { "id": "operations-guide", "category": "operations", "name": "管理者運用guide", "status": "static-implemented", "phase": "Production", "evidence": [{ "path": "docs/manual/システム管理者運用ガイド.md", "digest": "sha256:8a2f3e70dee7633c2f010fcabaf809b3774fce3fe389c43174c54a925168cccb" }] }
   ]
 }

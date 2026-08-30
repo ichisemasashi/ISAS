@@ -2,15 +2,15 @@
 
 ## 1. 実装範囲
 
-本手順は、法域内OpenTelemetry、CloudWatch SLO／error-budget、運用alert、供給網検査、保護branch、build-once、stagingからproductionへの段階配備を操作する管理者向けrunbookである。
+本手順は、法域内OpenTelemetry、SLO／error-budget、運用alert、供給網検査、保護branch、build-once、stagingからproductionへの段階配備を操作する管理者向けrunbookである。AWS固有操作は任意AWS adapterを選択した場合だけ使用する。macOS／Linux／FreeBSD共通のnative artifactは[native artifact受入runbook](../../ops/native-artifacts/README.md)を正とする。
 
 | 領域 | 実装 | fail-closed条件 |
 |---|---|---|
 | telemetry | BFF NodeSDK→同一ECS taskのADOT→東京CloudWatch／X-Ray。cookie、authorization、tenant/user、query本文を削除 | productionでtask-local以外のOTLP endpointを指定するとBFF起動失敗 |
 | SLO | 99.5% availabilityの5分＋1時間14.4倍、30分＋6時間6倍burn-rate composite alarm。28日error-budget widget | request signal欠落はbudget 0、blocking alarm欠落はpromotion停止 |
 | 運用alert | RDS WAL容量／archive age、失効・監査・同期DLQ、同期queue年齢、監査chain不一致、写真欠損／孤立、collector drop | 安全系custom probe未報告は`breaching`。0と未報告を同一視しない |
-| CI | BFF/Web test・build、OpenTofu、運用policy、dependency、secret、IaC、filesystem、container scan | Critical/High、test、format、immutable pinのいずれか失敗でmerge不可 |
-| supply chain | Web/BFF/migrationを一度buildし、BuildKit provenance＋SBOM、AWS KMS cosign署名、公開鍵digest、OCI digestをbundle化 | tag参照、署名／attestation／公開鍵digest不一致で配備不可 |
+| CI | BFF/Web test・build、OpenTofu、運用policy、dependency、secret、IaC、filesystem scan。R3 native workflowは3 OS×2 architecture×6 serviceを実package化 | Critical/High、test、format、immutable pin、host metadata混入、package installのいずれか失敗でmerge／R3受入不可 |
+| supply chain | 共通経路はnative packageを一度buildし、checksum、署名、SPDX SBOM、SLSA provenance、source commitを36 artifact manifestへ束縛。OCI／AWS KMS経路はR4完了までの任意AWS adapter互換経路 | digest、署名、attestation、install検証、source commit不一致で配備不可 |
 | delivery | staging migration＋配備→25項目受入→production 5%→25%→100%→24時間後finalize | ALARM、INSUFFICIENT_DATA、alarm欠落、観測期限超過でstableへ自動rollback |
 
 `worker`、`pgbouncer`、`adot`は本repositoryでbuildするapplication成果物ではなく、OpenTofu入力でdigest固定するplatform imageである。ECR enhanced scanとrelease manifestのsecurity gateで検査し、未署名・由来不明のdigestを承認しない。
@@ -63,7 +63,7 @@ PRを作ると`.github/workflows/ci.yml`が次を実行する。
 2. `npm audit`／`pnpm audit`のHigh/Critical gate。
 3. Trivy filesystem secret・misconfiguration・dependency scan。
 4. OpenTofu format／validateとrelease policy test。
-5. Web、BFF、migration imageのlocal buildとcontainer High/Critical scan。
+5. R3移行中の互換gateとしてWeb、BFF、migration imageのlocal buildとcontainer High/Critical scan。native代替の3 OS実受入完了前に削除しない。
 
 Actionsやbase imageをtagだけへ戻す変更は`node ops/check-ci-policy.mjs`が拒否する。Dependabot PRも通常PRと同じreviewを行い、自動mergeでsecurity／migration／release policyを迂回しない。
 
@@ -71,9 +71,21 @@ scan失敗時はActionsの該当jobを開き、package、installed version、fix
 
 ## 4. build-onceとstaging
 
+### 4.0 3 OS共通native artifactのR3受入
+
+AWS adapterのimage buildより先に、macOS／Linux／FreeBSDで共通のnative artifactを受け入れる。runner準備、workflow実行、36 package manifestの検査は[native artifact受入runbook](../../ops/native-artifacts/README.md)に従う。
+
+```bash
+gh workflow run build-native-release.yml -f version=1.1.0-rc.1
+gh run list --workflow build-native-release.yml --limit 5
+gh run watch <run-id> --exit-status
+```
+
+静的testとmacOS package生成・署名smokeは完了しているが、実installをしていないrecordは`install_verified=false`のままである。3 OS各2 architectureの全36 recordが署名・install検証済みになるまでR3、Production、旧Dockerfile削除を承認しない。
+
 ### 4.1 release成果物を一度だけbuildする
 
-`main`上のreview済みcommitへSemVer tagを作るか、Actionsの`Build release once`を手動実行する。手動例：
+以下はR4完了まで保持する任意AWS adapterの互換経路である。`main`上のreview済みcommitへSemVer tagを作るか、Actionsの`Build release once`を手動実行する。手動例：
 
 ```bash
 gh workflow run build-release.yml -f version=v1.1.0

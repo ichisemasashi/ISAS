@@ -2,10 +2,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | **採用（クローズ v3、R1・R2完了、R3以降進行中）** |
+| ステータス | **採用（クローズ v4、R1・R2完了、R3実runner受入待ち）** |
 | 日付 | 2026-08-21 |
 | 由来 | ユーザー確定要求「Dockerをプロジェクトから段階的に撤去する」 |
-| 関連 | [ADR-0019](ADR-0019-インフラ・運用.md)、[ADR-0021](ADR-0021-テスト・リリース方式.md)、[ADR-0023](ADR-0023-Mac本番相当ローカル統合環境.md)、[Productionホスト共通契約](../../operations/Productionホスト共通契約.md) |
+| 関連 | [ADR-0019](ADR-0019-インフラ・運用.md)、[ADR-0021](ADR-0021-テスト・リリース方式.md)、[ADR-0023](ADR-0023-Mac本番相当ローカル統合環境.md)、[Productionホスト共通契約](../../operations/Productionホスト共通契約.md)、[native artifact受入runbook](../../../ops/native-artifacts/README.md) |
 
 ## 1. 背景
 
@@ -41,6 +41,8 @@ macOS Productionはlaunchd、Linux Productionはsystemd、FreeBSD ProductionはJ
 2026-08-22にR1を完了した。native macOS arm64上のPostgreSQL 16.15＋PostGIS 3.6.4で全migration／verify、rollback 0017〜0013、S1／S2／S5／S8、S7 15件を合格後、`spikes/docker-compose.yml`と`spikes/run.sh`を削除した。
 
 2026-08-28にR2を完了した。macOS arm64上で、10個の非特権launchd user agent、loopback限定HTTPS、PostgreSQL 16.15＋PostGIS 3.6.4、5個の独立PgBouncer、Keycloak、OpenTelemetry Collector、Production BFF＋local adapterを起動し、doctor 12項目、native構成test 8件、DB／RLS／owner／監査、OIDC／MFA／session／業務E2E 4件、stop→start永続性を受入後、旧Compose定義と専用scriptを削除した。証跡は`ops/docker-retirement/evidence/R2-native-local-integration-acceptance.json`を正とする。R3以降の旧経路は各phase合格まで保持する。
+
+同日にR3の受入前実装を強化した。3 OS×2 architecture×6 serviceのnative package workflowへfilesystem scanとhost metadata混入拒否を追加し、R2で削除した旧local source pathをartifact契約から除外した。macOS arm64ではpackage生成、checksum、署名、AppleDouble非混入までPASSしたが、system領域へのinstallは実施していない。R3完了にはmacOS／Linux／FreeBSDのephemeral runnerで全36 packageの`signature_verified=true`かつ`install_verified=true`を記録したmanifestが必要である。この証跡がないためR3は未完で、Dockerfileと旧image workflowは保持する。
 
 ## 4. 帰結
 
