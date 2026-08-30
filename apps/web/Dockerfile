@@ -8,7 +8,7 @@ COPY apps/web/public ./public
 COPY apps/web/src ./src
 RUN pnpm build
 
-FROM nginx:1.29.1-alpine@sha256:42a516af16b852e33b7682d5ef8acbd5d13fe08fecadc7ed98605ba5e3b26ab8
+FROM nginx:1.31.4-alpine@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
 COPY --chmod=0444 apps/web/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build --chown=nginx:nginx /build/dist /usr/share/nginx/html
 USER nginx
