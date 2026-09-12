@@ -44,14 +44,20 @@
            send! (or send-fn
                      (fn [_conf message]
                        (swap! sent conj message)
-                       {:error :SUCCESS}))]
+                       {:error :SUCCESS}))
+           bdir (let [d (File/createTempFile "basemap" "dir")]
+                  (.delete d)
+                  (.mkdirs d)
+                  (.deleteOnExit d)
+                  (.getPath d))]
        (accounts/bootstrap-admin! ds conf)
        {:conf conf
         :ds ds
         :db-path db-path
         :sent sent
         :send-fn send!
-        :now now}))))
+        :now now
+        :basemap-dir bdir}))))
 
 (defn with-sys
   ([f] (with-sys {} f))

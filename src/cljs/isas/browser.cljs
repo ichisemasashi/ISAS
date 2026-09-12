@@ -4,6 +4,15 @@
 
 (defonce app-state (atom (ui/init-state)))
 
+(defonce map-sync-fn (atom nil))
+
+(defn register-map-sync! [f]
+  (reset! map-sync-fn f))
+
+(defn narrow-screen? []
+  (let [w (.-innerWidth js/window)]
+    (boolean (and w (< w 800)))))
+
 (defn root-el []
   (.getElementById js/document "app"))
 
@@ -45,12 +54,27 @@
       (.then (fn [text] (cb (parse-json text))))
       (.catch (fn [_] (cb {:ok false :error true})))))
 
+(defn fetch-upload [method path form cb]
+  (let [fd (js/FormData.)]
+    (doseq [[k v] form]
+      (when (and k v)
+        (.append fd (name k) v)))
+    (-> (js/fetch (api-url path)
+                  (clj->js {:method method
+                            :credentials "same-origin"
+                            :body fd}))
+        (.then (fn [res] (.text res)))
+        (.then (fn [text] (cb (parse-json text))))
+        (.catch (fn [_] (cb {:ok false :error true}))))))
+
 (declare dispatch!)
 
 (defn apply-fx! [fx]
   (let [[op a b c d] fx]
     (case op
-      :html (set-html! a)
+      :html (do (set-html! a)
+                (when-let [f @map-sync-fn]
+                  (f @app-state dispatch!)))
       :nav (do (push-path! a)
                (dispatch! [:path {:path a :search ""}]))
       :session (fetch-api "GET"
@@ -61,6 +85,10 @@
                               (if (:error body)
                                 (dispatch! [:api-error])
                                 (dispatch! [d body]))))
+      :upload (fetch-upload a b c (fn [body]
+                                    (if (:error body)
+                                      (dispatch! [:api-error])
+                                      (dispatch! [d body]))))
       nil)))
 
 (defn dispatch! [msg]
@@ -88,11 +116,15 @@
 (defn on-popstate [_ev]
   (dispatch! [:path {:path (current-path) :search (current-search)}]))
 
+(defn on-resize [_ev]
+  (dispatch! [:narrow {:narrow? (narrow-screen?)}]))
+
 (defn bind-events! []
   (.addEventListener js/document "submit" on-submit true)
   (.addEventListener js/document "click" on-click)
-  (.addEventListener js/window "popstate" on-popstate))
+  (.addEventListener js/window "popstate" on-popstate)
+  (.addEventListener js/window "resize" on-resize))
 
 (defn main! []
-  (dispatch! [:boot {:path (current-path) :search (current-search)}])
+  (dispatch! [:boot {:path (current-path) :search (current-search) :narrow? (narrow-screen?)}])
   (bind-events!))

@@ -2,10 +2,9 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
-            [isas.accounts :as accounts]
-            [isas.db :as db]
             [isas.http :as http]
             [isas.test-util :as tu]
+            [isas.geo :as geo]
             [ring.mock.request :as mock]))
 
 (defn parse [resp]
@@ -47,9 +46,40 @@
    (let [req (mock/request :get path)]
      (app (if sid (as-user req kind sid) req)))))
 
+(defn put-json
+  ([app path body] (put-json app path body nil nil))
+  ([app path body kind sid]
+   (let [req (-> (mock/request :put path)
+                 (mock/content-type "application/json")
+                 (mock/body (json/write-str body)))]
+     (app (if sid (as-user req kind sid) req)))))
+
+(defn delete-path
+  ([app path] (delete-path app path nil nil))
+  ([app path kind sid]
+   (let [req (mock/request :delete path)]
+     (app (if sid (as-user req kind sid) req)))))
+
+(def square
+  {:type "Polygon"
+   :coordinates [[[140.0 36.0]
+                  [140.001 36.0]
+                  [140.001 36.001]
+                  [140.0 36.001]
+                  [140.0 36.0]]]})
+
+(def square-east
+  {:type "Polygon"
+   :coordinates [[[140.002 36.0]
+                  [140.003 36.0]
+                  [140.003 36.001]
+                  [140.002 36.001]
+                  [140.002 36.0]]]})
+
 (deftest json-helpers-test
   (is (= 200 (:status (http/ok {}))))
   (is (= 401 (:status (http/fail "unauthorized"))))
+  (is (= 403 (:status (http/fail "forbidden"))))
   (is (true? (http/https? {:scheme :https})))
   (is (true? (http/https? {:scheme :http :headers {"x-forwarded-proto" "https"}})))
   (is (false? (http/https? {:scheme :http :headers {}})))
@@ -73,8 +103,10 @@
         (is (= 405 (:status (app (mock/request :post "/home")))))
         (is (= 200 (:status (get-path app "/js/ok.js"))))
         (is (= 200 (:status (get-path app "/js/note"))))
+        (is (= 200 (:status (get-path app "/css/ol.css"))))
         (is (= 404 (:status (get-path app "/js/missing.js"))))
         (is (= 405 (:status (app (mock/request :post "/js/ok.js")))))
+        (is (= 405 (:status (app (mock/request :post "/css/ol.css")))))
         (is (= 401 (:status (get-path app "/api/nope"))))
         (is (= 200 (:status (app {:request-method :get})))
             "SPA when uri is missing")
@@ -215,3 +247,112 @@
         (is (= 403 (:status (http/fail "x" 403))))
         (with-redefs [http/api-routes {[:get "/api/bogus-op"] [:bogus-op]}]
           (is (= "unauthorized" (:code (parse (http/dispatch-api sys {:request-method :get :uri "/api/bogus-op"}))))))))))
+
+(deftest farm-api-test
+  (tu/with-sys
+    (fn [sys]
+      (let [app (http/make-app sys)
+            alogin (post-json app "/api/admin/login" {:email "admin@example.com" :password "ChangeMeAdmin1"})
+            asid (cookie-value alogin "isas_admin")
+            inv (post-json app "/api/admin/invite" {:email "farm@example.com"} "admin" asid)
+            pw (:initial_password (parse inv))
+            ulogin (post-json app "/api/user/login" {:email "farm@example.com" :password pw})
+            usid (cookie-value ulogin "isas_user")
+            inv2 (post-json app "/api/admin/invite" {:email "other@example.com"} "admin" asid)
+            pw2 (:initial_password (parse inv2))
+            ulogin2 (post-json app "/api/user/login" {:email "other@example.com" :password pw2})
+            usid2 (cookie-value ulogin2 "isas_user")]
+        (is (= 401 (:status (get-path app "/api/user/place"))))
+        (is (= 403 (:status (get-path app "/api/user/place" "admin" asid))))
+        (is (= "place_unset" (:code (parse (get-path app "/api/user/place" "user" usid)))))
+        (is (= "place_invalid" (:code (parse (put-json app "/api/user/place" {:west 1} "user" usid)))))
+        (is (= "place_invalid" (:code (parse (app (as-user (-> (mock/request :put "/api/user/place")
+                                                               (mock/content-type "application/json")
+                                                               (mock/body "not-json"))
+                                                          "user" usid))))))
+        (is (true? (:ok (parse (put-json app "/api/user/place"
+                                         {:west 139.0 :south 35.0 :east 141.0 :north 37.0}
+                                         "user" usid)))))
+        (is (true? (:ok (parse (get-path app "/api/user/place" "user" usid)))))
+        (is (true? (:ok (parse (get-path app "/api/user/basemaps" "user" usid)))))
+        (is (= "basemap_kind" (:code (parse (get-path app "/api/user/basemaps/nope" "user" usid)))))
+        (is (= "basemap_missing" (:code (parse (get-path app "/api/user/basemaps/aerial" "user" usid)))))
+        (let [tmp (java.io.File. (tu/temp-file "bmap" ".jpg" "fake-jpeg"))
+              up (app (as-user (assoc (mock/request :put "/api/user/basemaps/aerial")
+                                      :multipart-params {"file" {:filename "a.jpg"
+                                                                 :content-type "image/jpeg"
+                                                                 :tempfile tmp}})
+                               "user" usid))
+              bad (app (as-user (assoc (mock/request :put "/api/user/basemaps/nope")
+                                       :multipart-params {"file" {:filename "a.jpg"
+                                                                  :content-type "image/jpeg"
+                                                                  :tempfile tmp}})
+                                "user" usid))]
+          (is (true? (:ok (parse up))))
+          (is (= "basemap_kind" (:code (parse bad)))))
+        (let [img (get-path app "/api/user/basemaps/aerial" "user" usid)]
+          (is (= 200 (:status img)))
+          (is (re-find #"image/jpeg" (str (get-in img [:headers "Content-Type"])))))
+        (is (nil? (http/match-api :post "/api/user/basemaps/aerial")))
+        (is (nil? (http/match-api :get "/api/user/fields/1")))
+        (is (= [:basemap-put "aerial"] (http/match-api :put "/api/user/basemaps/aerial")))
+        (is (= [:basemap-get "aerial"] (http/match-api :get "/api/user/basemaps/aerial")))
+        (is (true? (:ok (parse (get-path app "/api/user/fields" "user" usid)))))
+        (is (= "shape_not_area" (:code (parse (post-json app "/api/user/fields" {:name "x" :geojson {:type "Point" :coordinates [0 0]}} "user" usid)))))
+        (is (= "shape_not_area" (:code (parse (app (as-user (-> (mock/request :post "/api/user/fields")
+                                                               (mock/content-type "application/json")
+                                                               (mock/body "not-json"))
+                                                          "user" usid))))))
+        (let [c1 (parse (post-json app "/api/user/fields" {:name "A" :geojson square} "user" usid))
+              c2 (parse (post-json app "/api/user/fields" {:name "B" :geojson square-east} "user" usid))
+              id (get-in c1 [:field :id])
+              id2 (get-in c2 [:field :id])]
+          (is (true? (:ok c1)))
+          (is (= "field_not_found" (:code (parse (put-json app (str "/api/user/fields/" id) {:name "Z"} "user" usid2)))))
+          (is (= "shape_not_area" (:code (parse (app (as-user (-> (mock/request :put (str "/api/user/fields/" id))
+                                                                 (mock/content-type "application/json")
+                                                                 (mock/body "not-json"))
+                                                            "user" usid))))))
+          (is (true? (:ok (parse (put-json app (str "/api/user/fields/" id) {:name "A2"} "user" usid)))))
+          (is (= [:field-put (str id)] (http/match-api :put (str "/api/user/fields/" id))))
+          (is (= [:field-delete (str id)] (http/match-api :delete (str "/api/user/fields/" id))))
+          (is (= [:field-split (str id)] (http/match-api :post (str "/api/user/fields/" id "/split"))))
+          (is (nil? (http/match-api :get (str "/api/user/fields/" id "/split"))))
+          (is (= "split_too_few" (:code (parse (post-json app (str "/api/user/fields/" id "/split") {:polygons []} "user" usid)))))
+          (is (= "merge_too_few" (:code (parse (post-json app "/api/user/fields/merge" {:keep_id id :ids [id]} "user" usid)))))
+          (is (= "split_too_few" (:code (parse (app (as-user (-> (mock/request :post (str "/api/user/fields/" id "/split"))
+                                                                (mock/content-type "application/json")
+                                                                (mock/body "not-json"))
+                                                           "user" usid))))))
+          (is (= "merge_too_few" (:code (parse (app (as-user (-> (mock/request :post "/api/user/fields/merge")
+                                                                (mock/content-type "application/json")
+                                                                (mock/body "not-json"))
+                                                           "user" usid))))))
+          (let [sp (parse (post-json app (str "/api/user/fields/" id "/split")
+                                     {:polygons [square square-east]} "user" usid))]
+            (is (true? (:ok sp)))
+            (is (= 2 (count (:fields sp)))))
+          (let [listed (:fields (parse (get-path app "/api/user/fields" "user" usid)))
+                a (:id (first listed))
+                b (:id (second listed))
+                mg (parse (post-json app "/api/user/fields/merge" {:keep_id a :ids [a b]} "user" usid))]
+            (is (true? (:ok mg)))
+            (is (true? (:ok (parse (delete-path app (str "/api/user/fields/" a) "user" usid))))))
+          (is (= "import_invalid" (:code (parse (post-json app "/api/user/fields/import" {} "user" usid)))))
+          (let [tmp (java.io.File. (tu/temp-file "imp" ".geojson" (geo/to-json square)))
+                imp (app (as-user (assoc (mock/request :post "/api/user/fields/import")
+                                         :params {:file {:filename "a.geojson" :tempfile tmp}})
+                                  "user" usid))]
+            (is (true? (:ok (parse imp)))))
+          (let [tmp (java.io.File. (tu/temp-file "imp2" ".geojson" (geo/to-json square-east)))
+                imp (app (as-user (assoc (mock/request :post "/api/user/fields/import")
+                                         :multipart-params {:file {:filename "b.geojson" :tempfile tmp}})
+                                  "user" usid))]
+            (is (true? (:ok (parse imp)))))
+          (is (some? (http/upload-of {:params {"file" :a}})))
+          (is (some? (http/upload-of {:params {:file :b}})))
+          (is (some? (http/upload-of {:multipart-params {"file" :c}})))
+          (is (some? (http/upload-of {:multipart-params {:file :d}})))
+          (is (nil? (http/upload-of {})))
+          (is (= "field_not_found" (:code (parse (delete-path app "/api/user/fields/99999" "user" usid)))))
+          (is (= 403 (:status (put-json app "/api/user/place" {:west 1 :south 2 :east 3 :north 4} "admin" asid)))))))))

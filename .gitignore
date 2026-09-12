@@ -18,6 +18,8 @@ pom.xml
 .lsp/
 resources/public/js/main.js
 resources/public/js/main.js.map
+resources/public/js/farmmap.js
+resources/public/js/farmmap.js.map
 resources/public/js/cljs-runtime/
 resources/public/js/manifest.edn
 

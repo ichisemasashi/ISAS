@@ -35,6 +35,33 @@
       account_id INTEGER NOT NULL,
       expires_at TEXT NOT NULL,
       revoked_at TEXT
+    )"
+   "CREATE TABLE IF NOT EXISTS work_places (
+      user_id INTEGER PRIMARY KEY,
+      west REAL NOT NULL,
+      south REAL NOT NULL,
+      east REAL NOT NULL,
+      north REAL NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS basemaps (
+      user_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      body_ref TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, kind),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS fields (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      geojson TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
     )"])
 
 (defn datasource [jdbc-url]
@@ -124,3 +151,60 @@
 
 (defn mark-token-used! [ds id]
   (jdbc/execute-one! ds ["UPDATE reset_tokens SET used_at = ? WHERE id = ?" (time/now-utc) id]))
+
+(defn find-place [ds user-id]
+  (jdbc/execute-one! ds ["SELECT * FROM work_places WHERE user_id = ?" user-id]))
+
+(defn upsert-place! [ds user-id {:keys [west south east north]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO work_places (user_id, west, south, east, north, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(user_id) DO UPDATE SET
+                         west = excluded.west, south = excluded.south,
+                         east = excluded.east, north = excluded.north,
+                         updated_at = excluded.updated_at
+                       RETURNING *"
+                      user-id west south east north (time/now-utc)]))
+
+(defn list-basemaps [ds user-id]
+  (jdbc/execute! ds ["SELECT * FROM basemaps WHERE user_id = ?" user-id]))
+
+(defn find-basemap [ds user-id kind]
+  (jdbc/execute-one! ds ["SELECT * FROM basemaps WHERE user_id = ? AND kind = ?" user-id kind]))
+
+(defn upsert-basemap! [ds {:keys [user-id kind content-type body-ref]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO basemaps (user_id, kind, content_type, body_ref, updated_at)
+                       VALUES (?, ?, ?, ?, ?)
+                       ON CONFLICT(user_id, kind) DO UPDATE SET
+                         content_type = excluded.content_type,
+                         body_ref = excluded.body_ref,
+                         updated_at = excluded.updated_at
+                       RETURNING *"
+                      user-id kind content-type body-ref (time/now-utc)]))
+
+(defn delete-basemaps! [ds user-id]
+  (jdbc/execute-one! ds ["DELETE FROM basemaps WHERE user_id = ?" user-id]))
+
+(defn insert-field! [ds {:keys [user-id name geojson]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO fields (user_id, name, geojson, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?) RETURNING *"
+                      user-id name geojson (time/now-utc) (time/now-utc)]))
+
+(defn find-field [ds user-id id]
+  (jdbc/execute-one! ds ["SELECT * FROM fields WHERE id = ? AND user_id = ?" id user-id]))
+
+(defn list-fields [ds user-id]
+  (jdbc/execute! ds ["SELECT * FROM fields WHERE user_id = ? ORDER BY id" user-id]))
+
+(defn update-field! [ds id {:keys [name geojson]}]
+  (jdbc/execute-one! ds
+                     ["UPDATE fields SET name = ?, geojson = ?, updated_at = ? WHERE id = ? RETURNING *"
+                      name geojson (time/now-utc) id]))
+
+(defn delete-field! [ds id]
+  (jdbc/execute-one! ds ["DELETE FROM fields WHERE id = ?" id]))
+
+(defn field-names [ds user-id]
+  (mapv :name (jdbc/execute! ds ["SELECT name FROM fields WHERE user_id = ?" user-id])))

@@ -1,5 +1,6 @@
 (ns isas.ui
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            #?(:clj [clojure.data.json :as json])))
 
 (def messages
   {:user-login-title "利用者ログイン"
@@ -18,7 +19,22 @@
    :password-wrong "今のパスワードが違います"
    :password-ok "パスワードを変更しました"
    :unauthorized "入っていません"
-   :api-error "通信できませんでした"})
+   :api-error "通信できませんでした"
+   :fields-title "圃場台帳"
+   :map-title "地図"
+   :place-needed "先に作業場所の範囲を決めてください"
+   :place-set "この範囲を作業場所にする"
+   :phone-map "台帳と地図の編集はパソコンで開いてください"
+   :shape-not-area "閉じた形で、面積が取れるものにしてください"
+   :import-invalid "このファイルは区画として読めません"
+   :forbidden "この入口では使えません"
+   :place-invalid "作業場所の範囲が正しくありません"
+   :basemap-kind "下地の種類が違います"
+   :basemap-missing "その下地はまだありません"
+   :field-not-found "その圃場はありません"
+   :split-too-few "分割は2枚以上にしてください"
+   :merge-too-few "合筆は2枚以上選んでください"
+   :merge-keep-missing "残す圃場を対象に含めてください"})
 
 (defn code-message [code]
   (case code
@@ -31,6 +47,17 @@
     "password_too_short" (:password-too-short messages)
     "password_wrong" (:password-wrong messages)
     "unauthorized" (:unauthorized messages)
+    "forbidden" (:forbidden messages)
+    "place_unset" (:place-needed messages)
+    "place_invalid" (:place-invalid messages)
+    "shape_not_area" (:shape-not-area messages)
+    "basemap_kind" (:basemap-kind messages)
+    "basemap_missing" (:basemap-missing messages)
+    "field_not_found" (:field-not-found messages)
+    "split_too_few" (:split-too-few messages)
+    "merge_too_few" (:merge-too-few messages)
+    "merge_keep_missing" (:merge-keep-missing messages)
+    "import_invalid" (:import-invalid messages)
     (:api-error messages)))
 
 (defn esc [s]
@@ -39,6 +66,14 @@
       (str/replace "<" "&lt;")
       (str/replace ">" "&gt;")
       (str/replace "\"" "&quot;")))
+
+(defn read-json-str [s]
+  (cond
+    (nil? s) nil
+    (or (map? s) (sequential? s)) s
+    :else
+    #?(:clj (try (json/read-str (str s) :key-fn keyword) (catch Exception _ nil))
+       :cljs (try (js->clj (js/JSON.parse s) :keywordize-keys true) (catch :default _ nil)))))
 
 (defn parse-query [search]
   (let [q (if (str/starts-with? (or search "") "?") (subs search 1) (or search ""))]
@@ -61,6 +96,9 @@
     "/home" {:page :home :kind "user"}
     "/invite" {:page :invite :kind "user"}
     "/password" {:page :password :kind "user"}
+    "/fields" {:page :fields :kind "user"}
+    "/map" {:page :map :kind "user"}
+    "/map/place" {:page :map-place :kind "user"}
     "/admin" {:page :login :kind "admin"}
     "/admin/reset/request" {:page :reset-request :kind "admin"}
     "/admin/reset" {:page :reset :kind "admin"}
@@ -77,7 +115,7 @@
   (if (= kind "admin") "/admin/home" "/home"))
 
 (defn needs-auth? [page]
-  (contains? #{:home :invite :password :users} page))
+  (contains? #{:home :invite :password :users :fields :map :map-place} page))
 
 (defn init-state []
   {:path "/"
@@ -89,6 +127,10 @@
    :busy false
    :initial-password nil
    :users []
+   :fields []
+   :place nil
+   :basemaps []
+   :narrow? false
    :form {}})
 
 (defn flash-html [state]
@@ -99,7 +141,7 @@
   (str "<main><h1>" (esc title) "</h1>" body "</main>"))
 
 (defn nav-user []
-  "<nav><a data-nav href=\"/home\">ホーム</a><a data-nav href=\"/invite\">招待</a><a data-nav href=\"/password\">パスワード</a><form data-act=\"logout\" method=\"post\"><button type=\"submit\">ログアウト</button></form></nav>")
+  "<nav><a data-nav href=\"/home\">ホーム</a><a data-nav href=\"/fields\">圃場台帳</a><a data-nav href=\"/map\">地図</a><a data-nav href=\"/invite\">招待</a><a data-nav href=\"/password\">パスワード</a><form data-act=\"logout\" method=\"post\"><button type=\"submit\">ログアウト</button></form></nav>")
 
 (defn nav-admin []
   "<nav><a data-nav href=\"/admin/home\">ホーム</a><a data-nav href=\"/admin/invite\">招待</a><a data-nav href=\"/admin/users\">取消し</a><a data-nav href=\"/admin/password\">パスワード</a><form data-act=\"logout\" method=\"post\"><button type=\"submit\">ログアウト</button></form></nav>")
@@ -178,16 +220,103 @@
 (defn unknown-view []
   (layout "ISAS" "<p>このページはありません。</p><p><a data-nav href=\"/\">利用者入口</a></p>"))
 
+(defn phone-view [state]
+  (layout (:map-title messages)
+          (str (nav-user) (flash-html state) "<p>" (esc (:phone-map messages)) "</p>")))
+
+(defn fields-view [state]
+  (layout (:fields-title messages)
+          (str (nav-user)
+               (flash-html state)
+               "<table><thead><tr><th>名前</th><th>ha</th><th></th></tr></thead><tbody>"
+               (apply str
+                      (for [f (:fields state)]
+                        (str "<tr><td>" (esc (:name f)) "</td><td>" (esc (:area_ha f)) " ha</td>"
+                             "<td>" (esc (:area_m2 f)) " ㎡"
+                             "<form data-act=\"delete-field\" method=\"post\">"
+                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
+                             "<button type=\"submit\">削除</button></form></td></tr>")))
+               "</tbody></table>"
+               "<p><a data-nav href=\"/map\">地図へ</a></p>")))
+
+(defn- basemap-ready? [state kind]
+  (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state))))
+
+(defn map-place-view [state]
+  (layout (:map-title messages)
+          (str (nav-user)
+               (flash-html state)
+               "<p>" (esc (:place-needed messages)) "</p>"
+               "<div id=\"ol-map\" class=\"ol-map\"></div>"
+               "<form data-act=\"save-place\" method=\"post\">"
+               "<input type=\"hidden\" name=\"west\" value=\"" (esc (get-in state [:form :west] "129")) "\">"
+               "<input type=\"hidden\" name=\"south\" value=\"" (esc (get-in state [:form :south] "26")) "\">"
+               "<input type=\"hidden\" name=\"east\" value=\"" (esc (get-in state [:form :east] "146")) "\">"
+               "<input type=\"hidden\" name=\"north\" value=\"" (esc (get-in state [:form :north] "46")) "\">"
+               "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>")))
+
+(defn map-view [state]
+  (layout (:map-title messages)
+          (str (nav-user)
+               (flash-html state)
+               "<p><a data-nav href=\"/map/place\">作業場所を変える</a></p>"
+               "<div class=\"toolbar\">"
+               "<button type=\"button\" data-map=\"draw\">手描き</button>"
+               "<button type=\"button\" data-map=\"edit\">修正</button>"
+               "<button type=\"button\" data-map=\"split\">分割</button>"
+               "<button type=\"button\" data-map=\"merge\">合筆</button>"
+               (apply str
+                      (for [[k label] [["aerial" "空中写真"] ["standard" "標準地図"] ["satellite" "衛星"]]]
+                        (if (basemap-ready? state k)
+                          (str "<button type=\"button\" data-map=\"basemap\" data-kind=\"" k "\">" label "</button>")
+                          "")))
+               "</div>"
+               "<form data-act=\"create-field\" method=\"post\">"
+               "<label>名前<input name=\"name\" required></label>"
+               "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
+               "<button type=\"submit\">圃場を保存</button></form>"
+               "<form data-act=\"update-field\" method=\"post\">"
+               "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :id] "")) "\">"
+               "<label>名前<input name=\"name\" value=\"" (esc (get-in state [:form :name] "")) "\"></label>"
+               "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
+               "<button type=\"submit\">形と名前を保存</button></form>"
+               "<form data-act=\"split-field\" method=\"post\">"
+               "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :split-id] "")) "\">"
+               "<input type=\"hidden\" name=\"polygons\" value=\"" (esc (get-in state [:form :polygons] "[]")) "\">"
+               "<button type=\"submit\">分割を保存</button></form>"
+               "<form data-act=\"merge-fields\" method=\"post\">"
+               "<input type=\"hidden\" name=\"keep_id\" value=\"" (esc (get-in state [:form :keep_id] "")) "\">"
+               "<input type=\"hidden\" name=\"ids\" value=\"" (esc (get-in state [:form :ids] "[]")) "\">"
+               "<button type=\"submit\">合筆する</button></form>"
+               "<form data-act=\"import-fields\" method=\"post\" enctype=\"multipart/form-data\">"
+               "<label>区画ファイル<input name=\"file\" type=\"file\" accept=\".json,.geojson,application/geo+json\"></label>"
+               "<button type=\"submit\">取り込む</button></form>"
+               "<form data-act=\"upload-basemap\" method=\"post\" enctype=\"multipart/form-data\">"
+               "<label>下地"
+               "<select name=\"kind\">"
+               "<option value=\"aerial\">空中写真</option>"
+               "<option value=\"standard\">標準地図</option>"
+               "<option value=\"satellite\">衛星</option>"
+               "</select></label>"
+               "<input name=\"file\" type=\"file\" accept=\"image/jpeg,image/png,.jpg,.jpeg,.png\">"
+               "<button type=\"submit\">下地を取り込む</button></form>"
+               "<div id=\"ol-map\" class=\"ol-map\"></div>")))
+
 (defn render [state]
-  (case (:page state)
-    :login (login-view state)
-    :reset-request (reset-request-view state)
-    :reset (reset-view state)
-    :home (home-view state)
-    :invite (invite-view state)
-    :password (password-view state)
-    :users (users-view state)
-    (unknown-view)))
+  (if (and (:narrow? state) (contains? #{:fields :map :map-place} (:page state)))
+    (phone-view state)
+    (case (:page state)
+      :login (login-view state)
+      :reset-request (reset-request-view state)
+      :reset (reset-view state)
+      :home (home-view state)
+      :invite (invite-view state)
+      :password (password-view state)
+      :users (users-view state)
+      :fields (fields-view state)
+      :map (map-view state)
+      :map-place (map-place-view state)
+      (unknown-view))))
 
 (defn apply-route [state path search]
   (let [r (route-for path)]
@@ -212,8 +341,8 @@
     {:state state
      :fx [[:html (render state)]]}))
 
-(defn boot [state {:keys [path search]}]
-  (let [s (apply-route state path search)
+(defn boot [state {:keys [path search narrow?]}]
+  (let [s (apply-route (assoc state :narrow? (boolean narrow?)) path search)
         token (:token (parse-query search))]
     {:state (assoc s :form (if token {:token token} {}))
      :fx [[:session (:kind s)]]}))
@@ -222,9 +351,61 @@
   (let [s (if (:ok body)
             (assoc state :session {:email (:email body)})
             (assoc state :session nil))]
-    (if (and (= :users (:page s)) (:session s))
+    (cond
+      (and (= :users (:page s)) (:session s))
       {:state s :fx [[:api "GET" "/api/admin/users" nil :users-loaded]]}
+
+      (and (#{:map :map-place} (:page s)) (:session s) (not (:narrow? s)))
+      {:state s :fx [[:api "GET" "/api/user/place" nil :place-loaded]]}
+
+      (and (= :fields (:page s)) (:session s) (not (:narrow? s)))
+      {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+
+      :else
       (guarded s))))
+
+(defn place-loaded [state body]
+  (let [s (assoc state :place (when (:ok body)
+                                (select-keys body [:west :south :east :north])))]
+    (if (and (= :map (:page s)) (nil? (:place s)))
+      {:state s :fx [[:nav "/map/place"]]}
+      {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]})))
+
+(defn fields-loaded [state body]
+  (let [s (assoc state :fields (or (:fields body) []))]
+    (if (#{:map :map-place} (:page s))
+      {:state s :fx [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]]}
+      (guarded s))))
+
+(defn basemaps-loaded [state body]
+  (guarded (assoc state :basemaps (or (:basemaps body) []))))
+
+(defn after-place-save [state body]
+  (if (:ok body)
+    {:state (assoc state :flash nil)
+     :fx [[:nav "/map"]]}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn after-field-save [state body]
+  (if (:ok body)
+    {:state (assoc state :flash {:error? false :text "保存しました"} :form {})
+     :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn after-field-delete [state body]
+  (if (:ok body)
+    {:state state :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn after-basemap-upload [state body]
+  (if (:ok body)
+    {:state (assoc state :flash {:error? false :text "下地を取り込みました"})
+     :fx [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]]}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
 
 (defn users-loaded [state body]
   (guarded (assoc state :users (or (:users body) []))))
@@ -280,6 +461,13 @@
       :boot (boot state arg)
       :session-loaded (session-loaded state arg)
       :users-loaded (users-loaded state arg)
+      :place-loaded (place-loaded state arg)
+      :fields-loaded (fields-loaded state arg)
+      :basemaps-loaded (basemaps-loaded state arg)
+      :place-save-result (after-place-save state arg)
+      :field-save-result (after-field-save state arg)
+      :field-delete-result (after-field-delete state arg)
+      :basemap-upload-result (after-basemap-upload state arg)
       :login-result (after-login state arg)
       :logout-result (after-logout state)
       :reset-request-result (after-reset-request state)
@@ -288,6 +476,11 @@
       :password-result (after-password state arg)
       :revoke-result (after-revoke state)
       :api-error (after-api-error state)
+      :narrow
+      (let [s (assoc state :narrow? (boolean (:narrow? arg)))]
+        (if (:session s)
+          (session-loaded s {:ok true :email (get-in s [:session :email])})
+          (guarded s)))
       :path (guarded (apply-route (assoc state :session (:session state) :flash nil) (:path arg) (:search arg)))
       :submit
       (let [act (:act arg)
@@ -303,5 +496,26 @@
           "invite" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/invite" "/api/user/invite") form :invite-result]]}
           "password" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password" "/api/user/password") form :password-result]]}
           "revoke" {:state state :fx [[:api "POST" "/api/admin/users/revoke" form :revoke-result]]}
+          "save-place" {:state state :fx [[:api "PUT" "/api/user/place" form :place-save-result]]}
+          "create-field" {:state state :fx [[:api "POST" "/api/user/fields"
+                                            {:name (:name form)
+                                             :geojson (read-json-str (:geojson form))}
+                                            :field-save-result]]}
+          "update-field" {:state state :fx [[:api "PUT" (str "/api/user/fields/" (:id form))
+                                            (cond-> {}
+                                              (contains? form :name) (assoc :name (:name form))
+                                              (not (str/blank? (str (:geojson form))))
+                                              (assoc :geojson (read-json-str (:geojson form))))
+                                            :field-save-result]]}
+          "delete-field" {:state state :fx [[:api "DELETE" (str "/api/user/fields/" (:id form)) nil :field-delete-result]]}
+          "split-field" {:state state :fx [[:api "POST" (str "/api/user/fields/" (:id form) "/split")
+                                            {:polygons (or (read-json-str (:polygons form)) [])}
+                                            :field-save-result]]}
+          "merge-fields" {:state state :fx [[:api "POST" "/api/user/fields/merge"
+                                            {:keep_id (:keep_id form)
+                                             :ids (or (read-json-str (:ids form)) [])}
+                                            :field-save-result]]}
+          "import-fields" {:state state :fx [[:upload "POST" "/api/user/fields/import" form :field-save-result]]}
+          "upload-basemap" {:state state :fx [[:upload "PUT" (str "/api/user/basemaps/" (:kind form)) form :basemap-upload-result]]}
           {:state state :fx [[:html (render state)]]}))
       {:state state :fx [[:html (render state)]]})))

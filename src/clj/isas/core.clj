@@ -4,7 +4,8 @@
             [isas.db :as db]
             [isas.http :as http]
             [isas.log :as log]
-            [ring.adapter.jetty :as jetty])
+            [ring.adapter.jetty :as jetty]
+            [clojure.java.io :as io])
   (:gen-class))
 
 (def ^:dynamic *exit-fn* nil)
@@ -15,12 +16,15 @@
     (throw (ex-info "起動できませんでした"
                     {:isas/exit-code code}))))
 
-(defn open-system [{:keys [conf-path db-path]}]
+(defn open-system [{:keys [conf-path db-path basemap-dir]
+                    :or {basemap-dir "data/basemaps"}}]
   (let [conf (config/load-conf conf-path)
-        ds (db/migrate! (db/datasource (db/sqlite-url db-path)))]
+        ds (db/migrate! (db/datasource (db/sqlite-url db-path)))
+        dir (io/file basemap-dir)]
+    (.mkdirs dir)
     (accounts/bootstrap-admin! ds conf)
-    (log/info "ISAS を用意しました" :db db-path :log-file "data/isas.log")
-    {:conf conf :ds ds :conf-path conf-path :db-path db-path}))
+    (log/info "ISAS を用意しました" :db db-path :log-file "data/isas.log" :basemaps (.getPath dir))
+    {:conf conf :ds ds :conf-path conf-path :db-path db-path :basemap-dir (.getPath dir)}))
 
 (defn make-app [sys]
   (http/make-app sys))
@@ -31,12 +35,13 @@
 
 (defn start!
   ([] (start! {}))
-  ([{:keys [conf-path db-path port join?]
+  ([{:keys [conf-path db-path port join? basemap-dir]
      :or {conf-path "data/isas.conf"
           db-path "data/isas.sqlite"
           port 8080
-          join? true}}]
-   (let [sys (open-system {:conf-path conf-path :db-path db-path})
+          join? true
+          basemap-dir "data/basemaps"}}]
+   (let [sys (open-system {:conf-path conf-path :db-path db-path :basemap-dir basemap-dir})
          app (make-app sys)
          server (start-server app {:port port :join? join?})]
      (assoc sys :app app :server server))))

@@ -46,4 +46,26 @@
         (let [id (:id (first (db/open-reset-tokens ds "user")))]
           (db/mark-token-used! ds id)
           (is (empty? (db/open-reset-tokens ds "user")))))
-      (is (re-find #"jdbc:sqlite:" (db/sqlite-url "data/x.sqlite"))))))
+      (is (re-find #"jdbc:sqlite:" (db/sqlite-url "data/x.sqlite")))
+      (let [u (db/find-user-by-email ds "u@example.com")
+            p (db/upsert-place! ds (:id u) {:west 139.0 :south 35.0 :east 140.0 :north 36.0})]
+        (is (= 139.0 (:west (db/find-place ds (:id u)))))
+        (is (some? p))
+        (db/upsert-place! ds (:id u) {:west 138.0 :south 34.0 :east 139.0 :north 35.0})
+        (is (= 138.0 (:west (db/find-place ds (:id u)))))
+        (let [bm (db/upsert-basemap! ds {:user-id (:id u) :kind "aerial" :content-type "image/jpeg" :body-ref "1/aerial.jpg"})]
+          (is (= "aerial" (:kind (db/find-basemap ds (:id u) "aerial"))))
+          (is (= 1 (count (db/list-basemaps ds (:id u)))))
+          (db/upsert-basemap! ds {:user-id (:id u) :kind "aerial" :content-type "image/png" :body-ref "1/aerial.png"})
+          (is (= "image/png" (:content_type (db/find-basemap ds (:id u) "aerial"))))
+          (is (some? bm))
+          (db/delete-basemaps! ds (:id u))
+          (is (empty? (db/list-basemaps ds (:id u)))))
+        (let [f (db/insert-field! ds {:user-id (:id u) :name "A" :geojson "{\"type\":\"Polygon\"}"})]
+          (is (= "A" (:name (db/find-field ds (:id u) (:id f)))))
+          (is (= ["A"] (db/field-names ds (:id u))))
+          (is (= 1 (count (db/list-fields ds (:id u)))))
+          (db/update-field! ds (:id f) {:name "B" :geojson "{}"})
+          (is (= "B" (:name (db/find-field ds (:id u) (:id f)))))
+          (db/delete-field! ds (:id f))
+          (is (nil? (db/find-field ds (:id u) (:id f)))))))))
