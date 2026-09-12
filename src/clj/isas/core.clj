@@ -19,7 +19,7 @@
   (let [conf (config/load-conf conf-path)
         ds (db/migrate! (db/datasource (db/sqlite-url db-path)))]
     (accounts/bootstrap-admin! ds conf)
-    (log/info "ISAS を用意しました" :db db-path)
+    (log/info "ISAS を用意しました" :db db-path :log-file "data/isas.log")
     {:conf conf :ds ds :conf-path conf-path :db-path db-path}))
 
 (defn make-app [sys]

@@ -3,6 +3,7 @@
 .DS_Store
 data/*.sqlite
 data/*.sqlite-*
+data/*.log
 data/basemaps/
 target/
 .cpcache/

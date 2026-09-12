@@ -9,5 +9,6 @@ fi
 if [[ -n "${JAVA_HOME:-}" ]]; then
   export PATH="$JAVA_HOME/bin:$PATH"
 fi
+mkdir -p data
 npx --no-install shadow-cljs compile app
 exec clojure -M:run "$@"

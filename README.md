@@ -17,6 +17,8 @@ npm install
 
 ブラウザで `http://localhost:8080/`（利用者）と `http://localhost:8080/admin`（管理者）を開く。
 
+操作ログは端末と `data/isas.log` に残る。古いファイルは `data/isas.日付.番号.log` に回り、Git には入れない。
+
 ## テスト
 
 Clojure / ClojureScript のソースを cloverage 100% と cljs.test で確認する。
