@@ -1,0 +1,49 @@
+(ns isas.db-test
+  (:require [clojure.test :refer [deftest is]]
+            [isas.crypto :as crypto]
+            [isas.db :as db]
+            [isas.test-util :as tu]
+            [isas.time :as time]))
+
+(deftest migrate-and-crud-test
+  (binding [crypto/*cost* 4]
+    (let [ds (:ds (tu/test-system))]
+      (is (pos? (db/count-admins ds)))
+      (is (some? (db/find-admin-by-email ds "admin@example.com")))
+      (is (nil? (db/find-admin-by-email ds "no@x.x")))
+      (let [admin (db/find-admin-by-email ds "admin@example.com")]
+        (is (= (:email admin) (:email (db/find-admin-by-id ds (:id admin)))))
+        (db/update-admin-password! ds (:id admin) "new-hash")
+        (is (= "new-hash" (:password_hash (db/find-admin-by-id ds (:id admin))))))
+      (let [u (db/insert-user! ds {:email "u@example.com"
+                                   :password-hash "h"
+                                   :invited-by-kind "admin"
+                                   :invited-by-id 1})]
+        (is (= "u@example.com" (:email (db/find-user-by-email ds "u@example.com"))))
+        (is (= "u@example.com" (:email (db/find-user-by-id ds (:id u)))))
+        (is (= 1 (count (db/list-active-users ds))))
+        (db/update-user-password! ds (:id u) "h2")
+        (is (= "h2" (:password_hash (db/find-user-by-id ds (:id u)))))
+        (db/revoke-user! ds (:id u))
+        (is (seq (:revoked_at (db/find-user-by-id ds (:id u)))))
+        (is (empty? (db/list-active-users ds)))
+        (db/reinvite-user! ds (:id u) "h3" "user" 9)
+        (is (nil? (:revoked_at (db/find-user-by-id ds (:id u)))))
+        (is (= "user" (:invited_by_kind (db/find-user-by-id ds (:id u))))))
+      (let [sid "abc"]
+        (db/insert-session! ds {:id sid :kind "user" :account-id 1 :expires-at (time/plus-days 1)})
+        (is (nil? (:revoked_at (db/find-session ds sid))))
+        (db/revoke-session! ds sid)
+        (is (seq (:revoked_at (db/find-session ds sid))))
+        (db/insert-session! ds {:id "s2" :kind "user" :account-id 1 :expires-at (time/plus-days 1)})
+        (db/revoke-user-sessions! ds 1)
+        (is (seq (:revoked_at (db/find-session ds "s2")))))
+      (let [tok (db/insert-reset-token! ds {:kind "user" :account-id 1 :token-hash "th" :expires-at (time/plus-hours 1)})]
+        (is (= 1 (count (db/open-reset-tokens ds "user"))))
+        (db/invalidate-reset-tokens! ds "user" 1)
+        (is (empty? (db/open-reset-tokens ds "user")))
+        (db/insert-reset-token! ds {:kind "user" :account-id 1 :token-hash "th2" :expires-at (time/plus-hours 1)})
+        (let [id (:id (first (db/open-reset-tokens ds "user")))]
+          (db/mark-token-used! ds id)
+          (is (empty? (db/open-reset-tokens ds "user")))))
+      (is (re-find #"jdbc:sqlite:" (db/sqlite-url "data/x.sqlite"))))))
