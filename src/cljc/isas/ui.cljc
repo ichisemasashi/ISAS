@@ -35,7 +35,45 @@
    :field-not-found "その圃場はありません"
    :split-too-few "分割は2枚以上にしてください"
    :merge-too-few "合筆は2枚以上選んでください"
-   :merge-keep-missing "残す圃場を対象に含めてください"})
+   :merge-keep-missing "残す圃場を対象に含めてください"
+   :map-hint "手描き・修正・分割・合筆は、上のボタンを押してから地図を操作します"
+   :map-hint-draw "閉じた形を描き、名前を付けて「圃場を保存」してください"
+   :map-hint-edit "頂点を動かして「形と名前を保存」してください"
+   :map-hint-split "分割する圃場をクリックし、圃場を横切る線を引いて「分割を保存」してください"
+   :map-hint-merge "残す圃場をクリックし、続けて合筆する圃場をクリックして「合筆する」を押してください"
+   :map-hint-image "下地を圃場の形に合わせ、「下地の位置を保存」してください。3種とも同じ位置です"
+   :image-shift-west "下地を西へ"
+   :image-shift-east "下地を東へ"
+   :image-shift-south "下地を南へ"
+   :image-shift-north "下地を北へ"
+   :image-scale-in "下地を縮小"
+   :image-scale-out "下地を拡大"
+   :image-reset "下地を作業場所の範囲に戻す"
+   :image-save "下地の位置を保存"
+   :image-ok "下地の位置を保存しました"
+   :work-name "作業名"
+   :work-name-needed "作業名を入れてから塗ってください"
+   :work-name-too-long "作業名は100文字以内にしてください"
+   :work-name-see "この作業名で見る"
+   :paint-confirm "塗りを確定する"
+   :paint-discard "下書きを捨てる"
+   :paint-complete "この圃場をこの作業名で全面完了にする"
+   :paint-delete "この塗りを消す"
+   :paint-delete-all "この圃場のこの作業名の塗りを全部消す"
+   :split-has-paint "塗りが残っている圃場は分割できません。塗りを消してから行ってください"
+   :merge-has-paint "塗りが残っている圃場は合筆できません。塗りを消してから行ってください"
+   :status-none "未"
+   :status-partial "一部"
+   :status-done "済"
+   :paint-empty "圃場の内側に塗れる場所がありません"
+   :paint-not-found "その塗りはありません"
+   :map-hint-brush "作業名を入れ、圃場をクリックしてからブラシで塗ります。重ねて「塗りを確定する」まで正本になりません"
+   :paint-ok "塗りを保存しました"})
+
+(def paint-colors
+  {:none "#c8c8c8"
+   :partial "#e6b800"
+   :done "#2e7d32"})
 
 (defn code-message [code]
   (case code
@@ -59,7 +97,27 @@
     "merge_too_few" (:merge-too-few messages)
     "merge_keep_missing" (:merge-keep-missing messages)
     "import_invalid" (:import-invalid messages)
+    "work_name_required" (:work-name-needed messages)
+    "work_name_too_long" (:work-name-too-long messages)
+    "field_has_paint" (:split-has-paint messages)
+    "paint_not_found" (:paint-not-found messages)
+    "paint_empty" (:paint-empty messages)
     (:api-error messages)))
+
+(defn encode-q [s]
+  #?(:clj (java.net.URLEncoder/encode (str s) "UTF-8")
+     :cljs (js/encodeURIComponent (str s))))
+
+(defn paints-query [work-name]
+  (str "/api/user/paints?work_name=" (encode-q work-name)))
+
+(defn field-paints-query [id work-name]
+  (str "/api/user/fields/" id "/paints?work_name=" (encode-q work-name)))
+
+(defn paint-block-text [act]
+  (if (= "merge" act)
+    (:merge-has-paint messages)
+    (:split-has-paint messages)))
 
 (defn esc [s]
   (-> (str (or s ""))
@@ -89,8 +147,43 @@
                       [(keyword part) ""]))))
            (into {})))))
 
+(defn shift-bbox [{:keys [west south east north]} dx dy]
+  {:west (+ west dx)
+   :south (+ south dy)
+   :east (+ east dx)
+   :north (+ north dy)})
+
+(defn scale-bbox [{:keys [west south east north]} factor]
+  (let [f (if (and (number? factor) (pos? factor)) (double factor) 1.0)
+        cx (/ (+ west east) 2.0)
+        cy (/ (+ south north) 2.0)
+        hw (* (/ (- east west) 2.0) f)
+        hh (* (/ (- north south) 2.0) f)]
+    {:west (- cx hw)
+     :south (- cy hh)
+     :east (+ cx hw)
+     :north (+ cy hh)}))
+
+(defn image-bbox [place]
+  (if (and place
+           (every? number? [(:image_west place) (:image_south place)
+                            (:image_east place) (:image_north place)]))
+    {:west (:image_west place)
+     :south (:image_south place)
+     :east (:image_east place)
+     :north (:image_north place)}
+    (when place
+      (select-keys place [:west :south :east :north]))))
+
+(defn normalize-path [path]
+  (let [p (or path "/")]
+    (cond
+      (str/blank? p) "/"
+      (and (str/ends-with? p "/") (not= p "/")) (recur (subs p 0 (dec (count p))))
+      :else p)))
+
 (defn route-for [path]
-  (case path
+  (case (normalize-path path)
     "/" {:page :login :kind "user"}
     "/reset/request" {:page :reset-request :kind "user"}
     "/reset" {:page :reset :kind "user"}
@@ -107,6 +200,9 @@
     "/admin/invite" {:page :invite :kind "admin"}
     "/admin/users" {:page :users :kind "admin"}
     "/admin/password" {:page :password :kind "admin"}
+    "/admin/fields" {:page :fields :kind "user"}
+    "/admin/map" {:page :map :kind "user"}
+    "/admin/map/place" {:page :map-place :kind "user"}
     {:page :unknown :kind "user"}))
 
 (defn login-path [kind]
@@ -132,7 +228,10 @@
    :place nil
    :basemaps []
    :narrow? false
-   :form {}})
+   :form {}
+   :work-names []
+   :paint-data nil
+   :last-field-act nil})
 
 (defn flash-html [state]
   (when-let [f (:flash state)]
@@ -264,17 +363,59 @@
           (str (nav-user)
                (flash-html state)
                "<p><a data-nav href=\"/map/place\">作業場所を変える</a></p>"
+               "<p id=\"map-hint\">" (esc (:map-hint messages)) "</p>"
+               "<p id=\"map-selection\"></p>"
                "<div class=\"toolbar\">"
-               "<button type=\"button\" data-map=\"draw\">手描き</button>"
-               "<button type=\"button\" data-map=\"edit\">修正</button>"
-               "<button type=\"button\" data-map=\"split\">分割</button>"
-               "<button type=\"button\" data-map=\"merge\">合筆</button>"
+               "<button type=\"button\" data-map=\"draw\" data-hint=\"" (esc (:map-hint-draw messages)) "\">手描き</button>"
+               "<button type=\"button\" data-map=\"edit\" data-hint=\"" (esc (:map-hint-edit messages)) "\">修正</button>"
+               "<button type=\"button\" data-map=\"split\" data-hint=\"" (esc (:map-hint-split messages)) "\">分割</button>"
+               "<button type=\"button\" data-map=\"merge\" data-hint=\"" (esc (:map-hint-merge messages)) "\">合筆</button>"
                (apply str
                       (for [[k label] [["aerial" "空中写真"] ["standard" "標準地図"] ["satellite" "衛星"]]]
                         (if (basemap-ready? state k)
                           (str "<button type=\"button\" data-map=\"basemap\" data-kind=\"" k "\">" label "</button>")
                           "")))
                "</div>"
+               (when (seq (:fields state))
+                 (str
+                  "<div class=\"paint-tools\" data-none=\"" (:none paint-colors)
+                  "\" data-partial=\"" (:partial paint-colors)
+                  "\" data-done=\"" (:done paint-colors) "\">"
+                  "<p id=\"paint-legend\">"
+                  "<span>" (esc (:status-none messages)) "</span> "
+                  "<span>" (esc (:status-partial messages)) "</span> "
+                  "<span>" (esc (:status-done messages)) "</span></p>"
+                  "<form data-act=\"select-work-name\" method=\"post\">"
+                  "<label>" (esc (:work-name messages))
+                  "<input name=\"work_name\" list=\"work-name-list\" value=\"" (esc (get-in state [:form :work_name] "")) "\">"
+                  "<datalist id=\"work-name-list\">"
+                  (apply str (for [nm (:work-names state)]
+                               (str "<option value=\"" (esc nm) "\">")))
+                  "</datalist></label>"
+                  "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>"
+                  "<div class=\"toolbar\">"
+                  "<button type=\"button\" data-map=\"brush\" data-hint=\"" (esc (:map-hint-brush messages)) "\">ブラシ</button>"
+                  "<button type=\"button\" data-map=\"discard\" data-hint=\"" (esc (:map-hint-brush messages)) "\">" (esc (:paint-discard messages)) "</button>"
+                  "</div>"
+                  "<form data-act=\"confirm-paint\" method=\"post\">"
+                  "<input type=\"hidden\" name=\"field_id\" value=\"" (esc (get-in state [:form :field_id] "")) "\">"
+                  "<input type=\"hidden\" name=\"work_name\" value=\"" (esc (get-in state [:form :work_name] "")) "\">"
+                  "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :paint-geojson] "")) "\">"
+                  "<button type=\"submit\">" (esc (:paint-confirm messages)) "</button></form>"
+                  "<form data-act=\"complete-field\" method=\"post\">"
+                  "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :id] "")) "\">"
+                  "<input type=\"hidden\" name=\"work_name\" value=\"" (esc (get-in state [:form :work_name] "")) "\">"
+                  "<button type=\"submit\">" (esc (:paint-complete messages)) "</button></form>"
+                  "<form data-act=\"delete-paint\" method=\"post\">"
+                  "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :paint-id] "")) "\">"
+                  "<button type=\"submit\">" (esc (:paint-delete messages)) "</button></form>"
+                  "<form data-act=\"delete-field-paints\" method=\"post\">"
+                  "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :id] "")) "\">"
+                  "<input type=\"hidden\" name=\"work_name\" value=\"" (esc (get-in state [:form :work_name] "")) "\">"
+                  "<button type=\"submit\">" (esc (:paint-delete-all messages)) "</button></form>"
+                  "<form data-act=\"discard-drafts\" method=\"post\">"
+                  "<button type=\"submit\">" (esc (:paint-discard messages)) "</button></form>"
+                  "</div>"))
                "<form data-act=\"create-field\" method=\"post\">"
                "<label>名前<input name=\"name\" required></label>"
                "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
@@ -287,6 +428,7 @@
                "<form data-act=\"split-field\" method=\"post\">"
                "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :split-id] "")) "\">"
                "<input type=\"hidden\" name=\"polygons\" value=\"" (esc (get-in state [:form :polygons] "[]")) "\">"
+               "<input type=\"hidden\" name=\"line\" value=\"" (esc (get-in state [:form :line] "")) "\">"
                "<button type=\"submit\">分割を保存</button></form>"
                "<form data-act=\"merge-fields\" method=\"post\">"
                "<input type=\"hidden\" name=\"keep_id\" value=\"" (esc (get-in state [:form :keep_id] "")) "\">"
@@ -304,6 +446,23 @@
                "</select></label>"
                "<input name=\"file\" type=\"file\" accept=\"image/jpeg,image/png,.jpg,.jpeg,.png\">"
                "<button type=\"submit\">下地を取り込む</button></form>"
+               (when (some :ready (:basemaps state))
+                 (str "<p>" (esc (:map-hint-image messages)) "</p>"
+                      "<div class=\"toolbar\">"
+                      "<button type=\"button\" data-map=\"image-shift\" data-dir=\"west\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-west messages)) "</button>"
+                      "<button type=\"button\" data-map=\"image-shift\" data-dir=\"east\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-east messages)) "</button>"
+                      "<button type=\"button\" data-map=\"image-shift\" data-dir=\"south\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-south messages)) "</button>"
+                      "<button type=\"button\" data-map=\"image-shift\" data-dir=\"north\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-north messages)) "</button>"
+                      "<button type=\"button\" data-map=\"image-scale\" data-factor=\"0.94\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-scale-in messages)) "</button>"
+                      "<button type=\"button\" data-map=\"image-scale\" data-factor=\"1.06\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-scale-out messages)) "</button>"
+                      "<button type=\"button\" data-map=\"image-reset\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-reset messages)) "</button>"
+                      "</div>"
+                      "<form data-act=\"save-image-extent\" method=\"post\">"
+                      "<input type=\"hidden\" name=\"west\" value=\"" (esc (str (or (:west (image-bbox (:place state))) ""))) "\">"
+                      "<input type=\"hidden\" name=\"south\" value=\"" (esc (str (or (:south (image-bbox (:place state))) ""))) "\">"
+                      "<input type=\"hidden\" name=\"east\" value=\"" (esc (str (or (:east (image-bbox (:place state))) ""))) "\">"
+                      "<input type=\"hidden\" name=\"north\" value=\"" (esc (str (or (:north (image-bbox (:place state))) ""))) "\">"
+                      "<button type=\"submit\">" (esc (:image-save messages)) "</button></form>"))
                "<div id=\"ol-map\" class=\"ol-map\"></div>")))
 
 (defn render [state]
@@ -370,7 +529,9 @@
 
 (defn place-loaded [state body]
   (let [s (assoc state :place (when (:ok body)
-                                (select-keys body [:west :south :east :north])))]
+                                (select-keys body [:west :south :east :north
+                                                   :image_west :image_south
+                                                   :image_east :image_north])))]
     {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}))
 
 (defn fields-loaded [state body]
@@ -380,7 +541,23 @@
       (guarded s))))
 
 (defn basemaps-loaded [state body]
-  (guarded (assoc state :basemaps (or (:basemaps body) []))))
+  (let [s (assoc state :basemaps (or (:basemaps body) []))]
+    (if (#{:map :map-place} (:page s))
+      {:state s :fx [[:api "GET" "/api/user/work-names" nil :work-names-loaded]]}
+      (guarded s))))
+
+(defn work-names-loaded [state body]
+  (let [s (assoc state :work-names (or (:work_names body) []))
+        wn (str/trim (str (or (get-in s [:form :work_name]) "")))]
+    (if (and (= :map (:page s)) (not (str/blank? wn)))
+      {:state s :fx [[:api "GET" (paints-query wn) nil :paints-loaded]]}
+      (guarded s))))
+
+(defn paints-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :paint-data body))
+    (let [s (assoc state :paint-data nil :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
 
 (defn after-place-save [state body]
   (if (:ok body)
@@ -393,8 +570,28 @@
   (if (:ok body)
     {:state (assoc state :flash {:error? false :text "保存しました"} :form {})
      :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+    (let [text (if (= "field_has_paint" (:code body))
+                 (paint-block-text (:last-field-act state))
+                 (code-message (:code body)))
+          s (assoc state :flash {:error? true :text text})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn after-paint-save [state body]
+  (if (:ok body)
+    {:state (assoc state :flash {:error? false :text (:paint-ok messages)})
+     :fx [[:api "GET" "/api/user/work-names" nil :work-names-loaded]]}
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
+
+(defn- blank-work-name? [form state]
+  (str/blank? (str/trim (str (or (:work_name form) (get-in state [:form :work_name]) "")))))
+
+(defn- work-name-of [form state]
+  (str/trim (str (or (:work_name form) (get-in state [:form :work_name]) ""))))
+
+(defn- flash-html-state [state text]
+  (let [s (assoc state :flash {:error? true :text text})]
+    {:state s :fx [[:html (render s)]]}))
 
 (defn after-field-delete [state body]
   (if (:ok body)
@@ -406,6 +603,13 @@
   (if (:ok body)
     {:state (assoc state :flash {:error? false :text "下地を取り込みました"})
      :fx [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]]}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn after-image-save [state body]
+  (if (:ok body)
+    {:state (assoc state :flash {:error? false :text (:image-ok messages)})
+     :fx [[:api "GET" "/api/user/place" nil :place-loaded]]}
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
@@ -466,10 +670,14 @@
       :place-loaded (place-loaded state arg)
       :fields-loaded (fields-loaded state arg)
       :basemaps-loaded (basemaps-loaded state arg)
+      :work-names-loaded (work-names-loaded state arg)
+      :paints-loaded (paints-loaded state arg)
       :place-save-result (after-place-save state arg)
       :field-save-result (after-field-save state arg)
+      :paint-save-result (after-paint-save state arg)
       :field-delete-result (after-field-delete state arg)
       :basemap-upload-result (after-basemap-upload state arg)
+      :image-save-result (after-image-save state arg)
       :login-result (after-login state arg)
       :logout-result (after-logout state)
       :reset-request-result (after-reset-request state)
@@ -484,10 +692,14 @@
           (session-loaded s {:ok true :email (get-in s [:session :email])})
           (guarded s)))
       :path
-      (let [s (apply-route (assoc state :session (:session state) :flash nil) (:path arg) (:search arg))]
-        (if (:session s)
+      (let [s (apply-route (assoc state :session (:session state) :flash nil) (:path arg) (:search arg))
+            s (if (#{:map :map-place} (:page s))
+                (assoc s :form {} :paint-data nil)
+                s)]
+        (if (and (:session s) (= (:kind s) (:kind state)))
           (session-loaded s {:ok true :email (get-in s [:session :email])})
-          (guarded s)))
+          {:state (assoc s :session nil)
+           :fx [[:session (:kind s)]]}))
       :submit
       (let [act (:act arg)
             form (:form arg)
@@ -514,14 +726,85 @@
                                               (assoc :geojson (read-json-str (:geojson form))))
                                             :field-save-result]]}
           "delete-field" {:state state :fx [[:api "DELETE" (str "/api/user/fields/" (:id form)) nil :field-delete-result]]}
-          "split-field" {:state state :fx [[:api "POST" (str "/api/user/fields/" (:id form) "/split")
-                                            {:polygons (or (read-json-str (:polygons form)) [])}
-                                            :field-save-result]]}
-          "merge-fields" {:state state :fx [[:api "POST" "/api/user/fields/merge"
-                                            {:keep_id (:keep_id form)
-                                             :ids (or (read-json-str (:ids form)) [])}
-                                            :field-save-result]]}
+          "split-field"
+          (let [id (str (:id form))
+                polys (let [v (read-json-str (:polygons form))]
+                        (if (sequential? v) v []))
+                line (read-json-str (:line form))]
+            (cond
+              (str/blank? id)
+              (let [s (assoc state :flash {:error? true :text (code-message "field_not_found")})]
+                {:state s :fx [[:html (render s)]]})
+              (and (< (count polys) 2) (nil? line))
+              (let [s (assoc state :flash {:error? true :text (code-message "split_too_few")})]
+                {:state s :fx [[:html (render s)]]})
+              :else
+              {:state (assoc state :last-field-act "split")
+               :fx [[:api "POST" (str "/api/user/fields/" id "/split")
+                     (cond-> {:polygons polys}
+                       line (assoc :line line))
+                     :field-save-result]]}))
+          "merge-fields"
+          (let [ids (let [v (read-json-str (:ids form))]
+                      (if (sequential? v) v []))]
+            (if (< (count ids) 2)
+              (let [s (assoc state :flash {:error? true :text (code-message "merge_too_few")})]
+                {:state s :fx [[:html (render s)]]})
+              {:state (assoc state :last-field-act "merge")
+               :fx [[:api "POST" "/api/user/fields/merge"
+                     {:keep_id (:keep_id form) :ids ids}
+                     :field-save-result]]}))
+          "select-work-name"
+          (let [wn (str/trim (str (or (:work_name form) "")))]
+            (if (str/blank? wn)
+              (let [s (assoc state :form (assoc (:form state) :work_name "") :paint-data nil
+                             :flash {:error? true :text (:work-name-needed messages)})]
+                {:state s :fx [[:html (render s)]]})
+              {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil)
+               :fx [[:api "GET" (paints-query wn) nil :paints-loaded]]}))
+          "confirm-paint"
+          (cond
+            (blank-work-name? form state)
+            (flash-html-state state (:work-name-needed messages))
+            (str/blank? (str (:field_id form)))
+            (flash-html-state state (code-message "field_not_found"))
+            :else
+            {:state (assoc state :form (assoc (:form state) :work_name (work-name-of form state)))
+             :fx [[:api "POST" "/api/user/paints"
+                   {:field_id (:field_id form)
+                    :work_name (work-name-of form state)
+                    :geojson (read-json-str (:geojson form))}
+                   :paint-save-result]]})
+          "complete-field"
+          (cond
+            (blank-work-name? form state)
+            (flash-html-state state (:work-name-needed messages))
+            (str/blank? (str (:id form)))
+            (flash-html-state state (code-message "field_not_found"))
+            :else
+            {:state (assoc state :form (assoc (:form state) :work_name (work-name-of form state)))
+             :fx [[:api "POST" (str "/api/user/fields/" (:id form) "/complete")
+                   {:work_name (work-name-of form state)}
+                   :paint-save-result]]})
+          "delete-paint"
+          (if (str/blank? (str (:id form)))
+            (flash-html-state state (code-message "paint_not_found"))
+            {:state state
+             :fx [[:api "DELETE" (str "/api/user/paints/" (:id form)) nil :paint-save-result]]})
+          "delete-field-paints"
+          (cond
+            (blank-work-name? form state)
+            (flash-html-state state (:work-name-needed messages))
+            (str/blank? (str (:id form)))
+            (flash-html-state state (code-message "field_not_found"))
+            :else
+            {:state state
+             :fx [[:api "DELETE" (field-paints-query (:id form) (work-name-of form state)) nil :paint-save-result]]})
+          "discard-drafts"
+          (let [s (assoc state :flash {:error? false :text (:paint-discard messages)})]
+            {:state s :fx [[:html (render s)]]})
           "import-fields" {:state state :fx [[:upload "POST" "/api/user/fields/import" form :field-save-result]]}
+          "save-image-extent" {:state state :fx [[:api "PUT" "/api/user/place/image" form :image-save-result]]}
           "upload-basemap" {:state state :fx [[:upload "PUT" (str "/api/user/basemaps/" (:kind form)) form :basemap-upload-result]]}
           {:state state :fx [[:html (render state)]]}))
       {:state state :fx [[:html (render state)]]})))

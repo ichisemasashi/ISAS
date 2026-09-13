@@ -1,7 +1,7 @@
 (ns isas.geo-test
   (:require [clojure.test :refer [deftest is]]
             [isas.geo :as geo])
-  (:import [org.locationtech.jts.geom Coordinate GeometryFactory]))
+  (:import [org.locationtech.jts.geom Coordinate Geometry GeometryFactory]))
 
 (def square
   {:type "Polygon"
@@ -22,6 +22,9 @@
 (deftest parse-and-keywordize-test
   (is (nil? (geo/parse-json "{")))
   (is (nil? (geo/parse-json nil)))
+  (is (= "" (geo/strip-bom "")))
+  (is (= "{\"a\":1}" (geo/strip-bom "{\"a\":1}")))
+  (is (= {:type "X"} (geo/parse-json (str "\uFEFF{\"type\":\"X\"}"))))
   (is (= {:type "X"} (geo/keywordize {"type" "X"})))
   (is (= {:a 1} (geo/keywordize {:a 1})))
   (is (= [{:k 1}] (geo/keywordize [{"k" 1}])))
@@ -121,13 +124,55 @@
     (is (= "MultiPolygon" (:type back)))
     (is (= 2 (count (:coordinates back)))))
   (is (nil? (#'geo/jts->gj (.createPoint (GeometryFactory.) (Coordinate. 1.0 2.0)))))
+  (is (nil? (geo/intersect-shapes nil square)))
+  (is (nil? (geo/intersect-shapes {:type "Point" :coordinates [140 36]} square)))
+  (is (nil? (geo/intersect-shapes square square-east)))
+  (is (geo/valid-shape? (geo/intersect-shapes square
+                                             {:type "Polygon"
+                                              :coordinates [[[140.0002 36.0002]
+                                                             [140.0005 36.0002]
+                                                             [140.0005 36.0005]
+                                                             [140.0002 36.0005]
+                                                             [140.0002 36.0002]]]})))
+  (let [gf (GeometryFactory.)
+        p (#'geo/gj->jts square)
+        pe (#'geo/gj->jts square-east)
+        pt (.createPoint gf (Coordinate. 140.0 36.0))
+        empty (.intersection p pe)
+        mp (#'geo/gj->jts {:type "MultiPolygon" :coordinates [(:coordinates square)]})
+        gc1 (.createGeometryCollection gf (into-array Geometry [p]))
+        gc2 (.createGeometryCollection gf (into-array Geometry [p pe]))
+        gc0 (.createGeometryCollection gf (make-array Geometry 0))
+        gcp (.createGeometryCollection gf (into-array Geometry [pt]))]
+    (is (some? (#'geo/polygonal-geom p)))
+    (is (some? (#'geo/polygonal-geom mp)))
+    (is (nil? (#'geo/polygonal-geom nil)))
+    (is (nil? (#'geo/polygonal-geom pt)))
+    (is (nil? (#'geo/polygonal-geom empty)))
+    (is (some? (#'geo/polygonal-geom gc1)))
+    (is (some? (#'geo/polygonal-geom gc2)))
+    (is (nil? (#'geo/polygonal-geom gc0)))
+    (is (nil? (#'geo/polygonal-geom gcp))))
   (is (nil? (geo/union-shapes [])))
   (is (nil? (geo/union-shapes [{:type "Point" :coordinates [0 0]}])))
   (let [u (geo/union-shapes [square square-east])]
     (is (geo/valid-shape? u))
     (is (#{"Polygon" "MultiPolygon"} (:type u))))
   (let [u (geo/union-shapes [square square])]
-    (is (= "Polygon" (:type u)))))
+    (is (= "Polygon" (:type u))))
+  (is (nil? (geo/split-shape square [1 2 3])))
+  (is (nil? (geo/split-shape square {:type "Point" :coordinates [140 36]})))
+  (is (nil? (geo/split-shape square {:type "LineString" :coordinates [[140 36]]})))
+  (is (nil? (geo/split-shape square {:type "LineString" :coordinates [[400000 3000000] [400010 3000010]]})))
+  (is (nil? (geo/split-shape square {:type "LineString" :coordinates "no"})))
+  (is (nil? (geo/split-shape {:type "Point" :coordinates [140 36]} {:type "LineString" :coordinates [[140 36] [141 36]]})))
+  (is (> 2 (count (or (geo/split-shape square {:type "LineString" :coordinates [[139 35] [139 36]]}) []))))
+  (let [cut (geo/split-shape square {:type "LineString"
+                                     :coordinates [[140.0005 35.999] [140.0005 36.002]]})]
+    (is (<= 2 (count cut)))
+    (is (every? geo/valid-shape? cut)))
+  (let [cut (geo/split-shape square "{\"type\":\"LineString\",\"coordinates\":[[140.0005,35.999],[140.0005,36.002]]}")]
+    (is (<= 2 (count cut)))))
 
 (deftest numbers-bbox-json-test
   (is (= 1.5 (geo/as-number 1.5)))

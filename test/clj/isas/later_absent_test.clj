@@ -1,5 +1,5 @@
 (ns isas.later-absent-test
-  "工程3〜6は未着手。基本・詳細試験のうち「まだ無い／出さない」項だけを自動試験する。"
+  "工程4〜6は未着手。基本・詳細試験のうち「まだ無い／出さない」項だけを自動試験する。"
   (:require [clojure.test :refer [deftest is testing]]
             [isas.http :as http]
             [isas.test-util :as tu]
@@ -9,8 +9,7 @@
   (tu/page-html (merge {:kind "user" :session {:email "a@example.com"}} opts)))
 
 (def later-apis
-  [["P3" ["/api/user/paints" "/api/user/work-names"]]
-   ["P4" ["/api/user/gantt" "/api/user/gantt/percent"]]
+  [["P4" ["/api/user/gantt" "/api/user/gantt/percent"]]
    ["P5" ["/api/user/orders" "/api/user/journals" "/api/admin/relations/cut"]]
    ["P6" ["/api/user/locale" "/api/admin/locale"]]])
 
@@ -22,12 +21,11 @@
             map-html (html {:page :map :place {:west 1 :south 2 :east 3 :north 4}})
             home (html {:page :home})
             admin-home (html {:page :home :kind "admin"})]
-        (testing "B3-2-04 / P3 ガントと指示は地図に出さない。塗りAPIは無い"
-          (is (nil? (http/match-api :post "/api/user/paints")))
-          (is (not (re-find #"全面完了|作業名の色|ガント" map-html)))
-          (is (not (contains? names "paints"))))
+        (testing "B3-2-04 / P3-2.1-08 ガントと指示は地図に出さない"
+          (is (not (re-find #"ガント|指示" map-html)))
+          (is (contains? names "paints")))
         (testing "B3-2-03 / B3-5.4-01 狭い画面に塗りは持たない"
-          (is (not (re-find #"手描き|全面完了" (html {:page :map :narrow? true})))))
+          (is (not (re-find #"手描き|全面完了|ブラシ" (html {:page :map :narrow? true})))))
         (testing "B3-3-02 他人の圃場は見ない"
           (is (nil? (http/match-api :get "/api/user/others/fields"))))
         (testing "B4-2-04 / P4 指示は出さない。ガントAPIは無い"

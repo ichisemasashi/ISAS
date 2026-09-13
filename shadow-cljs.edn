@@ -19,4 +19,7 @@
                                 "ol/source/ImageStatic" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/format/GeoJSON" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/interaction/Draw" {:target :file :file "test/js/ol_stub.js"}
-                                "ol/interaction/Modify" {:target :file :file "test/js/ol_stub.js"}}}}}}
+                                "ol/interaction/Modify" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/style/Style" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/style/Fill" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/style/Stroke" {:target :file :file "test/js/ol_stub.js"}}}}}}

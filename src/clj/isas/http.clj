@@ -5,6 +5,7 @@
             [isas.accounts :as accounts]
             [isas.fields :as fields]
             [isas.log :as log]
+            [isas.paints :as paints]
             [ring.middleware.cookies :as cookies]
             [ring.middleware.multipart-params :as mp]
             [ring.util.response :as response]))
@@ -197,6 +198,16 @@
           (log/warn "作業場所を読めませんでした" :error (.getMessage e))
           (fail "place_invalid"))))))
 
+(defn place-image-put [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (fields/put-image-extent sys uid (read-body req))]
+          (if (:ok r) (ok {}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "下地の位置を読めませんでした" :error (.getMessage e))
+          (fail "place_invalid"))))))
+
 (defn basemaps-get [sys req]
   (with-farm sys req
     (fn [uid]
@@ -275,6 +286,67 @@
       (let [r (fields/import-geojson sys uid (upload-of req))]
         (if (:ok r) (ok {:fields (:fields r)}) (fail (:code r)))))))
 
+(defn query-params [req]
+  (let [q (or (:query-string req) "")]
+    (if (str/blank? q)
+      {}
+      (->> (str/split q #"&")
+           (remove str/blank?)
+           (map (fn [part]
+                  (let [i (str/index-of part "=")
+                        [k v] (if i
+                                [(subs part 0 i) (subs part (inc i))]
+                                [part ""])]
+                    [(keyword k)
+                     (try
+                       (java.net.URLDecoder/decode (str v) "UTF-8")
+                       (catch Exception _ (str v)))])))
+           (into {})))))
+
+(defn work-names-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (ok (select-keys (paints/list-work-names sys uid) [:work_names])))))
+
+(defn paints-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (paints/list-paints sys uid (:work_name (query-params req)))]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn paints-post [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (paints/create-paint sys uid (read-body req))]
+          (if (:ok r) (ok {:paint (:paint r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "塗り確定を読めませんでした" :error (.getMessage e))
+          (fail "paint_empty"))))))
+
+(defn field-complete [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [body (read-body req)
+              r (paints/complete-field sys uid id (:work_name body))]
+          (if (:ok r) (ok {}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "全面完了を読めませんでした" :error (.getMessage e))
+          (fail "work_name_required"))))))
+
+(defn paint-delete [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (paints/delete-paint sys uid id)]
+        (if (:ok r) (ok {}) (fail (:code r)))))))
+
+(defn field-paints-delete [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (paints/delete-field-paints sys uid id (:work_name (query-params req)))]
+        (if (:ok r) (ok {}) (fail (:code r)))))))
+
 (def api-routes
   {[:get "/api/user/session"] [:session "user"]
    [:post "/api/user/login"] [:login "user"]
@@ -294,11 +366,15 @@
    [:post "/api/admin/users/revoke"] [:revoke]
    [:get "/api/user/place"] [:place-get]
    [:put "/api/user/place"] [:place-put]
+   [:put "/api/user/place/image"] [:place-image-put]
    [:get "/api/user/basemaps"] [:basemaps-get]
    [:get "/api/user/fields"] [:fields-get]
    [:post "/api/user/fields"] [:fields-post]
    [:post "/api/user/fields/merge"] [:fields-merge]
-   [:post "/api/user/fields/import"] [:fields-import]})
+   [:post "/api/user/fields/import"] [:fields-import]
+   [:get "/api/user/work-names"] [:work-names-get]
+   [:get "/api/user/paints"] [:paints-get]
+   [:post "/api/user/paints"] [:paints-post]})
 
 (defn match-api [method uri]
   (or (get api-routes [method uri])
@@ -307,8 +383,14 @@
           (= method :put) [:basemap-put kind]
           (= method :get) [:basemap-get kind]
           :else nil))
+      (when-let [[_ id] (re-matches #"/api/user/fields/(\d+)/complete" (str uri))]
+        (when (= method :post) [:field-complete id]))
+      (when-let [[_ id] (re-matches #"/api/user/fields/(\d+)/paints" (str uri))]
+        (when (= method :delete) [:field-paints-delete id]))
       (when-let [[_ id] (re-matches #"/api/user/fields/(\d+)/split" (str uri))]
         (when (= method :post) [:field-split id]))
+      (when-let [[_ id] (re-matches #"/api/user/paints/(\d+)" (str uri))]
+        (when (= method :delete) [:paint-delete id]))
       (when-let [[_ id] (re-matches #"/api/user/fields/(\d+)" (str uri))]
         (cond
           (= method :put) [:field-put id]
@@ -335,6 +417,7 @@
         :revoke (revoke-post sys req)
         :place-get (place-get sys req)
         :place-put (place-put sys req)
+        :place-image-put (place-image-put sys req)
         :basemaps-get (basemaps-get sys req)
         :basemap-put (basemap-put sys req (second spec))
         :basemap-get (basemap-file sys req (second spec))
@@ -345,6 +428,12 @@
         :field-split (field-split sys req (second spec))
         :fields-merge (fields-merge sys req)
         :fields-import (fields-import sys req)
+        :work-names-get (work-names-get sys req)
+        :paints-get (paints-get sys req)
+        :paints-post (paints-post sys req)
+        :field-complete (field-complete sys req (second spec))
+        :field-paints-delete (field-paints-delete sys req (second spec))
+        :paint-delete (paint-delete sys req (second spec))
         (fail "unauthorized")))))
 
 (defn index-html []

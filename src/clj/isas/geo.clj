@@ -3,7 +3,8 @@
             [clojure.string :as str]
             [clojure.walk :as walk])
   (:import [net.sf.geographiclib Geodesic PolygonArea]
-           [org.locationtech.jts.geom Coordinate GeometryFactory LinearRing MultiPolygon Polygon PrecisionModel]))
+           [org.locationtech.jts.geom Coordinate GeometryCollection GeometryFactory LinearRing MultiPolygon Polygon PrecisionModel]
+           [org.locationtech.jts.operation.polygonize Polygonizer]))
 
 (def ^:private gf (GeometryFactory. (PrecisionModel.) 4326))
 
@@ -17,9 +18,16 @@
        v))
    x))
 
+(defn strip-bom [s]
+  (let [t (str s)]
+    (cond
+      (empty? t) t
+      (= (first t) \uFEFF) (str/trim (subs t 1))
+      :else t)))
+
 (defn parse-json [s]
   (try
-    (keywordize (json/read-str (str s)))
+    (keywordize (json/read-str (strip-bom (str s))))
     (catch Exception _
       nil)))
 
@@ -180,6 +188,48 @@
   (let [geoms (keep gj->jts gjs)]
     (when (seq geoms)
       (jts->gj (reduce (fn [a b] (.union a b)) geoms)))))
+
+(defn- polygonal-geom [g]
+  (when (and g (not (.isEmpty g)))
+    (cond
+      (instance? Polygon g) g
+      (instance? MultiPolygon g) g
+      (instance? GeometryCollection g)
+      (let [parts (keep (fn [i]
+                          (polygonal-geom (.getGeometryN g i)))
+                        (range (.getNumGeometries g)))]
+        (when (seq parts)
+          (if (= 1 (count parts))
+            (first parts)
+            (reduce (fn [a b] (.union a b)) parts))))
+      :else nil)))
+
+(defn intersect-shapes [a b]
+  (let [ga (gj->jts a)
+        gb (gj->jts b)]
+    (when (and ga gb)
+      (let [gj (jts->gj (polygonal-geom (.intersection ga gb)))]
+        (when (valid-shape? gj) gj)))))
+
+(defn- gj->line [gj]
+  (when (and (map? gj) (= "LineString" (str (:type gj))))
+    (let [pts (keep pair (:coordinates gj))]
+      (when (and (>= (count pts) 2)
+                 (every? lon-lat? pts))
+        (.createLineString gf (into-array Coordinate (map (fn [[x y]] (Coordinate. x y)) pts)))))))
+
+(defn split-shape [gj line-gj]
+  (let [g (gj->jts gj)
+        line (gj->line (if (string? line-gj) (parse-json line-gj) line-gj))]
+    (when (and g line)
+      (let [noded (.union (.getBoundary g) line)
+            polygonizer (Polygonizer.)]
+        (.add polygonizer noded)
+        (->> (.getPolygons polygonizer)
+             (filter (fn [p] (.covers g (.getInteriorPoint p))))
+             (keep jts->gj)
+             (filter valid-shape?)
+             vec)))))
 
 (defn as-number [x]
   (cond

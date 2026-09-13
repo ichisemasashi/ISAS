@@ -35,9 +35,9 @@
           (is (re-find #"圃場台帳" (html {:page :fields :fields []})))
           (is (re-find #"パソコンで開いてください" (html {:page :map :narrow? true})))
           (is (not (re-find #"手描き" (html {:page :map :narrow? true})))))
-        (testing "B2-2-05 塗り・ガント・指示・言語切替は出さない"
-          (is (not (re-find #"全面完了|ガント|指示" (html {:page :map :place place}))))
-          (is (nil? (http/match-api :post "/api/user/paints"))))
+        (testing "B2-2-05 ガント・指示・言語切替は出さない"
+          (is (not (re-find #"ガント|指示" (html {:page :map :place place}))))
+          (is (nil? (http/match-api :get "/api/user/gantt"))))
         (testing "B2-2-06 管理者は圃場を持たない"
           (is (= 403 (:status (tu/get-path app "/api/user/fields" "admin" asid))))
           (is (not (re-find #"href=\"/fields\"" (html {:page :home :kind "admin"})))))
@@ -86,7 +86,7 @@
         (testing "B2-5.3 / B2-5.4"
           (is (re-find #"空中写真|標準地図|衛星" (html {:page :map :place place
                                                       :basemaps [{:kind "aerial" :ready true}]})))
-          (is (not (re-find #"全面完了" (html {:page :map :place place}))))
+          (is (not (re-find #"ガント" (html {:page :map :place place}))))
           (is (not (re-find #"下地を取り込む" (html {:page :map :narrow? true})))))
         (testing "B2-6 データ単位"
           (let [p (db/find-place (:ds sys) uid)
@@ -96,7 +96,7 @@
             (is (contains? names "work_places"))
             (is (contains? names "basemaps"))
             (is (contains? names "fields"))
-            (is (not (contains? names "paints")))))
+            (is (not (contains? names "gantt_rows")))))
         (testing "B2-7.2 流れ"
           (is (true? (:ok (fields/put-place sys uid place))))
           (is (re-find #"この範囲を作業場所にする|空中写真|手描き" (html {:page :map :place place})))

@@ -3,7 +3,8 @@
             [isas.crypto :as crypto]
             [isas.db :as db]
             [isas.test-util :as tu]
-            [isas.time :as time]))
+            [isas.time :as time]
+            [next.jdbc :as jdbc]))
 
 (deftest migrate-and-crud-test
   (binding [crypto/*cost* 4]
@@ -47,12 +48,21 @@
           (db/mark-token-used! ds id)
           (is (empty? (db/open-reset-tokens ds "user")))))
       (is (re-find #"jdbc:sqlite:" (db/sqlite-url "data/x.sqlite")))
+      (is (contains? (db/table-columns ds "work_places") "image_west"))
+      (db/migrate! ds)
+      (jdbc/execute! ds ["CREATE TABLE tmp_cols (id INTEGER)"])
+      (#'db/ensure-column! ds "tmp_cols" "x" "REAL")
+      (is (contains? (db/table-columns ds "tmp_cols") "x"))
+      (#'db/ensure-column! ds "tmp_cols" "x" "REAL")
       (let [u (db/find-user-by-email ds "u@example.com")
             p (db/upsert-place! ds (:id u) {:west 139.0 :south 35.0 :east 140.0 :north 36.0})]
         (is (= 139.0 (:west (db/find-place ds (:id u)))))
         (is (some? p))
+        (db/update-place-image! ds (:id u) {:west 139.2 :south 35.2 :east 139.8 :north 35.8})
+        (is (= 139.2 (:image_west (db/find-place ds (:id u)))))
         (db/upsert-place! ds (:id u) {:west 138.0 :south 34.0 :east 139.0 :north 35.0})
         (is (= 138.0 (:west (db/find-place ds (:id u)))))
+        (is (nil? (:image_west (db/find-place ds (:id u)))))
         (let [bm (db/upsert-basemap! ds {:user-id (:id u) :kind "aerial" :content-type "image/jpeg" :body-ref "1/aerial.jpg"})]
           (is (= "aerial" (:kind (db/find-basemap ds (:id u) "aerial"))))
           (is (= 1 (count (db/list-basemaps ds (:id u)))))

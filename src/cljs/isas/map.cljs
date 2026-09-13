@@ -1,5 +1,6 @@
 (ns isas.map
   (:require [isas.browser :as browser]
+            [isas.ui :as ui]
             ["ol/Map" :default OlMap]
             ["ol/View" :default View]
             ["ol/layer/Vector" :default VectorLayer]
@@ -9,7 +10,10 @@
             ["ol/source/ImageStatic" :default ImageStatic]
             ["ol/format/GeoJSON" :default GeoJSON]
             ["ol/interaction/Draw" :default Draw]
-            ["ol/interaction/Modify" :default Modify]))
+            ["ol/interaction/Modify" :default Modify]
+            ["ol/style/Style" :default Style]
+            ["ol/style/Fill" :default Fill]
+            ["ol/style/Stroke" :default Stroke]))
 
 (def japan-extent #js [129 26 146 46])
 
@@ -25,28 +29,132 @@
     (.setTarget ol-map nil))
   (reset! current nil))
 
-(defn- features-from [fields]
+(defn style-for [kind status painted?]
+  (let [fill (if (= "paint" (str kind))
+               "rgba(21,101,192,0.25)"
+               (if painted?
+                 (case (str status)
+                   "none" "#c8c8c8"
+                   "partial" "#e6b800"
+                   "done" "#2e7d32"
+                   "#c8c8c8")
+                 "rgba(0,0,0,0)"))
+        stroke (if (= "paint" (str kind)) "#1565c0" "#333333")
+        width (if (= "paint" (str kind)) 2 1)]
+    (Style. #js {:stroke (Stroke. #js {:color stroke :width width})
+                 :fill (Fill. #js {:color fill})})))
+
+(defn drafts-geojson [drafts]
+  (let [ds (vec drafts)]
+    (cond
+      (empty? ds) nil
+      (= 1 (count ds)) (first ds)
+      :else {:type "MultiPolygon"
+             :coordinates (mapv (fn [g]
+                                  (if (= "Polygon" (str (:type g)))
+                                    (:coordinates g)
+                                    (first (or (:coordinates g) []))))
+                                ds)})))
+
+(defn- features-from [fields paint-data]
   (let [^js fmt (geojson-fmt)
-        arr #js []]
+        arr #js []
+        by (into {} (map (fn [f] [(:id f) f]) (or (:fields paint-data) [])))
+        colored? (some? paint-data)]
     (doseq [f fields]
       (when (:geojson f)
-        (let [feat (.readFeature fmt (clj->js {:type "Feature"
+        (let [p (get by (:id f))
+              feat (.readFeature fmt (clj->js {:type "Feature"
                                                :geometry (:geojson f)
-                                               :properties {:id (:id f) :name (:name f)}}))]
+                                               :properties {:id (:id f)
+                                                            :name (:name f)
+                                                            :status (or (:status p) "none")
+                                                            :painted colored?}}))]
+          (.set feat "id" (:id f))
+          (.set feat "name" (:name f))
+          (.set feat "status" (or (:status p) "none"))
+          (.set feat "painted" colored?)
           (.push arr feat))))
+    (when paint-data
+      (doseq [pf (:fields paint-data)
+              p (:paints pf)]
+        (when (:geojson p)
+          (let [feat (.readFeature fmt (clj->js {:type "Feature"
+                                                 :geometry (:geojson p)
+                                                 :properties {:paint-id (:id p)
+                                                              :kind "paint"
+                                                              :id (:id pf)}}))]
+            (.set feat "paint-id" (:id p))
+            (.set feat "kind" "paint")
+            (.set feat "id" (:id pf))
+            (.push arr feat)))))
     arr))
 
-(defn- image-layer [kind place]
-  (ImageLayer.
-   #js {:source (ImageStatic.
-                 #js {:url (str "/api/user/basemaps/" kind)
-                      :imageExtent #js [(:west place) (:south place) (:east place) (:north place)]
-                      :projection "EPSG:4326"})}))
+(defn- image-source [kind box]
+  (ImageStatic.
+   #js {:url (str "/api/user/basemaps/" kind)
+        :imageExtent #js [(:west box) (:south box) (:east box) (:north box)]
+        :projection "EPSG:4326"}))
+
+(defn- image-layer [kind box]
+  (ImageLayer. #js {:source (image-source kind box)}))
+
+(defn- place-box [place]
+  (select-keys place [:west :south :east :north]))
+
+(defn- current-image-box [place]
+  (or (:image-ext @current) (ui/image-bbox place) (place-box place)))
 
 (defn- set-form-input [act name v]
   (when-let [^js form (.querySelector js/document (str "form[data-act='" act "']"))]
     (when-let [^js el (.querySelector form (str "input[name='" name "']"))]
       (set! (.-value el) (str v)))))
+
+(defn- fill-image-form [box]
+  (when box
+    (set-form-input "save-image-extent" "west" (:west box))
+    (set-form-input "save-image-extent" "south" (:south box))
+    (set-form-input "save-image-extent" "east" (:east box))
+    (set-form-input "save-image-extent" "north" (:north box))))
+
+(defn- remember-image [box]
+  (swap! current assoc :image-ext box)
+  (when-let [st @browser/app-state]
+    (swap! browser/app-state update :place merge
+           {:image_west (:west box)
+            :image_south (:south box)
+            :image_east (:east box)
+            :image_north (:north box)}))
+  (fill-image-form box))
+
+(defn- apply-image-box [box]
+  (when (and box (< (:west box) (:east box)) (< (:south box) (:north box)))
+    (remember-image box)
+    (when-let [{:keys [^js image-layer kind]} @current]
+      (when image-layer
+        (.setSource image-layer (image-source kind box))))))
+
+(defn- shift-image [dir]
+  (when-let [place (or (:place @current) (:place @browser/app-state))]
+    (let [box (current-image-box place)
+          w (- (:east box) (:west box))
+          h (- (:north box) (:south box))
+          step 0.03
+          [dx dy] (case dir
+                    "west" [(- (* w step)) 0]
+                    "east" [(* w step) 0]
+                    "south" [0 (- (* h step))]
+                    "north" [0 (* h step)]
+                    [0 0])]
+      (apply-image-box (ui/shift-bbox box dx dy)))))
+
+(defn- scale-image [factor]
+  (when-let [place (or (:place @current) (:place @browser/app-state))]
+    (apply-image-box (ui/scale-bbox (current-image-box place) factor))))
+
+(defn- reset-image []
+  (when-let [place (or (:place @current) (:place @browser/app-state))]
+    (apply-image-box (place-box place))))
 
 (defn- deg [n]
   (.toFixed (js/Number n) 2))
@@ -64,20 +172,56 @@
 (defn- write-json [act name obj]
   (set-form-input act name (.stringify js/JSON (clj->js obj))))
 
+(defn- set-hint [text]
+  (when-let [^js el (.getElementById js/document "map-hint")]
+    (set! (.-textContent el) (str text))))
+
+(defn- set-selection [text]
+  (when-let [^js el (.getElementById js/document "map-selection")]
+    (set! (.-textContent el) (str text))))
+
+(defn- current-work-name []
+  (or (some-> (.querySelector js/document "form[data-act='select-work-name'] input[name='work_name']")
+              .-value)
+      ""))
+
+(defn- write-drafts! []
+  (when-let [gj (drafts-geojson (or (:drafts @current) []))]
+    (write-json "confirm-paint" "geojson" gj))
+  (when-let [id (first (:selected @current))]
+    (set-form-input "confirm-paint" "field_id" id)
+    (set-form-input "complete-field" "id" id)
+    (set-form-input "delete-field-paints" "id" id))
+  (let [wn (current-work-name)]
+    (set-form-input "confirm-paint" "work_name" wn)
+    (set-form-input "complete-field" "work_name" wn)
+    (set-form-input "delete-field-paints" "work_name" wn)))
+
 (defn- start-draw [mode]
-  (when-let [{:keys [^js map ^js source]} @current]
-    (let [^js draw (Draw. #js {:source source :type "Polygon"})]
+  (when-let [{:keys [^js map ^js source draft-source]} @current]
+    (let [src (if (= mode :brush) (or draft-source source) source)
+          typ (if (= mode :split) "LineString" "Polygon")
+          opts #js {:source src :type typ :freehand (= mode :brush)}
+          ^js draw (Draw. opts)]
       (.addInteraction map draw)
       (.on draw "drawend"
            (fn [^js ev]
              (let [^js fmt (geojson-fmt)
                    ^js feat (.-feature ev)
-                   gj (.writeGeometryObject fmt (.getGeometry feat))]
-               (if (= mode :split)
-                 (let [ps (conj (or (:split-polys @current) []) gj)]
-                   (swap! current assoc :split-polys ps)
-                   (write-json "split-field" "polygons" ps))
-                 (write-json "create-field" "geojson" gj))))))))
+                   gj (js->clj (.writeGeometryObject fmt (.getGeometry feat)) :keywordize-keys true)]
+               (cond
+                 (= mode :split) (write-json "split-field" "line" gj)
+                 (= mode :brush) (do (swap! current update :drafts (fnil conj []) gj)
+                                     (write-drafts!))
+                 :else (write-json "create-field" "geojson" gj))))))))
+
+(defn- discard-drafts! []
+  (swap! current assoc :drafts [])
+  (when-let [^js src (:draft-source @current)]
+    (when (.-clear src)
+      (.clear src)))
+  (set-form-input "confirm-paint" "geojson" "")
+  (set-selection ""))
 
 (defn- start-edit []
   (when-let [{:keys [^js map ^js source]} @current]
@@ -96,13 +240,18 @@
                  (write-json "update-field" "geojson"
                              (.writeGeometryObject fmt (.getGeometry feat))))))))))
 
-(defn- on-tool [op kind]
+(defn- on-tool [op kind dir factor]
   (cond
     (= op "draw") (start-draw :create)
     (= op "edit") (start-edit)
-    (= op "split") (do (swap! current assoc :split-polys [])
-                       (start-draw :split))
-    (= op "merge") (swap! current assoc :selected [])
+    (= op "split") (start-draw :split)
+    (= op "brush") (start-draw :brush)
+    (= op "discard") (discard-drafts!)
+    (= op "merge") (do (swap! current assoc :selected [])
+                       (set-selection ""))
+    (= op "image-shift") (shift-image dir)
+    (= op "image-scale") (scale-image (js/parseFloat (str factor)))
+    (= op "image-reset") (reset-image)
     (= op "basemap") (when kind
                        (swap! current assoc :kind kind)
                        (when-let [st @browser/app-state]
@@ -111,24 +260,44 @@
 
 (defn- on-doc-click [^js ev]
   (when-let [^js btn (.closest (.-target ev) "[data-map]")]
-    (on-tool (.getAttribute btn "data-map") (.getAttribute btn "data-kind"))))
+    (when-let [h (.getAttribute btn "data-hint")]
+      (set-hint h))
+    (on-tool (.getAttribute btn "data-map")
+             (.getAttribute btn "data-kind")
+             (.getAttribute btn "data-dir")
+             (.getAttribute btn "data-factor"))))
 
 (defn- bind-map-click [^js ol-map]
   (.on ol-map "click"
        (fn [^js evt]
          (.forEachFeatureAtPixel ol-map (.-pixel evt)
                                  (fn [^js feat]
-                                   (let [id (.get feat "id")
-                                         nm (.get feat "name")
-                                         ids (vec (distinct (conj (or (:selected @current) []) id)))]
-                                     (swap! current assoc :selected ids)
-                                     (set-form-input "split-field" "id" id)
-                                     (set-form-input "update-field" "id" id)
-                                     (when nm
-                                       (set-form-input "update-field" "name" nm))
-                                     (set-form-input "merge-fields" "keep_id" (first ids))
-                                     (write-json "merge-fields" "ids" ids)
-                                     true))))))
+                                   (if-let [paint-id (.get feat "paint-id")]
+                                     (do
+                                       (set-form-input "delete-paint" "id" paint-id)
+                                       (set-selection (str "選んでいる塗り: " paint-id))
+                                       true)
+                                     (let [id (.get feat "id")
+                                           nm (.get feat "name")
+                                           ids (vec (distinct (conj (or (:selected @current) []) id)))]
+                                       (swap! current assoc :selected ids)
+                                       (set-form-input "split-field" "id" id)
+                                       (set-form-input "update-field" "id" id)
+                                       (set-form-input "confirm-paint" "field_id" id)
+                                       (set-form-input "complete-field" "id" id)
+                                       (set-form-input "delete-field-paints" "id" id)
+                                       (let [wn (current-work-name)]
+                                         (set-form-input "confirm-paint" "work_name" wn)
+                                         (set-form-input "complete-field" "work_name" wn)
+                                         (set-form-input "delete-field-paints" "work_name" wn))
+                                       (when nm
+                                         (set-form-input "update-field" "name" nm))
+                                       (set-form-input "merge-fields" "keep_id" (first ids))
+                                       (write-json "merge-fields" "ids" ids)
+                                       (set-selection (str "選んでいる圃場: " (or nm id)
+                                                           (when (> (count ids) 1)
+                                                             (str "（合筆の対象 " (count ids) "枚）"))))
+                                       true)))))))
 
 (defn- sync! [state _dispatch]
   (let [el (.getElementById js/document "ol-map")]
@@ -137,12 +306,18 @@
       (let [place (:place state)
             kind (or (:basemap-kind state) "aerial")
             ready? (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state)))
-            src (VectorSource. #js {:features (features-from (or (:fields state) []))})
-            vec-layer (VectorLayer. #js {:source src})
+            style-fn (fn [feat _]
+                       (style-for (.get feat "kind") (.get feat "status") (.get feat "painted")))
+            src (VectorSource. #js {:features (features-from (or (:fields state) []) (:paint-data state))})
+            draft-src (VectorSource. #js {:features #js []})
+            vec-layer (VectorLayer. #js {:source src :style style-fn})
+            draft-layer (VectorLayer. #js {:source draft-src})
             ^js grid (Graticule. #js {:showLabels true :wrapX false})
-            layers (if (and place ready?)
-                     #js [(image-layer kind place) grid vec-layer]
-                     #js [grid vec-layer])
+            img-box (when place (current-image-box place))
+            img (when (and place ready? img-box) (image-layer kind img-box))
+            layers (if img
+                     #js [img grid vec-layer draft-layer]
+                     #js [grid vec-layer draft-layer])
             ^js view (View. #js {:projection "EPSG:4326"})
             ^js ol-map (OlMap. #js {:target el :layers layers :view view})
             ext (if place
@@ -150,11 +325,15 @@
                   japan-extent)]
         (.fit view ext #js {:padding #js [16 16 16 16]})
         (fill-place-form ext)
+        (fill-image-form img-box)
         (.on ol-map "moveend" (fn [_]
                                 (when-let [^js v (.getView ol-map)]
                                   (fill-place-form (.calculateExtent v)))))
         (bind-map-click ol-map)
-        (reset! current {:map ol-map :source src :view view :kind kind :split-polys [] :selected []})
+        (reset! current {:map ol-map :source src :view view :kind kind
+                         :image-layer img :place place :image-ext img-box
+                         :split-polys [] :selected [] :drafts []
+                         :draft-source draft-src :style-fn style-fn})
         nil))))
 
 (defn install! []

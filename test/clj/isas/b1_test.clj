@@ -35,8 +35,7 @@
           (let [sid (tu/user-sid app "b1@example.com" pw)]
             (is (seq (:initial_password (tu/parse (tu/post-json app "/api/user/invite"
                                                                {:email "from-user@example.com"} "user" sid)))))))
-        (testing "B1-2-05 後工程のうち未着手は出さない（塗り・ガント・指示・言語切替）"
-          (is (nil? (http/match-api :post "/api/user/paints")))
+        (testing "B1-2-05 後工程のうち未着手は出さない（ガント・指示・言語切替）"
           (is (nil? (http/match-api :get "/api/user/gantt")))
           (is (nil? (http/match-api :post "/api/user/orders")))
           (is (not (re-find #"言語切替|English" (html {:page :home :kind "user"})))))
@@ -121,7 +120,6 @@
             (is (nil? (:ui_lang admin)))
             (is (:email user))
             (is (contains? user :revoked_at))
-            (is (not (contains? names "paints")))
             (is (not (contains? names "gantt_rows")))
             (is (not (contains? names "orders")))))
         (testing "B1-7.1 招待して入る／取り消す"

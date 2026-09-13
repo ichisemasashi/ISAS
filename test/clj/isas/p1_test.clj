@@ -330,7 +330,6 @@
             (is (every? #(contains? user %) [:id :email :password_hash :revoked_at :invited_by_kind :invited_by_id :created_at]))
             (is (contains? names "reset_tokens"))
             (is (contains? names "sessions"))
-            (is (not (contains? names "paints")))
             (is (not (contains? names "gantt_rows")))
             (is (not (contains? names "orders")))))
         (testing "P1-4-07 圃場ゼロでも入れる"

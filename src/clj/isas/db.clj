@@ -42,6 +42,10 @@
       south REAL NOT NULL,
       east REAL NOT NULL,
       north REAL NOT NULL,
+      image_west REAL,
+      image_south REAL,
+      image_east REAL,
+      image_north REAL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id)
     )"
@@ -62,14 +66,34 @@
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS paints (
+      id INTEGER PRIMARY KEY,
+      field_id INTEGER NOT NULL,
+      work_name TEXT NOT NULL,
+      geojson TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (field_id) REFERENCES fields(id)
     )"])
 
 (defn datasource [jdbc-url]
   (jdbc/with-options (jdbc/get-datasource {:jdbcUrl jdbc-url})
     {:builder-fn rs/as-unqualified-lower-maps}))
 
+(defn table-columns [ds table]
+  (set (map (fn [row] (str (:name row)))
+            (jdbc/execute! ds [(str "PRAGMA table_info(" table ")")]))))
+
+(defn- ensure-column! [ds table column decl]
+  (when-not (contains? (table-columns ds table) (str column))
+    (jdbc/execute! ds [(str "ALTER TABLE " table " ADD COLUMN " column " " decl)])))
+
 (defn migrate! [ds]
   (run! (fn [sql] (jdbc/execute! ds [sql])) schema)
+  (ensure-column! ds "work_places" "image_west" "REAL")
+  (ensure-column! ds "work_places" "image_south" "REAL")
+  (ensure-column! ds "work_places" "image_east" "REAL")
+  (ensure-column! ds "work_places" "image_north" "REAL")
   (log/info "データベースの表を用意しました")
   ds)
 
@@ -162,9 +186,17 @@
                        ON CONFLICT(user_id) DO UPDATE SET
                          west = excluded.west, south = excluded.south,
                          east = excluded.east, north = excluded.north,
+                         image_west = NULL, image_south = NULL,
+                         image_east = NULL, image_north = NULL,
                          updated_at = excluded.updated_at
                        RETURNING *"
                       user-id west south east north (time/now-utc)]))
+
+(defn update-place-image! [ds user-id {:keys [west south east north]}]
+  (jdbc/execute-one! ds
+                     ["UPDATE work_places SET image_west = ?, image_south = ?, image_east = ?, image_north = ?,
+                         updated_at = ? WHERE user_id = ? RETURNING *"
+                      west south east north (time/now-utc) user-id]))
 
 (defn list-basemaps [ds user-id]
   (jdbc/execute! ds ["SELECT * FROM basemaps WHERE user_id = ?" user-id]))
@@ -208,3 +240,46 @@
 
 (defn field-names [ds user-id]
   (mapv :name (jdbc/execute! ds ["SELECT name FROM fields WHERE user_id = ?" user-id])))
+
+(defn insert-paint! [ds {:keys [field-id work-name geojson]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO paints (field_id, work_name, geojson, created_at)
+                       VALUES (?, ?, ?, ?) RETURNING *"
+                      field-id work-name geojson (time/now-utc)]))
+
+(defn find-paint-for-user [ds user-id id]
+  (jdbc/execute-one! ds
+                     ["SELECT p.* FROM paints p JOIN fields f ON f.id = p.field_id
+                       WHERE p.id = ? AND f.user_id = ?"
+                      id user-id]))
+
+(defn list-paints-for-field [ds field-id]
+  (jdbc/execute! ds ["SELECT * FROM paints WHERE field_id = ? ORDER BY id" field-id]))
+
+(defn list-paints-for-field-name [ds field-id work-name]
+  (jdbc/execute! ds ["SELECT * FROM paints WHERE field_id = ? AND work_name = ? ORDER BY id"
+                     field-id work-name]))
+
+(defn list-work-names [ds user-id]
+  (mapv :work_name
+        (jdbc/execute! ds
+                       ["SELECT DISTINCT p.work_name AS work_name FROM paints p
+                         JOIN fields f ON f.id = p.field_id
+                         WHERE f.user_id = ?
+                         ORDER BY p.work_name"
+                        user-id])))
+
+(defn count-paints-for-field [ds field-id]
+  (:c (jdbc/execute-one! ds ["SELECT COUNT(*) AS c FROM paints WHERE field_id = ?" field-id])))
+
+(defn delete-paint! [ds id]
+  (jdbc/execute-one! ds ["DELETE FROM paints WHERE id = ?" id]))
+
+(defn delete-paints-for-field! [ds field-id]
+  (jdbc/execute-one! ds ["DELETE FROM paints WHERE field_id = ?" field-id]))
+
+(defn delete-paints-for-field-name! [ds field-id work-name]
+  (jdbc/execute-one! ds ["DELETE FROM paints WHERE field_id = ? AND work_name = ?" field-id work-name]))
+
+(defn update-paint-geojson! [ds id geojson]
+  (jdbc/execute-one! ds ["UPDATE paints SET geojson = ? WHERE id = ?" geojson id]))

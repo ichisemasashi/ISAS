@@ -26,10 +26,20 @@
                             ["/admin/invite" :invite "admin"]
                             ["/admin/users" :users "admin"]
                             ["/admin/password" :password "admin"]
-                            ["/nope" :unknown "user"]]]
+                            ["/nope" :unknown "user"]
+                            ["/home/" :home "user"]
+                            ["/fields/" :fields "user"]
+                            ["/map/" :map "user"]
+                            ["/admin/fields" :fields "user"]
+                            ["/admin/map" :map "user"]
+                            ["/admin/map/place/" :map-place "user"]
+                            ["/admin/home/" :home "admin"]]]
     (let [r (ui/route-for path)]
       (is (= page (:page r)))
       (is (= kind (:kind r)))))
+  (is (= "/" (ui/normalize-path "")))
+  (is (= "/" (ui/normalize-path nil)))
+  (is (= "/home" (ui/normalize-path "/home/")))
   (is (= "/" (ui/login-path "user")))
   (is (= "/admin" (ui/login-path "admin")))
   (is (= "/home" (ui/home-path "user")))
@@ -59,7 +69,32 @@
   (is (re-find #"合筆は2枚" (ui/code-message "merge_too_few")))
   (is (re-find #"残す圃場" (ui/code-message "merge_keep_missing")))
   (is (re-find #"区画として読めません" (ui/code-message "import_invalid")))
-  (is (re-find #"通信" (ui/code-message "other"))))
+  (is (re-find #"作業名を入れてから" (ui/code-message "work_name_required")))
+  (is (re-find #"100文字" (ui/code-message "work_name_too_long")))
+  (is (re-find #"分割できません" (ui/code-message "field_has_paint")))
+  (is (re-find #"その塗り" (ui/code-message "paint_not_found")))
+  (is (re-find #"内側に塗れる" (ui/code-message "paint_empty")))
+  (is (re-find #"%E7%94%B0" (ui/encode-q "田植え")))
+  (is (re-find #"work_name=" (ui/paints-query "田植え")))
+  (is (re-find #"/paints\?work_name=" (ui/field-paints-query 1 "田植え")))
+  (is (re-find #"合筆できません" (ui/paint-block-text "merge")))
+  (is (re-find #"分割できません" (ui/paint-block-text "split")))
+  (is (re-find #"通信" (ui/code-message "other")))
+  (is (= {:west 1.0 :south 2.0 :east 3.0 :north 4.0}
+         (ui/shift-bbox {:west 0.0 :south 2.0 :east 2.0 :north 4.0} 1.0 0.0)))
+  (let [s (ui/scale-bbox {:west 0.0 :south 0.0 :east 2.0 :north 2.0} 2.0)]
+    (is (= -1.0 (:west s)))
+    (is (= 3.0 (:east s))))
+  (is (= {:west 0.0 :south 0.0 :east 2.0 :north 2.0}
+         (ui/scale-bbox {:west 0.0 :south 0.0 :east 2.0 :north 2.0} 0)))
+  (is (= {:west 0.0 :south 0.0 :east 2.0 :north 2.0}
+         (ui/scale-bbox {:west 0.0 :south 0.0 :east 2.0 :north 2.0} nil)))
+  (is (nil? (ui/image-bbox nil)))
+  (is (= {:west 1 :south 2 :east 3 :north 4}
+         (ui/image-bbox {:west 1 :south 2 :east 3 :north 4})))
+  (is (= {:west 9 :south 8 :east 7 :north 6}
+         (ui/image-bbox {:west 1 :south 2 :east 3 :north 4
+                         :image_west 9 :image_south 8 :image_east 7 :image_north 6}))))
 
 (deftest render-all-pages-test
   (let [base (ui/init-state)]
@@ -76,6 +111,15 @@
     (is (not (re-find #"href=\"/fields\"" (ui/render (assoc base :page :home :kind "admin" :session {:email "a"})))))
     (is (re-find #"href=\"/fields\"" (ui/render (assoc base :page :home :kind "user" :session {:email "a"}))))
     (is (re-find #"href=\"/map\"" (ui/render (assoc base :page :home :kind "user" :session {:email "a"}))))
+    (is (re-find #"下地を西へ" (ui/render (assoc base :page :map :session {:email "a"}
+                                               :place {:west 1 :south 2 :east 3 :north 4}
+                                               :basemaps [{:kind "aerial" :ready true}]))))
+    (is (not (re-find #"下地を西へ" (ui/render (assoc base :page :map :session {:email "a"}
+                                                    :place {:west 1 :south 2 :east 3 :north 4}
+                                                    :basemaps [])))))
+    (is (re-find #"下地の位置を保存" (ui/render (assoc base :page :map :session {:email "a"}
+                                                     :place {}
+                                                     :basemaps [{:kind "aerial" :ready true}]))))
     (is (re-find #"取り消す" (ui/render (assoc base :page :users :kind "admin" :users [{:id 2 :email "z@z.z"}]))))
     (is (re-find #"招待" (ui/render (assoc base :page :invite :kind "admin" :session {:email "a"}))))
     (is (re-find #"今のパスワード" (ui/render (assoc base :page :password :kind "admin" :session {:email "a"}))))
@@ -95,7 +139,18 @@
                                               :basemaps [{:kind "aerial" :ready true}]))))
     (is (not (re-find #"data-kind=\"standard\"" (ui/render (assoc base :page :map :kind "user"
                                                                 :place {:west 1 :south 2 :east 3 :north 4}
-                                                                :basemaps [])))))))
+                                                                :basemaps [])))))
+    (is (re-find #"塗りを確定する" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                                     :place {:west 1 :south 2 :east 3 :north 4}
+                                                     :fields [{:id 1 :name "北"}]
+                                                     :work-names ["田植え"]))))
+    (is (re-find #"option value=\"田植え\"" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                                              :place {:west 1 :south 2 :east 3 :north 4}
+                                                              :fields [{:id 1 :name "北"}]
+                                                              :work-names ["田植え"]))))
+    (is (not (re-find #"塗りを確定する" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                                          :place {:west 1 :south 2 :east 3 :north 4}
+                                                          :fields [])))))))
 
 (deftest handle-flow-test
   (let [s (ui/init-state)
@@ -155,7 +210,9 @@
     (is (= :api (fx-op (assoc s :page :map) [:fields-loaded {:fields [{:id 1}]}])))
     (is (= :html (fx-op (assoc s :page :fields) [:fields-loaded {:fields []}])))
     (is (map? (ui/handle s [:fields-loaded {}])))
-    (is (= :html (fx-op s [:basemaps-loaded {:ok true :basemaps [{:kind "aerial" :ready true}]}])))
+    (is (= :api (fx-op s [:basemaps-loaded {:ok true :basemaps [{:kind "aerial" :ready true}]}])))
+    (is (= :html (fx-op (assoc s :page :fields) [:basemaps-loaded {:ok true :basemaps []}])))
+    (is (= :html (fx-op (assoc s :page :map-place) [:work-names-loaded {:work_names []}])))
     (is (map? (ui/handle s [:basemaps-loaded {}])))
     (is (= :nav (fx-op s [:place-save-result {:ok true}])))
     (is (true? (get-in (ui/handle s [:place-save-result {:ok false :code "place_invalid"}]) [:state :flash :error?])))
@@ -170,7 +227,8 @@
     (is (= :api (fx-op (assoc s :page :home) [:path {:path "/map" :search ""}])))
     (is (= :api (fx-op (assoc s :page :home) [:path {:path "/fields" :search ""}])))
     (is (= :html (fx-op (assoc s :page :map) [:path {:path "/home" :search ""}])))
-    (is (= :nav (fx-op (assoc (dissoc s :session) :page :home) [:path {:path "/map" :search ""}])))
+    (is (= :session (fx-op (assoc (dissoc s :session) :page :home) [:path {:path "/map" :search ""}])))
+    (is (= :session (fx-op (assoc s :page :home :kind "user") [:path {:path "/admin/users" :search ""}])))
     (let [b (ui/handle (ui/init-state) [:boot {:path "/map" :search "" :narrow? true}])]
       (is (true? (get-in b [:state :narrow?]))))
     (is (= :api (fx-op s [:submit {:act "save-place" :form {:west "1"}}])))
@@ -182,9 +240,15 @@
     (is (= :nav (fx-op (assoc (ui/init-state) :page :map :kind "user") [:session-loaded {:ok false}])))
     (is (= :nav (fx-op (assoc (ui/init-state) :page :map-place :kind "user") [:session-loaded {:ok false}])))
     (is (= :nav (fx-op (assoc (ui/init-state) :page :fields :kind "user") [:session-loaded {:ok false}])))
-    (is (= :api (fx-op s [:submit {:act "split-field" :form {:id "1"}}])))
-    (is (= :api (fx-op s [:submit {:act "split-field" :form {:id "1" :polygons "[1]"}}])))
-    (is (= :api (fx-op s [:submit {:act "merge-fields" :form {:keep_id "1"}}])))
+    (is (= :html (fx-op s [:submit {:act "split-field" :form {:id "1"}}])))
+    (is (= :html (fx-op s [:submit {:act "split-field" :form {:id "1" :polygons "[1]"}}])))
+    (is (= :html (fx-op s [:submit {:act "split-field" :form {:polygons "[{},{}]"}}])))
+    (is (= :api (fx-op s [:submit {:act "split-field" :form {:id "1" :polygons "[{},{}]"}}])))
+    (is (= :api (fx-op s [:submit {:act "split-field" :form {:id "1" :line "{\"type\":\"LineString\"}"}}])))
+    (is (= :html (fx-op s [:submit {:act "merge-fields" :form {:keep_id "1"}}])))
     (is (= :api (fx-op s [:submit {:act "merge-fields" :form {:keep_id "1" :ids "[1,2]"}}])))
     (is (= :upload (fx-op s [:submit {:act "import-fields" :form {:file "x"}}])))
-    (is (= :upload (fx-op s [:submit {:act "upload-basemap" :form {:kind "aerial" :file "x"}}])))))
+    (is (= :upload (fx-op s [:submit {:act "upload-basemap" :form {:kind "aerial" :file "x"}}])))
+    (is (= :api (fx-op s [:submit {:act "save-image-extent" :form {:west "1" :south "2" :east "3" :north "4"}}])))
+    (is (= :api (fx-op s [:image-save-result {:ok true}])))
+    (is (true? (get-in (ui/handle s [:image-save-result {:ok false :code "place_invalid"}]) [:state :flash :error?])))))

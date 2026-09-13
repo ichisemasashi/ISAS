@@ -68,6 +68,13 @@
         (is (= "place_invalid" (:code (fields/put-place sys uid {:west 146 :south 26 :east 129 :north 46}))))
         (is (true? (:ok (fields/put-place sys uid {:west "139.5" :south "35.5" :east "140.5" :north "36.5"}))))
         (is (true? (:ok (fields/get-place sys uid))))
+        (is (nil? (:image_west (fields/get-place sys uid))))
+        (is (= "place_invalid" (:code (fields/put-image-extent sys uid {:west 140 :south 35 :east 139 :north 36}))))
+        (is (true? (:ok (fields/put-image-extent sys uid {:west "139.6" :south "35.6" :east "140.4" :north "36.4"}))))
+        (is (= 139.6 (:image_west (fields/get-place sys uid))))
+        (is (true? (:ok (fields/put-image-extent sys uid {:reset true}))))
+        (is (nil? (:image_west (fields/get-place sys uid))))
+        (is (true? (:ok (fields/put-image-extent sys uid {:reset "true"}))))
         (is (not (some :ready (:basemaps (fields/list-basemap-status sys uid)))))
         (is (= "basemap_kind" (:code (fields/put-basemap sys uid "nope" (img ".jpg" "image/jpeg")))))
         (is (= "basemap_kind" (:code (fields/get-basemap sys uid "nope"))))
@@ -88,7 +95,9 @@
               f (io/file (fields/basemap-root sys) (:body_ref row))]
           (.delete f)
           (is (= "basemap_missing" (:code (fields/get-basemap sys uid "aerial")))))
+        (is (true? (:ok (fields/put-image-extent sys uid {:west 139.7 :south 35.7 :east 140.3 :north 36.3}))))
         (is (true? (:ok (fields/put-place sys uid {:west 139.0 :south 35.0 :east 140.0 :north 36.0}))))
+        (is (nil? (:image_west (fields/get-place sys uid))))
         (is (= "basemap_missing" (:code (fields/get-basemap sys uid "standard"))))
         (fields/delete-basemap-files sys uid)
         (let [dir (io/file (fields/basemap-root sys) (str uid))]
@@ -106,7 +115,8 @@
   (tu/with-sys
     (fn [sys]
       (let [uid (user-id sys "q@example.com")]
-        (is (= "place_unset" (:code (fields/put-basemap sys uid "aerial" (img ".jpg" "image/jpeg")))))))))
+        (is (= "place_unset" (:code (fields/put-basemap sys uid "aerial" (img ".jpg" "image/jpeg")))))
+        (is (= "place_unset" (:code (fields/put-image-extent sys uid {:west 1 :south 2 :east 3 :north 4}))))))))
 
 (deftest field-crud-split-merge-import-test
   (tu/with-sys
@@ -137,6 +147,13 @@
             (is (= "field_not_found" (:code (fields/split-field sys uid 99999 {:polygons [square square-east]}))))
             (is (= "split_too_few" (:code (fields/split-field sys uid id {}))))
             (is (= "split_too_few" (:code (fields/split-field sys uid id {:polygons [square]}))))
+            (let [line-id (get-in (fields/create-field sys uid {:name "割線" :geojson square}) [:field :id])]
+              (is (= "split_too_few" (:code (fields/split-field sys uid line-id {:line {:type "LineString" :coordinates [[139 35] [139 36]]}}))))
+              (let [line-sp (fields/split-field sys uid line-id {:line {:type "LineString"
+                                                                       :coordinates [[140.0005 35.999] [140.0005 36.002]]}})]
+                (is (true? (:ok line-sp)))
+                (is (<= 2 (count (:fields line-sp))))
+                (is (re-find #"仮-" (get-in line-sp [:fields 0 :name])))))
             (let [sp (fields/split-field sys uid id {:polygons [(geo/to-json square) square-east]})]
               (is (true? (:ok sp)))
               (is (= 2 (count (:fields sp))))
@@ -165,6 +182,10 @@
               (is (= 2 (count (:fields r))))
               (is (= "取込A" (get-in r [:fields 0 :name])))
               (is (re-find #"仮-" (get-in r [:fields 1 :name]))))
+            (let [bom (str "\uFEFF" (geo/to-json {:type "FeatureCollection"
+                                                  :features [{:type "Feature" :geometry square}]}))
+                  r (fields/import-geojson sys uid {:body bom})]
+              (is (true? (:ok r))))
             (let [r (fields/import-geojson sys uid {:body (geo/to-json square)})]
               (is (true? (:ok r))))
             (let [r (fields/import-geojson sys uid {:bytes (.getBytes (geo/to-json square-east) "UTF-8")})]

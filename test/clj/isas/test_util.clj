@@ -151,6 +151,42 @@
                   [140.002 36.001]
                   [140.002 36.0]]]})
 
+(def square-inner
+  {:type "Polygon"
+   :coordinates [[[140.0002 36.0002]
+                  [140.0005 36.0002]
+                  [140.0005 36.0005]
+                  [140.0002 36.0005]
+                  [140.0002 36.0002]]]})
+
+(def square-nw
+  {:type "Polygon"
+   :coordinates [[[140.0 36.0008]
+                  [140.0002 36.0008]
+                  [140.0002 36.001]
+                  [140.0 36.001]
+                  [140.0 36.0008]]]})
+
+(defn get-query
+  ([app path q] (get-query app path q nil nil))
+  ([app path q kind sid]
+   (let [qs (->> q
+                 (map (fn [[k v]]
+                        (str (name k) "=" (java.net.URLEncoder/encode (str v) "UTF-8"))))
+                 (str/join "&"))
+         req (mock/request :get (if (str/blank? qs) path (str path "?" qs)))]
+     (app (if sid (as-user req kind sid) req)))))
+
+(defn delete-query
+  ([app path q] (delete-query app path q nil nil))
+  ([app path q kind sid]
+   (let [qs (->> q
+                 (map (fn [[k v]]
+                        (str (name k) "=" (java.net.URLEncoder/encode (str v) "UTF-8"))))
+                 (str/join "&"))
+         req (mock/request :delete (if (str/blank? qs) path (str path "?" qs)))]
+     (app (if sid (as-user req kind sid) req)))))
+
 (defn admin-sid [app]
   (cookie-value (post-json app "/api/admin/login"
                            {:email "admin@example.com" :password "ChangeMeAdmin1"})

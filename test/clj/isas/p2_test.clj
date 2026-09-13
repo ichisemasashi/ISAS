@@ -58,7 +58,11 @@
           (is (true? (:ok (tu/parse (tu/put-json app "/api/user/place"
                                                 {:west 139.0 :south 35.0 :east 141.0 :north 37.0}
                                                 "user" usid)))))
-          (is (true? (:ok (tu/parse (tu/get-path app "/api/user/place" "user" usid))))))
+          (is (true? (:ok (tu/parse (tu/get-path app "/api/user/place" "user" usid)))))
+          (is (true? (:ok (tu/parse (tu/put-json app "/api/user/place/image"
+                                                {:west 139.2 :south 35.2 :east 140.8 :north 36.8}
+                                                "user" usid)))))
+          (is (= 139.2 (:image_west (tu/parse (tu/get-path app "/api/user/place" "user" usid))))))
         (testing "P2-2.2-05〜08 下地"
           (is (true? (:ok (tu/parse (tu/get-path app "/api/user/basemaps" "user" usid)))))
           (is (= "basemap_kind" (:code (tu/parse (tu/get-path app "/api/user/basemaps/nope" "user" usid)))))
@@ -79,6 +83,7 @@
             (is (true? (:ok (tu/parse (tu/put-json app "/api/user/place"
                                                   {:west 138.0 :south 34.0 :east 140.0 :north 36.0}
                                                   "user" usid)))))
+            (is (nil? (:image_west (tu/parse (tu/get-path app "/api/user/place" "user" usid)))))
             (is (= "basemap_missing" (:code (tu/parse (tu/get-path app "/api/user/basemaps/aerial" "user" usid)))))
             (is (some #(= "Keep" (:name %)) (db/list-fields (:ds sys) uid)))))
         (testing "P2-2.2-09〜15 圃場 CRUD"
@@ -96,6 +101,13 @@
             (is (true? (:ok (tu/parse (tu/put-json app (str "/api/user/fields/" id) {:name "A2"} "user" usid)))))
             (is (= "split_too_few" (:code (tu/parse (tu/post-json app (str "/api/user/fields/" id "/split")
                                                                 {:polygons []} "user" usid)))))
+            (let [line-id (get-in (tu/parse (tu/post-json app "/api/user/fields" {:name "割線" :geojson tu/square} "user" usid)) [:field :id])
+                  line-sp (tu/parse (tu/post-json app (str "/api/user/fields/" line-id "/split")
+                                                 {:line {:type "LineString"
+                                                         :coordinates [[140.0005 35.999] [140.0005 36.002]]}}
+                                                 "user" usid))]
+              (is (true? (:ok line-sp)))
+              (is (<= 2 (count (:fields line-sp)))))
             (is (= "merge_too_few" (:code (tu/parse (tu/post-json app "/api/user/fields/merge"
                                                                 {:keep_id id :ids [id]} "user" usid)))))
             (let [sp (tu/parse (tu/post-json app (str "/api/user/fields/" id "/split")
@@ -147,9 +159,9 @@
             (is (re-find #"ol-map" h))
             (is (re-find #"value=\"129\"" h))))
         (testing "P2-2.3-04 / P2-7-03 地図の初期は作業場所"
-          (is (= :html (tu/fx-op (assoc (ui/init-state) :page :map :kind "user" :session {:email "a"}
-                                        :place place :fields [{:id 1}])
-                                 [:basemaps-loaded {:basemaps []}]))))
+          (is (= :api (tu/fx-op (assoc (ui/init-state) :page :map :kind "user" :session {:email "a"}
+                                       :place place :fields [{:id 1}])
+                                [:basemaps-loaded {:basemaps []}]))))
         (testing "P2-2.3-05 既定は空中写真。無ければ下地なし"
           (let [ready (html {:page :map :place place :basemaps [{:kind "aerial" :ready true}
                                                                {:kind "standard" :ready true}]})
@@ -174,7 +186,7 @@
         (testing "P2-2.6 地図は自分の圃場。後工程は出さない"
           (let [h (html {:page :map :place place :fields [{:id 1 :name "北"}]})]
             (is (re-find #"手描き|修正|分割|合筆" h))
-            (is (not (re-find #"全面完了|ガント|指示|作業名の色" h)))))
+            (is (not (re-find #"ガント|指示" h)))))
         (testing "P2-2.6-06 取込は Polygon ごと。点は飛ばす"
           (let [fc {:type "FeatureCollection"
                     :features [{:type "Feature" :geometry tu/square :properties {:name "取込A"}}
@@ -213,7 +225,7 @@
             (is (contains? names "work_places"))
             (is (contains? names "basemaps"))
             (is (contains? names "fields"))
-            (is (not (contains? names "paints"))))
+            (is (contains? names "paints")))
           (is (re-find #"data/basemaps/" (slurp (io/file ".gitignore")))))
         (testing "P2-5 文言"
           (is (= "圃場台帳" (:fields-title ui/messages)))
@@ -222,7 +234,6 @@
           (is (re-find #"パソコンで開いてください" (html {:page :map :narrow? true})))
           (is (re-find #"標準地図" (html {:page :map :place place :basemaps [{:kind "standard" :ready true}]}))))
         (testing "P2-6 工程2で作らないもの"
-          (is (nil? (http/match-api :post "/api/user/paints")))
           (is (nil? (http/match-api :get "/api/user/gantt")))
           (is (not (re-find #"cyberjapandata|openstreetmap|tile.openstreetmap" (html {:page :map :place place}))))
           (is (not (re-find #"地名検索" (html {:page :map-place}))))
