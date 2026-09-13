@@ -81,10 +81,21 @@
     (is (re-find #"今のパスワード" (ui/render (assoc base :page :password :kind "admin" :session {:email "a"}))))
     (is (re-find #"ホーム" (ui/render (assoc base :page :invite :kind "user" :session {:email "a"} :initial-password nil))))
     (is (re-find #"圃場台帳" (ui/render (assoc base :page :fields :kind "user" :fields []))))
+    (is (re-find #"<th>㎡</th>" (ui/render (assoc base :page :fields :kind "user"
+                                                 :fields [{:id 1 :name "北" :area_ha 0 :area_m2 42}]))))
+    (is (re-find #"42" (ui/render (assoc base :page :fields :kind "user"
+                                         :fields [{:id 1 :name "北" :area_ha 0 :area_m2 42}]))))
     (is (re-find #"パソコンで開いてください" (ui/render (assoc base :page :map :kind "user" :narrow? true :session {:email "a"}))))
-    (is (re-find #"作業場所" (ui/render (assoc base :page :map-place :kind "user" :form {:west "1" :south "2" :east "3" :north "4"}))))
-    (is (re-find #"空中写真" (ui/render (assoc base :page :map :kind "user" :basemaps [{:kind "aerial" :ready true}]))))
-    (is (not (re-find #"data-kind=\"standard\"" (ui/render (assoc base :page :map :kind "user" :basemaps [])))))))
+    (is (re-find #"この範囲を作業場所にする" (ui/render (assoc base :page :map-place :kind "user" :form {:west "1" :south "2" :east "3" :north "4"}))))
+    (is (re-find #"先に作業場所の範囲を決めてください" (ui/render (assoc base :page :map :kind "user"))))
+    (is (re-find #"ドラッグで移動" (ui/render (assoc base :page :map :kind "user"))))
+    (is (re-find #"この範囲を作業場所にする" (ui/render (assoc base :page :map :kind "user"))))
+    (is (re-find #"空中写真" (ui/render (assoc base :page :map :kind "user"
+                                              :place {:west 1 :south 2 :east 3 :north 4}
+                                              :basemaps [{:kind "aerial" :ready true}]))))
+    (is (not (re-find #"data-kind=\"standard\"" (ui/render (assoc base :page :map :kind "user"
+                                                                :place {:west 1 :south 2 :east 3 :north 4}
+                                                                :basemaps [])))))))
 
 (deftest handle-flow-test
   (let [s (ui/init-state)
@@ -138,7 +149,7 @@
     (is (= :api (fx-op (assoc s :page :map-place) [:session-loaded {:ok true :email "a"}])))
     (is (= :api (fx-op (assoc s :page :fields) [:session-loaded {:ok true :email "a"}])))
     (is (= :html (fx-op (assoc s :page :map :narrow? true) [:session-loaded {:ok true :email "a"}])))
-    (is (= :nav (fx-op (assoc s :page :map) [:place-loaded {:ok false :code "place_unset"}])))
+    (is (= :api (fx-op (assoc s :page :map) [:place-loaded {:ok false :code "place_unset"}])))
     (is (= :api (fx-op (assoc s :page :map) [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])))
     (is (= :api (fx-op (assoc s :page :map-place) [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])))
     (is (= :api (fx-op (assoc s :page :map) [:fields-loaded {:fields [{:id 1}]}])))
@@ -156,6 +167,10 @@
     (is (true? (get-in (ui/handle s [:basemap-upload-result {:ok false :code "import_invalid"}]) [:state :flash :error?])))
     (is (= :api (fx-op (assoc s :page :map) [:narrow {:narrow? false}])))
     (is (= :html (fx-op (assoc (dissoc s :session) :page :login) [:narrow {:narrow? true}])))
+    (is (= :api (fx-op (assoc s :page :home) [:path {:path "/map" :search ""}])))
+    (is (= :api (fx-op (assoc s :page :home) [:path {:path "/fields" :search ""}])))
+    (is (= :html (fx-op (assoc s :page :map) [:path {:path "/home" :search ""}])))
+    (is (= :nav (fx-op (assoc (dissoc s :session) :page :home) [:path {:path "/map" :search ""}])))
     (let [b (ui/handle (ui/init-state) [:boot {:path "/map" :search "" :narrow? true}])]
       (is (true? (get-in b [:state :narrow?]))))
     (is (= :api (fx-op s [:submit {:act "save-place" :form {:west "1"}}])))

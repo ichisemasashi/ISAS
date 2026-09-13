@@ -1,5 +1,4 @@
 {:deps {:aliases [:cljs]}
- :source-paths ["src/cljs" "src/cljc" "test/cljs"]
  :builds
  {:app {:target :browser
         :output-dir "resources/public/js"
@@ -10,4 +9,14 @@
         :devtools {:enabled false}}
   :test {:target :node-test
          :output-to "target/node-tests.js"
-         :ns-regexp "isas.browser-test"}}}
+         :ns-regexp "-test$"
+         :js-options {:resolve {"ol/Map" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/View" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/layer/Vector" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/layer/Image" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/layer/Graticule" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/source/Vector" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/source/ImageStatic" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/format/GeoJSON" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/interaction/Draw" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/interaction/Modify" {:target :file :file "test/js/ol_stub.js"}}}}}}

@@ -23,6 +23,7 @@
    :fields-title "圃場台帳"
    :map-title "地図"
    :place-needed "先に作業場所の範囲を決めてください"
+   :place-move "枠の中をドラッグで移動し、ホイールまたは左上の＋／−で拡大します。灰色は下地なしです"
    :place-set "この範囲を作業場所にする"
    :phone-map "台帳と地図の編集はパソコンで開いてください"
    :shape-not-area "閉じた形で、面積が取れるものにしてください"
@@ -228,12 +229,13 @@
   (layout (:fields-title messages)
           (str (nav-user)
                (flash-html state)
-               "<table><thead><tr><th>名前</th><th>ha</th><th></th></tr></thead><tbody>"
+               "<table><thead><tr><th>名前</th><th>ha</th><th>㎡</th><th></th></tr></thead><tbody>"
                (apply str
                       (for [f (:fields state)]
-                        (str "<tr><td>" (esc (:name f)) "</td><td>" (esc (:area_ha f)) " ha</td>"
-                             "<td>" (esc (:area_m2 f)) " ㎡"
-                             "<form data-act=\"delete-field\" method=\"post\">"
+                        (str "<tr><td>" (esc (:name f)) "</td>"
+                             "<td>" (esc (:area_ha f)) "</td>"
+                             "<td>" (esc (:area_m2 f)) "</td>"
+                             "<td><form data-act=\"delete-field\" method=\"post\">"
                              "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
                              "<button type=\"submit\">削除</button></form></td></tr>")))
                "</tbody></table>"
@@ -247,13 +249,15 @@
           (str (nav-user)
                (flash-html state)
                "<p>" (esc (:place-needed messages)) "</p>"
-               "<div id=\"ol-map\" class=\"ol-map\"></div>"
+               "<p>" (esc (:place-move messages)) "</p>"
+               "<p id=\"place-extent\"></p>"
                "<form data-act=\"save-place\" method=\"post\">"
                "<input type=\"hidden\" name=\"west\" value=\"" (esc (get-in state [:form :west] "129")) "\">"
                "<input type=\"hidden\" name=\"south\" value=\"" (esc (get-in state [:form :south] "26")) "\">"
                "<input type=\"hidden\" name=\"east\" value=\"" (esc (get-in state [:form :east] "146")) "\">"
                "<input type=\"hidden\" name=\"north\" value=\"" (esc (get-in state [:form :north] "46")) "\">"
-               "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>")))
+               "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>"
+               "<div id=\"ol-map\" class=\"ol-map\"></div>")))
 
 (defn map-view [state]
   (layout (:map-title messages)
@@ -314,7 +318,7 @@
       :password (password-view state)
       :users (users-view state)
       :fields (fields-view state)
-      :map (map-view state)
+      :map (if (:place state) (map-view state) (map-place-view state))
       :map-place (map-place-view state)
       (unknown-view))))
 
@@ -367,9 +371,7 @@
 (defn place-loaded [state body]
   (let [s (assoc state :place (when (:ok body)
                                 (select-keys body [:west :south :east :north])))]
-    (if (and (= :map (:page s)) (nil? (:place s)))
-      {:state s :fx [[:nav "/map/place"]]}
-      {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]})))
+    {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}))
 
 (defn fields-loaded [state body]
   (let [s (assoc state :fields (or (:fields body) []))]
@@ -481,7 +483,11 @@
         (if (:session s)
           (session-loaded s {:ok true :email (get-in s [:session :email])})
           (guarded s)))
-      :path (guarded (apply-route (assoc state :session (:session state) :flash nil) (:path arg) (:search arg)))
+      :path
+      (let [s (apply-route (assoc state :session (:session state) :flash nil) (:path arg) (:search arg))]
+        (if (:session s)
+          (session-loaded s {:ok true :email (get-in s [:session :email])})
+          (guarded s)))
       :submit
       (let [act (:act arg)
             form (:form arg)
