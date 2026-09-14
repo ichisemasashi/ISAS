@@ -23,8 +23,15 @@
    :fields-title "圃場台帳"
    :map-title "地図"
    :place-needed "先に作業場所の範囲を決めてください"
-   :place-move "枠の中をドラッグで移動し、ホイールまたは左上の＋／−で拡大します。灰色は下地なしです"
+   :place-move "地理院地図を動かして範囲を決め、空中写真で確認してから確定してください"
    :place-set "この範囲を作業場所にする"
+   :place-preview "空中写真で最終確認"
+   :place-preview-note "確認用の空中写真です（eMAFF が取れないときは地理院）"
+   :place-gsi-attr "地図：国土地理院"
+   :emaff-import "この範囲の区画と下地を自動で取り込む"
+   :emaff-import-ok "自動取込が終わりました"
+   :emaff-unavailable "自動取込ができませんでした。手作業の取込を使ってください"
+   :emaff-partial "一部だけ自動取込できました"
    :phone-map "台帳と地図の編集はパソコンで開いてください"
    :shape-not-area "閉じた形で、面積が取れるものにしてください"
    :import-invalid "このファイルは区画として読めません"
@@ -36,12 +43,20 @@
    :split-too-few "分割は2枚以上にしてください"
    :merge-too-few "合筆は2枚以上選んでください"
    :merge-keep-missing "残す圃場を対象に含めてください"
-   :map-hint "手描き・修正・分割・合筆は、上のボタンを押してから地図を操作します"
+   :map-hint "いま必要な操作のボタンだけ出しています。やめるとメニューに戻ります"
+   :map-hint-browse "塗りをするか、圃場の形・下地のどれかを選んでください"
+   :map-hint-paint "作業名を入れ、圃場をクリックしてからブラシで塗ります。圃場の形を直すときは「圃場を直す」"
    :map-hint-draw "閉じた形を描き、名前を付けて「圃場を保存」してください"
    :map-hint-edit "頂点を動かして「形と名前を保存」してください"
    :map-hint-split "分割する圃場をクリックし、圃場を横切る線を引いて「分割を保存」してください"
    :map-hint-merge "残す圃場をクリックし、続けて合筆する圃場をクリックして「合筆する」を押してください"
+   :map-hint-import "区画ファイルを選んで取り込んでください"
    :map-hint-image "下地を圃場の形に合わせ、「下地の位置を保存」してください。3種とも同じ位置です"
+   :map-do-paint "塗りをする"
+   :map-do-fields "圃場を直す"
+   :map-do-basemap "下地"
+   :map-do-import "区画取込"
+   :map-cancel "やめる"
    :image-shift-west "下地を西へ"
    :image-shift-east "下地を東へ"
    :image-shift-south "下地を南へ"
@@ -89,6 +104,9 @@
     "forbidden" (:forbidden messages)
     "place_unset" (:place-needed messages)
     "place_invalid" (:place-invalid messages)
+    "emaff_unavailable" (:emaff-unavailable messages)
+    "emaff_partial" (:emaff-partial messages)
+    "emaff_empty" (:emaff-unavailable messages)
     "shape_not_area" (:shape-not-area messages)
     "basemap_kind" (:basemap-kind messages)
     "basemap_missing" (:basemap-missing messages)
@@ -231,7 +249,37 @@
    :form {}
    :work-names []
    :paint-data nil
-   :last-field-act nil})
+   :last-field-act nil
+   :map-mode nil
+   :map-mode-parent nil})
+
+(defn map-mode [state]
+  (let [m (:map-mode state)
+        wn (str/trim (str (or (get-in state [:form :work_name]) "")))]
+    (cond
+      (and m (not (str/blank? (str m)))) (str m)
+      (str/blank? wn) "browse"
+      :else "paint")))
+
+(defn- map-hint-for [mode]
+  (case (str mode)
+    "browse" (:map-hint-browse messages)
+    "paint" (:map-hint-paint messages)
+    "draw" (:map-hint-draw messages)
+    "edit" (:map-hint-edit messages)
+    "split" (:map-hint-split messages)
+    "merge" (:map-hint-merge messages)
+    "import" (:map-hint-import messages)
+    "basemap" (:map-hint-image messages)
+    (:map-hint messages)))
+
+(defn- mode-form [mode label]
+  (str "<form data-act=\"set-map-mode\" method=\"post\" class=\"inline\">"
+       "<input type=\"hidden\" name=\"mode\" value=\"" (esc mode) "\">"
+       "<button type=\"submit\">" (esc label) "</button></form>"))
+
+(defn- cancel-form []
+  (mode-form "cancel" (:map-cancel messages)))
 
 (defn flash-html [state]
   (when-let [f (:flash state)]
@@ -343,127 +391,198 @@
 (defn- basemap-ready? [state kind]
   (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state))))
 
+(defn- basemap-kind-buttons [state]
+  (apply str
+         (for [[k label] [["aerial" "空中写真"] ["standard" "標準地図"] ["satellite" "衛星"]]]
+           (if (basemap-ready? state k)
+             (str "<button type=\"button\" data-map=\"basemap\" data-kind=\"" k "\">" label "</button>")
+             ""))))
+
+(defn- paint-panel [state]
+  (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))
+        fid (str/trim (str (or (get-in state [:form :field_id]) (get-in state [:form :id]) "")))
+        pid (str/trim (str (or (get-in state [:form :paint-id]) "")))
+        gj (str/trim (str (or (get-in state [:form :paint-geojson]) "")))]
+    (str
+     "<div class=\"paint-tools\" data-none=\"" (:none paint-colors)
+     "\" data-partial=\"" (:partial paint-colors)
+     "\" data-done=\"" (:done paint-colors) "\">"
+     "<form data-act=\"select-work-name\" method=\"post\">"
+     "<label>" (esc (:work-name messages))
+     "<input name=\"work_name\" list=\"work-name-list\" value=\"" (esc wn) "\">"
+     "<datalist id=\"work-name-list\">"
+     (apply str (for [nm (:work-names state)]
+                  (str "<option value=\"" (esc nm) "\">")))
+     "</datalist></label>"
+     "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>"
+     (when-not (str/blank? wn)
+       (str
+        "<p id=\"paint-legend\">"
+        "<span>" (esc (:status-none messages)) "</span> "
+        "<span>" (esc (:status-partial messages)) "</span> "
+        "<span>" (esc (:status-done messages)) "</span></p>"
+        "<div class=\"toolbar\">"
+        "<button type=\"button\" data-map=\"brush\" data-hint=\"" (esc (:map-hint-brush messages)) "\">ブラシ</button>"
+        "<button type=\"button\" data-map=\"discard\" data-hint=\"" (esc (:map-hint-brush messages)) "\">" (esc (:paint-discard messages)) "</button>"
+        "</div>"
+        "<form data-act=\"confirm-paint\" method=\"post\">"
+        "<input type=\"hidden\" name=\"field_id\" value=\"" (esc fid) "\">"
+        "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
+        "<input type=\"hidden\" name=\"geojson\" value=\"" (esc gj) "\">"
+        "<button type=\"submit\">" (esc (:paint-confirm messages)) "</button></form>"
+        "<form data-act=\"complete-field\" method=\"post\">"
+        "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
+        "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
+        "<button type=\"submit\">" (esc (:paint-complete messages)) "</button></form>"
+        "<form data-act=\"delete-field-paints\" method=\"post\">"
+        "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
+        "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
+        "<button type=\"submit\">" (esc (:paint-delete-all messages)) "</button></form>"
+        "<form data-act=\"delete-paint\" method=\"post\">"
+        "<input type=\"hidden\" name=\"id\" value=\"" (esc pid) "\">"
+        "<button type=\"submit\">" (esc (:paint-delete messages)) "</button></form>"))
+     "</div>")))
+
+(defn- browse-panel [state]
+  (str "<div class=\"toolbar\">"
+       (mode-form "paint" (:map-do-paint messages))
+       (mode-form "draw" "手描き")
+       (mode-form "edit" "修正")
+       (mode-form "split" "分割")
+       (mode-form "merge" "合筆")
+       (mode-form "import" (:map-do-import messages))
+       (mode-form "basemap" (:map-do-basemap messages))
+       (basemap-kind-buttons state)
+       "</div>"))
+
+(defn- draw-panel [state]
+  (str (cancel-form)
+       "<form data-act=\"create-field\" method=\"post\">"
+       "<label>名前<input name=\"name\" required></label>"
+       "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
+       "<button type=\"submit\">圃場を保存</button></form>"))
+
+(defn- edit-panel [state]
+  (str (cancel-form)
+       "<form data-act=\"update-field\" method=\"post\">"
+       "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :id] "")) "\">"
+       "<label>名前<input name=\"name\" value=\"" (esc (get-in state [:form :name] "")) "\"></label>"
+       "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
+       "<button type=\"submit\">形と名前を保存</button></form>"))
+
+(defn- split-panel [state]
+  (str (cancel-form)
+       "<form data-act=\"split-field\" method=\"post\">"
+       "<input type=\"hidden\" name=\"id\" value=\"" (esc (or (get-in state [:form :split-id])
+                                                              (get-in state [:form :id])
+                                                              (get-in state [:form :field_id])
+                                                              "")) "\">"
+       "<input type=\"hidden\" name=\"polygons\" value=\"" (esc (get-in state [:form :polygons] "[]")) "\">"
+       "<input type=\"hidden\" name=\"line\" value=\"" (esc (get-in state [:form :line] "")) "\">"
+       "<button type=\"submit\">分割を保存</button></form>"))
+
+(defn- merge-panel [state]
+  (str (cancel-form)
+       "<form data-act=\"merge-fields\" method=\"post\">"
+       "<input type=\"hidden\" name=\"keep_id\" value=\"" (esc (get-in state [:form :keep_id] "")) "\">"
+       "<input type=\"hidden\" name=\"ids\" value=\"" (esc (get-in state [:form :ids] "[]")) "\">"
+       "<button type=\"submit\">合筆する</button></form>"))
+
+(defn- import-panel []
+  (str (cancel-form)
+       "<form data-act=\"import-fields\" method=\"post\" enctype=\"multipart/form-data\">"
+       "<label>区画ファイル<input name=\"file\" type=\"file\" accept=\".json,.geojson,application/geo+json\"></label>"
+       "<button type=\"submit\">取り込む</button></form>"))
+
+(defn- basemap-panel [state]
+  (str (cancel-form)
+       "<div class=\"toolbar\">" (basemap-kind-buttons state) "</div>"
+       "<form data-act=\"emaff-import\" method=\"post\">"
+       "<button type=\"submit\">" (esc (:emaff-import messages)) "</button></form>"
+       "<form data-act=\"upload-basemap\" method=\"post\" enctype=\"multipart/form-data\">"
+       "<label>下地"
+       "<select name=\"kind\">"
+       "<option value=\"aerial\">空中写真</option>"
+       "<option value=\"standard\">標準地図</option>"
+       "<option value=\"satellite\">衛星</option>"
+       "</select></label>"
+       "<input name=\"file\" type=\"file\" accept=\"image/jpeg,image/png,.jpg,.jpeg,.png\">"
+       "<button type=\"submit\">下地を取り込む</button></form>"
+       (when (some :ready (:basemaps state))
+         (str "<p>" (esc (:map-hint-image messages)) "</p>"
+              "<div class=\"toolbar\">"
+              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"west\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-west messages)) "</button>"
+              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"east\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-east messages)) "</button>"
+              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"south\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-south messages)) "</button>"
+              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"north\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-north messages)) "</button>"
+              "<button type=\"button\" data-map=\"image-scale\" data-factor=\"0.94\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-scale-in messages)) "</button>"
+              "<button type=\"button\" data-map=\"image-scale\" data-factor=\"1.06\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-scale-out messages)) "</button>"
+              "<button type=\"button\" data-map=\"image-reset\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-reset messages)) "</button>"
+              "</div>"
+              "<form data-act=\"save-image-extent\" method=\"post\">"
+              "<input type=\"hidden\" name=\"west\" value=\"" (esc (str (or (:west (image-bbox (:place state))) ""))) "\">"
+              "<input type=\"hidden\" name=\"south\" value=\"" (esc (str (or (:south (image-bbox (:place state))) ""))) "\">"
+              "<input type=\"hidden\" name=\"east\" value=\"" (esc (str (or (:east (image-bbox (:place state))) ""))) "\">"
+              "<input type=\"hidden\" name=\"north\" value=\"" (esc (str (or (:north (image-bbox (:place state))) ""))) "\">"
+              "<button type=\"submit\">" (esc (:image-save messages)) "</button></form>"))))
+
+(defn- paint-mode-panel [state]
+  (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))]
+    (str (paint-panel state)
+         (when-not (str/blank? wn)
+           (str "<div class=\"toolbar\">"
+                (mode-form "browse" (:map-do-fields messages))
+                (mode-form "basemap" (:map-do-basemap messages))
+                "</div>"))
+         (when (str/blank? wn)
+           (cancel-form)))))
+
 (defn map-place-view [state]
-  (layout (:map-title messages)
-          (str (nav-user)
-               (flash-html state)
-               "<p>" (esc (:place-needed messages)) "</p>"
-               "<p>" (esc (:place-move messages)) "</p>"
-               "<p id=\"place-extent\"></p>"
-               "<form data-act=\"save-place\" method=\"post\">"
-               "<input type=\"hidden\" name=\"west\" value=\"" (esc (get-in state [:form :west] "129")) "\">"
-               "<input type=\"hidden\" name=\"south\" value=\"" (esc (get-in state [:form :south] "26")) "\">"
-               "<input type=\"hidden\" name=\"east\" value=\"" (esc (get-in state [:form :east] "146")) "\">"
-               "<input type=\"hidden\" name=\"north\" value=\"" (esc (get-in state [:form :north] "46")) "\">"
-               "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>"
-               "<div id=\"ol-map\" class=\"ol-map\"></div>")))
+  (let [preview? (= "aerial" (str (:place-preview state)))]
+    (layout (:map-title messages)
+            (str (nav-user)
+                 (flash-html state)
+                 "<p>" (esc (:place-needed messages)) "</p>"
+                 "<p>" (esc (:place-move messages)) "</p>"
+                 "<p class=\"attr\">" (esc (:place-gsi-attr messages)) "</p>"
+                 (when preview?
+                   (str "<p>" (esc (or (get-in state [:form :preview-note]) (:place-preview-note messages))) "</p>"))
+                 "<p id=\"place-extent\"></p>"
+                 "<form data-act=\"preview-place\" method=\"post\">"
+                 "<input type=\"hidden\" name=\"west\" value=\"" (esc (get-in state [:form :west] "129")) "\">"
+                 "<input type=\"hidden\" name=\"south\" value=\"" (esc (get-in state [:form :south] "26")) "\">"
+                 "<input type=\"hidden\" name=\"east\" value=\"" (esc (get-in state [:form :east] "146")) "\">"
+                 "<input type=\"hidden\" name=\"north\" value=\"" (esc (get-in state [:form :north] "46")) "\">"
+                 "<button type=\"submit\">" (esc (:place-preview messages)) "</button></form>"
+                 "<form data-act=\"save-place\" method=\"post\">"
+                 "<input type=\"hidden\" name=\"west\" value=\"" (esc (get-in state [:form :west] "129")) "\">"
+                 "<input type=\"hidden\" name=\"south\" value=\"" (esc (get-in state [:form :south] "26")) "\">"
+                 "<input type=\"hidden\" name=\"east\" value=\"" (esc (get-in state [:form :east] "146")) "\">"
+                 "<input type=\"hidden\" name=\"north\" value=\"" (esc (get-in state [:form :north] "46")) "\">"
+                 "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>"
+                 "<div id=\"ol-map\" class=\"ol-map\" data-place-mode=\"1\""
+                 (when preview? " data-preview=\"aerial\"")
+                 "></div>"))))
 
 (defn map-view [state]
-  (layout (:map-title messages)
-          (str (nav-user)
-               (flash-html state)
-               "<p><a data-nav href=\"/map/place\">作業場所を変える</a></p>"
-               "<p id=\"map-hint\">" (esc (:map-hint messages)) "</p>"
-               "<p id=\"map-selection\"></p>"
-               "<div class=\"toolbar\">"
-               "<button type=\"button\" data-map=\"draw\" data-hint=\"" (esc (:map-hint-draw messages)) "\">手描き</button>"
-               "<button type=\"button\" data-map=\"edit\" data-hint=\"" (esc (:map-hint-edit messages)) "\">修正</button>"
-               "<button type=\"button\" data-map=\"split\" data-hint=\"" (esc (:map-hint-split messages)) "\">分割</button>"
-               "<button type=\"button\" data-map=\"merge\" data-hint=\"" (esc (:map-hint-merge messages)) "\">合筆</button>"
-               (apply str
-                      (for [[k label] [["aerial" "空中写真"] ["standard" "標準地図"] ["satellite" "衛星"]]]
-                        (if (basemap-ready? state k)
-                          (str "<button type=\"button\" data-map=\"basemap\" data-kind=\"" k "\">" label "</button>")
-                          "")))
-               "</div>"
-               (when (seq (:fields state))
-                 (str
-                  "<div class=\"paint-tools\" data-none=\"" (:none paint-colors)
-                  "\" data-partial=\"" (:partial paint-colors)
-                  "\" data-done=\"" (:done paint-colors) "\">"
-                  "<p id=\"paint-legend\">"
-                  "<span>" (esc (:status-none messages)) "</span> "
-                  "<span>" (esc (:status-partial messages)) "</span> "
-                  "<span>" (esc (:status-done messages)) "</span></p>"
-                  "<form data-act=\"select-work-name\" method=\"post\">"
-                  "<label>" (esc (:work-name messages))
-                  "<input name=\"work_name\" list=\"work-name-list\" value=\"" (esc (get-in state [:form :work_name] "")) "\">"
-                  "<datalist id=\"work-name-list\">"
-                  (apply str (for [nm (:work-names state)]
-                               (str "<option value=\"" (esc nm) "\">")))
-                  "</datalist></label>"
-                  "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>"
-                  "<div class=\"toolbar\">"
-                  "<button type=\"button\" data-map=\"brush\" data-hint=\"" (esc (:map-hint-brush messages)) "\">ブラシ</button>"
-                  "<button type=\"button\" data-map=\"discard\" data-hint=\"" (esc (:map-hint-brush messages)) "\">" (esc (:paint-discard messages)) "</button>"
-                  "</div>"
-                  "<form data-act=\"confirm-paint\" method=\"post\">"
-                  "<input type=\"hidden\" name=\"field_id\" value=\"" (esc (get-in state [:form :field_id] "")) "\">"
-                  "<input type=\"hidden\" name=\"work_name\" value=\"" (esc (get-in state [:form :work_name] "")) "\">"
-                  "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :paint-geojson] "")) "\">"
-                  "<button type=\"submit\">" (esc (:paint-confirm messages)) "</button></form>"
-                  "<form data-act=\"complete-field\" method=\"post\">"
-                  "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :id] "")) "\">"
-                  "<input type=\"hidden\" name=\"work_name\" value=\"" (esc (get-in state [:form :work_name] "")) "\">"
-                  "<button type=\"submit\">" (esc (:paint-complete messages)) "</button></form>"
-                  "<form data-act=\"delete-paint\" method=\"post\">"
-                  "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :paint-id] "")) "\">"
-                  "<button type=\"submit\">" (esc (:paint-delete messages)) "</button></form>"
-                  "<form data-act=\"delete-field-paints\" method=\"post\">"
-                  "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :id] "")) "\">"
-                  "<input type=\"hidden\" name=\"work_name\" value=\"" (esc (get-in state [:form :work_name] "")) "\">"
-                  "<button type=\"submit\">" (esc (:paint-delete-all messages)) "</button></form>"
-                  "<form data-act=\"discard-drafts\" method=\"post\">"
-                  "<button type=\"submit\">" (esc (:paint-discard messages)) "</button></form>"
-                  "</div>"))
-               "<form data-act=\"create-field\" method=\"post\">"
-               "<label>名前<input name=\"name\" required></label>"
-               "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
-               "<button type=\"submit\">圃場を保存</button></form>"
-               "<form data-act=\"update-field\" method=\"post\">"
-               "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :id] "")) "\">"
-               "<label>名前<input name=\"name\" value=\"" (esc (get-in state [:form :name] "")) "\"></label>"
-               "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
-               "<button type=\"submit\">形と名前を保存</button></form>"
-               "<form data-act=\"split-field\" method=\"post\">"
-               "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :split-id] "")) "\">"
-               "<input type=\"hidden\" name=\"polygons\" value=\"" (esc (get-in state [:form :polygons] "[]")) "\">"
-               "<input type=\"hidden\" name=\"line\" value=\"" (esc (get-in state [:form :line] "")) "\">"
-               "<button type=\"submit\">分割を保存</button></form>"
-               "<form data-act=\"merge-fields\" method=\"post\">"
-               "<input type=\"hidden\" name=\"keep_id\" value=\"" (esc (get-in state [:form :keep_id] "")) "\">"
-               "<input type=\"hidden\" name=\"ids\" value=\"" (esc (get-in state [:form :ids] "[]")) "\">"
-               "<button type=\"submit\">合筆する</button></form>"
-               "<form data-act=\"import-fields\" method=\"post\" enctype=\"multipart/form-data\">"
-               "<label>区画ファイル<input name=\"file\" type=\"file\" accept=\".json,.geojson,application/geo+json\"></label>"
-               "<button type=\"submit\">取り込む</button></form>"
-               "<form data-act=\"upload-basemap\" method=\"post\" enctype=\"multipart/form-data\">"
-               "<label>下地"
-               "<select name=\"kind\">"
-               "<option value=\"aerial\">空中写真</option>"
-               "<option value=\"standard\">標準地図</option>"
-               "<option value=\"satellite\">衛星</option>"
-               "</select></label>"
-               "<input name=\"file\" type=\"file\" accept=\"image/jpeg,image/png,.jpg,.jpeg,.png\">"
-               "<button type=\"submit\">下地を取り込む</button></form>"
-               (when (some :ready (:basemaps state))
-                 (str "<p>" (esc (:map-hint-image messages)) "</p>"
-                      "<div class=\"toolbar\">"
-                      "<button type=\"button\" data-map=\"image-shift\" data-dir=\"west\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-west messages)) "</button>"
-                      "<button type=\"button\" data-map=\"image-shift\" data-dir=\"east\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-east messages)) "</button>"
-                      "<button type=\"button\" data-map=\"image-shift\" data-dir=\"south\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-south messages)) "</button>"
-                      "<button type=\"button\" data-map=\"image-shift\" data-dir=\"north\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-north messages)) "</button>"
-                      "<button type=\"button\" data-map=\"image-scale\" data-factor=\"0.94\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-scale-in messages)) "</button>"
-                      "<button type=\"button\" data-map=\"image-scale\" data-factor=\"1.06\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-scale-out messages)) "</button>"
-                      "<button type=\"button\" data-map=\"image-reset\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-reset messages)) "</button>"
-                      "</div>"
-                      "<form data-act=\"save-image-extent\" method=\"post\">"
-                      "<input type=\"hidden\" name=\"west\" value=\"" (esc (str (or (:west (image-bbox (:place state))) ""))) "\">"
-                      "<input type=\"hidden\" name=\"south\" value=\"" (esc (str (or (:south (image-bbox (:place state))) ""))) "\">"
-                      "<input type=\"hidden\" name=\"east\" value=\"" (esc (str (or (:east (image-bbox (:place state))) ""))) "\">"
-                      "<input type=\"hidden\" name=\"north\" value=\"" (esc (str (or (:north (image-bbox (:place state))) ""))) "\">"
-                      "<button type=\"submit\">" (esc (:image-save messages)) "</button></form>"))
-               "<div id=\"ol-map\" class=\"ol-map\"></div>")))
+  (let [mode (map-mode state)]
+    (layout (:map-title messages)
+            (str (nav-user)
+                 (flash-html state)
+                 "<p><a data-nav href=\"/map/place\">作業場所を変える</a></p>"
+                 "<p id=\"map-hint\">" (esc (map-hint-for mode)) "</p>"
+                 "<p id=\"map-selection\"></p>"
+                 (case mode
+                   "browse" (browse-panel state)
+                   "paint" (paint-mode-panel state)
+                   "draw" (draw-panel state)
+                   "edit" (edit-panel state)
+                   "split" (split-panel state)
+                   "merge" (merge-panel state)
+                   "import" (import-panel)
+                   "basemap" (basemap-panel state)
+                   (browse-panel state))
+                 "<div id=\"ol-map\" class=\"ol-map\"></div>"))))
 
 (defn render [state]
   (if (and (:narrow? state) (contains? #{:fields :map :map-place} (:page state)))
@@ -559,16 +678,44 @@
     (let [s (assoc state :paint-data nil :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
-(defn after-place-save [state body]
+(defn after-place-preview [state body]
   (if (:ok body)
-    {:state (assoc state :flash nil)
-     :fx [[:nav "/map"]]}
+    (let [box (or (:bbox body) {})
+          form (cond-> (or (:form state) {})
+                 (:west box) (assoc :west (str (:west box)))
+                 (:south box) (assoc :south (str (:south box)))
+                 (:east box) (assoc :east (str (:east box)))
+                 (:north box) (assoc :north (str (:north box)))
+                 (:note body) (assoc :preview-note (:note body)))
+          s (assoc state :place-preview "aerial" :form form :flash nil)]
+      {:state s :fx [[:html (render s)]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
+(defn after-place-save [state body]
+  (if (:ok body)
+    {:state (assoc state :flash nil :place-preview nil)
+     :fx [[:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn after-emaff-import [state body]
+  (let [ok? (:ok body)
+        text (cond
+               (and ok? (= "emaff_partial" (:code body))) (:emaff-partial messages)
+               ok? (:emaff-import-ok messages)
+               :else (code-message (:code body)))
+        s (assoc state :flash {:error? (not ok?) :text text} :place-preview nil)]
+    {:state s
+     :fx (if (= :map (:page state))
+           [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]
+            [:api "GET" "/api/user/fields" nil :fields-loaded]]
+           [[:nav "/map"]])}))
+
 (defn after-field-save [state body]
   (if (:ok body)
-    {:state (assoc state :flash {:error? false :text "保存しました"} :form {})
+    {:state (assoc state :flash {:error? false :text "保存しました"} :form {}
+                   :map-mode "browse" :map-mode-parent nil)
      :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
     (let [text (if (= "field_has_paint" (:code body))
                  (paint-block-text (:last-field-act state))
@@ -583,7 +730,8 @@
           form (cond-> (dissoc (:form state) :paint-geojson :paint-id)
                  (not (str/blank? wn)) (assoc :work_name wn)
                  fid (assoc :field_id (str fid) :id (str fid)))]
-      {:state (assoc state :flash {:error? false :text (:paint-ok messages)} :form form)
+      {:state (assoc state :flash {:error? false :text (:paint-ok messages)} :form form
+                     :map-mode "paint")
        :fx [[:api "GET" "/api/user/work-names" nil :work-names-loaded]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
@@ -693,7 +841,9 @@
       :basemaps-loaded (basemaps-loaded state arg)
       :work-names-loaded (work-names-loaded state arg)
       :paints-loaded (paints-loaded state arg)
+      :place-preview-result (after-place-preview state arg)
       :place-save-result (after-place-save state arg)
+      :emaff-import-result (after-emaff-import state arg)
       :field-save-result (after-field-save state arg)
       :paint-save-result (after-paint-save state arg)
       :field-delete-result (after-field-delete state arg)
@@ -715,7 +865,7 @@
       :path
       (let [s (apply-route (assoc state :session (:session state) :flash nil) (:path arg) (:search arg))
             s (if (#{:map :map-place} (:page s))
-                (assoc s :form {} :paint-data nil)
+                (assoc s :form {} :paint-data nil :map-mode nil :map-mode-parent nil :place-preview nil)
                 s)]
         (if (and (:session s) (= (:kind s) (:kind state)))
           (session-loaded s {:ok true :email (get-in s [:session :email])})
@@ -735,7 +885,27 @@
           "invite" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/invite" "/api/user/invite") form :invite-result]]}
           "password" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password" "/api/user/password") form :password-result]]}
           "revoke" {:state state :fx [[:api "POST" "/api/admin/users/revoke" form :revoke-result]]}
+          "preview-place" {:state state :fx [[:api "POST" "/api/user/place/preview" form :place-preview-result]]}
           "save-place" {:state state :fx [[:api "PUT" "/api/user/place" form :place-save-result]]}
+          "emaff-import" {:state state :fx [[:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}
+          "set-map-mode"
+          (let [mode (str/trim (str (or (:mode form) "")))
+                cur (map-mode state)
+                parent (or (:map-mode-parent state) "browse")]
+            (cond
+              (= mode "cancel")
+              (let [next (if (= cur "basemap") parent "browse")
+                    s (assoc state :map-mode next :map-mode-parent nil :flash nil
+                             :form (dissoc (:form state) :geojson :line :polygons :ids :keep_id :paint-geojson))]
+                {:state s :fx [[:html (render s)]]})
+              (= mode "basemap")
+              (let [s (assoc state :map-mode "basemap" :map-mode-parent cur :flash nil)]
+                {:state s :fx [[:html (render s)]]})
+              (#{"browse" "paint" "draw" "edit" "split" "merge" "import"} mode)
+              (let [s (assoc state :map-mode mode :flash nil)]
+                {:state s :fx [[:html (render s)]]})
+              :else
+              {:state state :fx [[:html (render state)]]}))
           "create-field" {:state state :fx [[:api "POST" "/api/user/fields"
                                             {:name (:name form)
                                              :geojson (read-json-str (:geojson form))}
@@ -779,9 +949,11 @@
           (let [wn (str/trim (str (or (:work_name form) "")))]
             (if (str/blank? wn)
               (let [s (assoc state :form (assoc (:form state) :work_name "") :paint-data nil
+                             :map-mode "paint"
                              :flash {:error? true :text (:work-name-needed messages)})]
                 {:state s :fx [[:html (render s)]]})
-              {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil)
+              {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil
+                             :map-mode "paint")
                :fx [[:api "GET" (paints-query wn) nil :paints-loaded]]}))
           "confirm-paint"
           (let [fid (field-id-of form state)

@@ -17,7 +17,9 @@
   (html {:page :map
          :place {:west 139 :south 35 :east 141 :north 37}
          :fields fields
-         :work-names []}))
+         :map-mode "paint"
+         :form {:work_name "田植え"}
+         :work-names ["田植え"]}))
 
 (defn- farm [sys]
   (let [app (tu/app sys)
@@ -40,6 +42,19 @@
           r (ui/handle s [:path {:path "/map" :search ""}])]
       (is (nil? (get-in r [:state :form :work_name])))
       (is (nil? (get-in r [:state :paint-data])))))
+  (testing "P3-2.1-01b 作業名ありは塗り優先"
+    (let [h (map-html [{:id 1 :name "北"}])]
+      (is (re-find #"ブラシ" h))
+      (is (not (re-find #">手描き<" h)))
+      (is (re-find #"圃場を直す" h))))
+  (testing "P3-2.1-01c 圃場を直すと手描きが戻る"
+    (let [h (html {:page :map
+                   :place {:west 139 :south 35 :east 141 :north 37}
+                   :fields [{:id 1 :name "北"}]
+                   :map-mode "browse"
+                   :form {:work_name "田植え"}})]
+      (is (re-find #"手描き" h))
+      (is (not (re-find #"ブラシ" h)))))
   (testing "P3-2.1-02 / P3-2.4-02〜04 色の具体値とラベル"
     (let [h (map-html [{:id 1 :name "北" :area_ha 1 :area_m2 10000}])]
       (is (re-find #"data-none=\"#c8c8c8\"" h))
@@ -69,8 +84,12 @@
                    :fields [{:id 1 :name "北"}]
                    :basemaps [{:kind "aerial" :ready true}]})]
       (is (re-find #"空中写真" h))
-      (is (re-find #"下地を西へ" h))
-      (is (re-find #"手描き" h))))
+      (is (re-find #"手描き" h))
+      (is (not (re-find #"下地を西へ" h)))
+      (is (re-find #"下地を西へ" (html {:page :map
+                                       :place {:west 139 :south 35 :east 141 :north 37}
+                                       :map-mode "basemap"
+                                       :basemaps [{:kind "aerial" :ready true}]})))))
   (testing "P3-5 文言"
     (let [h (map-html [{:id 1 :name "北"}])]
       (is (re-find #"作業名" h))

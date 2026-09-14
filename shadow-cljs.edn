@@ -14,9 +14,12 @@
                                 "ol/View" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/layer/Vector" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/layer/Image" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/layer/Tile" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/layer/Graticule" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/source/Vector" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/source/ImageStatic" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/source/XYZ" {:target :file :file "test/js/ol_stub.js"}
+                                "ol/proj" {:target :file :file "test/js/ol_proj_stub.js"}
                                 "ol/format/GeoJSON" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/interaction/Draw" {:target :file :file "test/js/ol_stub.js"}
                                 "ol/interaction/Modify" {:target :file :file "test/js/ol_stub.js"}

@@ -47,7 +47,10 @@
           (is (re-find #"圃場台帳" (html {:page :fields :fields []}))))
         (testing "B2-4.2 作業場所"
           (is (not (re-find #"地名検索" (html {:page :map-place}))))
+          (is (re-find #"国土地理院" (html {:page :map-place})))
+          (is (re-find #"空中写真で最終確認" (html {:page :map-place})))
           (is (not (re-find #"cyberjapandata|openstreetmap" (html {:page :map :place place}))))
+          (is (not (re-find #"cyberjapandata|openstreetmap" (html {:page :map-place}))))
           (is (re-find #"先に作業場所の範囲を決めてください" (html {:page :map})))
           (is (true? (:ok (accounts/login sys "user" "b2@example.com" pw)))))
         (testing "B2-4.2-02〜04 下地3種。場所を変えたら古い下地は使わない"

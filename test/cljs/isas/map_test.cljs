@@ -23,7 +23,8 @@
                 (get m n))))))
 
 (defn- setup-dom! []
-  (let [ol-el (js-obj "id" "ol-map")
+  (let [ol-el (js-obj "id" "ol-map"
+                      "getAttribute" (fn [_] nil))
         extent (js-obj "textContent" "")
         app-el (js-obj "innerHTML" "")
         west (make-input)
@@ -66,6 +67,7 @@
         del-paint (make-form {"id" d-id})
         del-all (make-form {"id" da-id "work_name" da-wn})
         forms {"save-place" save
+               "preview-place" save
                "save-image-extent" img
                "create-field" create
                "split-field" split
@@ -160,24 +162,29 @@
                                                               (= a "data-dir") (if (= op "image-shift") "east" nil)
                                                               (= a "data-factor") (if (= op "image-scale") "1.06" nil)
                                                               (= a "data-hint") (str "hint-" op)
-                                                              :else nil))))}})))]
-        (fire "draw" nil)
+                                                              :else nil))))}})))
+            enter (fn [mode]
+                    (swap! b/app-state assoc :map-mode mode :page :map
+                           :place {:west 129 :south 26 :east 146 :north 46})
+                    (b/apply-fx! [:html "<div id=\"ol-map\"></div>"]))]
+        (enter "draw")
         (let [draw (last-ol "drawend")]
           (call-ol draw "drawend" #js {:feature draw}))
-        (fire "split" nil)
+        (enter "split")
         (let [draw (last-ol "drawend")]
           (call-ol draw "drawend" #js {:feature draw}))
-        (fire "edit" nil)
+        (enter "edit")
         (let [mod (last-ol "modifyend")]
           (when mod
             (set! (.-features mod) mod)
             (call-ol mod "modifyend" #js {:features mod})))
+        (enter "paint")
         (fire "brush" nil)
         (let [draw (last-ol "drawend")]
           (call-ol draw "drawend" #js {:feature draw}))
         (fire "discard" nil)
         (is (nil? (seq (:drafts @m/current))))
-        (fire "merge" nil)
+        (enter "merge")
         (fire "image-shift" nil)
         (fire "image-scale" nil)
         (fire "image-reset" nil)

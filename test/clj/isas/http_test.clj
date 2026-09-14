@@ -265,6 +265,8 @@
         (is (= 401 (:status (get-path app "/api/user/place"))))
         (is (= 403 (:status (get-path app "/api/user/place" "admin" asid))))
         (is (= "place_unset" (:code (parse (get-path app "/api/user/place" "user" usid)))))
+        (is (= "place_unset" (:code (parse (post-json app "/api/user/place/preview" {} "user" usid)))))
+        (is (= "place_unset" (:code (parse (post-json app "/api/user/emaff/import" {} "user" usid)))))
         (is (= "place_invalid" (:code (parse (put-json app "/api/user/place" {:west 1} "user" usid)))))
         (is (= "place_invalid" (:code (parse (app (as-user (-> (mock/request :put "/api/user/place")
                                                                (mock/content-type "application/json")
@@ -274,6 +276,17 @@
                                          {:west 139.0 :south 35.0 :east 141.0 :north 37.0}
                                          "user" usid)))))
         (is (true? (:ok (parse (get-path app "/api/user/place" "user" usid)))))
+        (let [prev (parse (post-json app "/api/user/place/preview"
+                                     {:west 139.0 :south 35.0 :east 141.0 :north 37.0}
+                                     "user" usid))]
+          (is (true? (:ok prev)))
+          (is (= "gsi" (:source prev))))
+        (is (= "place_invalid" (:code (parse (app (as-user (-> (mock/request :post "/api/user/place/preview")
+                                                               (mock/content-type "application/json")
+                                                               (mock/body "not-json"))
+                                                          "user" usid))))))
+        (with-redefs [isas.gsi/stitch-bbox (fn [_ _] nil)]
+          (is (= "emaff_unavailable" (:code (parse (post-json app "/api/user/emaff/import" {} "user" usid))))))
         (is (= "place_invalid" (:code (parse (put-json app "/api/user/place/image" {:west 1} "user" usid)))))
         (is (= "place_invalid" (:code (parse (app (as-user (-> (mock/request :put "/api/user/place/image")
                                                                (mock/content-type "application/json")

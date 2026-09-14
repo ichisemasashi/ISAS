@@ -156,8 +156,27 @@
             (is (re-find #"name=\"west\"" h))
             (is (not (re-find #"地名|geocod" h)))
             (is (re-find #"この範囲を作業場所にする" h))
+            (is (re-find #"空中写真で最終確認" h))
+            (is (re-find #"国土地理院" h))
+            (is (re-find #"data-place-mode=\"1\"" h))
             (is (re-find #"ol-map" h))
-            (is (re-find #"value=\"129\"" h))))
+            (is (re-find #"value=\"129\"" h))
+            (is (not (re-find #"cyberjapandata|openstreetmap" h)))))
+        (testing "P2-2.3-03a 最終確認プレビュー"
+          (let [prev (tu/parse (tu/post-json app "/api/user/place/preview" place "user" usid))]
+            (is (true? (:ok prev)))
+            (is (= "gsi" (:source prev)))
+            (is (= "aerial" (:kind prev))))
+          (is (re-find #"data-preview=\"aerial\"" (html {:page :map-place :place-preview "aerial"}))))
+        (testing "P2-2.4-02a 自動取込 API"
+          (with-redefs [isas.gsi/stitch-bbox (fn [_ _]
+                                               (let [img (java.awt.image.BufferedImage. 8 8 java.awt.image.BufferedImage/TYPE_INT_RGB)
+                                                     baos (java.io.ByteArrayOutputStream.)]
+                                                 (javax.imageio.ImageIO/write img "jpg" baos)
+                                                 (.toByteArray baos)))]
+            (let [imp (tu/parse (tu/post-json app "/api/user/emaff/import" {} "user" usid))]
+              (is (true? (:ok imp)))
+              (is (seq (:basemaps imp))))))
         (testing "P2-2.3-04 / P2-7-03 地図の初期は作業場所"
           (is (= :api (tu/fx-op (assoc (ui/init-state) :page :map :kind "user" :session {:email "a"}
                                        :place place :fields [{:id 1}])
@@ -168,8 +187,8 @@
                 none (html {:page :map :place place :basemaps []})]
             (is (re-find #"空中写真" ready))
             (is (not (re-find #"data-kind=\"standard\"" none)))))
-        (testing "P2-2.4-02 農地ナビを呼ばない"
-          (is (not (re-find #"maff|農地ナビ" (html {:page :map :place place})))))
+        (testing "P2-2.4-02 農地ナビを埋め込まない"
+          (is (not (re-find #"農地ナビ|iframe" (html {:page :map :place place})))))
         (testing "P2-2.5 台帳"
           (let [h (html {:page :fields :fields [{:id 1 :name "北" :area_ha 0.00 :area_m2 42}]})]
             (is (re-find #"北" h))
@@ -183,10 +202,13 @@
                 b (tu/parse (tu/post-json app "/api/user/fields" {:name "同名" :geojson tu/square-east} "user" usid))]
             (is (true? (:ok a)))
             (is (true? (:ok b)))))
-        (testing "P2-2.6 地図は自分の圃場。後工程は出さない"
+        (testing "P2-2.6 地図は自分の圃場。後工程は出さない。段階表示"
           (let [h (html {:page :map :place place :fields [{:id 1 :name "北"}]})]
             (is (re-find #"手描き|修正|分割|合筆" h))
-            (is (not (re-find #"ガント|指示" h)))))
+            (is (not (re-find #"圃場を保存|合筆する|分割を保存" h)))
+            (is (not (re-find #"ガント|指示" h)))
+            (is (re-find #"圃場を保存" (html {:page :map :place place :map-mode "draw"})))
+            (is (re-find #"やめる" (html {:page :map :place place :map-mode "draw"})))))
         (testing "P2-2.6-06 取込は Polygon ごと。点は飛ばす"
           (let [fc {:type "FeatureCollection"
                     :features [{:type "Feature" :geometry tu/square :properties {:name "取込A"}}

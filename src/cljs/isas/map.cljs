@@ -6,9 +6,12 @@
             ["ol/View" :default View]
             ["ol/layer/Vector" :default VectorLayer]
             ["ol/layer/Image" :default ImageLayer]
+            ["ol/layer/Tile" :default TileLayer]
             ["ol/layer/Graticule" :default Graticule]
             ["ol/source/Vector" :default VectorSource]
             ["ol/source/ImageStatic" :default ImageStatic]
+            ["ol/source/XYZ" :default XYZ]
+            ["ol/proj" :as ol-proj]
             ["ol/format/GeoJSON" :default GeoJSON]
             ["ol/interaction/Draw" :default Draw]
             ["ol/interaction/Modify" :default Modify]
@@ -100,6 +103,18 @@
 (defn- image-layer [kind box]
   (ImageLayer. #js {:source (image-source kind box)}))
 
+(def gsi-attr "国土地理院")
+
+(defn- gsi-xyz-url [layer]
+  (let [ext (if (= "std" layer) "png" "jpg")]
+    (str "https://cyberjapandata.gsi.go.jp/xyz/" layer "/{z}/{x}/{y}." ext)))
+
+(defn- gsi-tile-layer [layer]
+  (TileLayer.
+   #js {:source (XYZ. #js {:url (gsi-xyz-url layer)
+                           :attributions gsi-attr
+                           :maxZoom 18})}))
+
 (defn- place-box [place]
   (select-keys place [:west :south :east :north]))
 
@@ -161,17 +176,15 @@
   (.toFixed (js/Number n) 2))
 
 (defn- fill-place-form [ext]
-  (set-form-input "save-place" "west" (aget ext 0))
-  (set-form-input "save-place" "south" (aget ext 1))
-  (set-form-input "save-place" "east" (aget ext 2))
-  (set-form-input "save-place" "north" (aget ext 3))
+  (doseq [act ["save-place" "preview-place"]]
+    (set-form-input act "west" (aget ext 0))
+    (set-form-input act "south" (aget ext 1))
+    (set-form-input act "east" (aget ext 2))
+    (set-form-input act "north" (aget ext 3)))
   (when-let [^js el (.getElementById js/document "place-extent")]
     (set! (.-textContent el)
           (str "東経 " (deg (aget ext 0)) "〜" (deg (aget ext 2))
                "　北緯 " (deg (aget ext 1)) "〜" (deg (aget ext 3))))))
-
-(defn- write-json [act name obj]
-  (set-form-input act name (.stringify js/JSON (clj->js obj))))
 
 (defn- set-hint [text]
   (when-let [^js el (.getElementById js/document "map-hint")]
@@ -200,6 +213,11 @@
 (defn- remember-form! [m]
   (when (and @browser/app-state (seq m))
     (swap! browser/app-state update :form merge m)))
+
+(defn- write-json [act name obj]
+  (let [s (.stringify js/JSON (clj->js obj))]
+    (set-form-input act name s)
+    (remember-form! {(keyword name) s})))
 
 (defn- set-field-targets! [id]
   (when-let [s (field-key id)]
@@ -283,22 +301,30 @@
                    ^js feat (when (and feats (pos? (.-length feats))) (aget feats 0))]
                (when feat
                  (set-form-input "update-field" "id" (.get feat "id"))
+                 (remember-form! {:id (str (.get feat "id"))})
                  (when-let [nm (.get feat "name")]
-                   (set-form-input "update-field" "name" nm))
+                   (set-form-input "update-field" "name" nm)
+                   (remember-form! {:name (str nm)}))
                  (write-json "update-field" "geojson"
                              (.writeGeometryObject fmt (.getGeometry feat))))))))))
 
+(defn- apply-map-mode! [state]
+  (let [mode (ui/map-mode state)]
+    (case mode
+      "draw" (start-draw :create)
+      "edit" (start-edit)
+      "split" (start-draw :split)
+      "merge" (do (swap! current assoc :tool :merge :drawing? false)
+                  (set-selection ""))
+      "paint" (swap! current assoc :tool :brush :drawing? false)
+      (swap! current assoc :tool nil :drawing? false))))
+
 (defn- on-tool [op kind dir factor]
   (cond
-    (= op "draw") (start-draw :create)
-    (= op "edit") (start-edit)
-    (= op "split") (start-draw :split)
     (= op "brush") (do (swap! current assoc :tool :brush :selected
                               (if-let [a (:active-field @current)] [a] []))
                        (start-draw :brush))
     (= op "discard") (discard-drafts!)
-    (= op "merge") (do (swap! current assoc :tool :merge :selected [] :active-field nil)
-                       (set-selection ""))
     (= op "image-shift") (shift-image dir)
     (= op "image-scale") (scale-image (js/parseFloat (str factor)))
     (= op "image-reset") (reset-image)
@@ -358,6 +384,8 @@
     (destroy!)
     (when el
       (let [place (:place state)
+            place-mode? (= "1" (.getAttribute el "data-place-mode"))
+            preview? (= "aerial" (.getAttribute el "data-preview"))
             kind (or (:basemap-kind state) "aerial")
             ready? (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state)))
             style-fn (fn [feat _]
@@ -368,32 +396,44 @@
             draft-layer (VectorLayer. #js {:source draft-src})
             ^js grid (Graticule. #js {:showLabels true :wrapX false})
             img-box (when place (current-image-box place))
-            img (when (and place ready? img-box) (image-layer kind img-box))
-            layers (if img
-                     #js [img grid vec-layer draft-layer]
-                     #js [grid vec-layer draft-layer])
-            ^js view (View. #js {:projection "EPSG:4326"})
+            img (when (and place (not place-mode?) ready? img-box) (image-layer kind img-box))
+            gsi (when place-mode?
+                  (gsi-tile-layer (if preview? "seamlessphoto" "std")))
+            layers (cond
+                     gsi #js [gsi grid vec-layer draft-layer]
+                     img #js [img grid vec-layer draft-layer]
+                     :else #js [grid vec-layer draft-layer])
+            map-proj (if place-mode? "EPSG:3857" "EPSG:4326")
+            ^js view (View. #js {:projection map-proj})
             ^js ol-map (OlMap. #js {:target el :layers layers :view view})
-            ext (if place
-                  #js [(:west place) (:south place) (:east place) (:north place)]
-                  japan-extent)
+            ext-4326 (if place
+                       #js [(:west place) (:south place) (:east place) (:north place)]
+                       japan-extent)
+            fit-ext (if place-mode?
+                      (ol-proj/transformExtent ext-4326 "EPSG:4326" "EPSG:3857")
+                      ext-4326)
             active (field-key (or (get-in state [:form :field_id]) (get-in state [:form :id])))
             selected (if active [active] [])]
-        (.fit view ext #js {:padding #js [16 16 16 16]})
-        (fill-place-form ext)
+        (.fit view fit-ext #js {:padding #js [16 16 16 16]})
+        (fill-place-form ext-4326)
         (fill-image-form img-box)
         (.on ol-map "moveend" (fn [_]
                                 (when-let [^js v (.getView ol-map)]
-                                  (fill-place-form (.calculateExtent v)))))
+                                  (let [e (.calculateExtent v)
+                                        e4326 (if place-mode?
+                                                (ol-proj/transformExtent e "EPSG:3857" "EPSG:4326")
+                                                e)]
+                                    (fill-place-form e4326)))))
         (bind-map-click ol-map)
         (reset! current {:map ol-map :source src :view view :kind kind
                          :image-layer img :place place :image-ext img-box
                          :split-polys [] :selected selected :active-field active
                          :drafts [] :draft-source draft-src :style-fn style-fn
-                         :tool :brush :drawing? false})
+                         :tool nil :drawing? false})
         (when active
           (set-field-targets! active)
           (set-work-name-targets! (or (get-in state [:form :work_name]) (current-work-name))))
+        (apply-map-mode! state)
         nil))))
 
 (defn install! []

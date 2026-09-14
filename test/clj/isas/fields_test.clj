@@ -116,7 +116,15 @@
     (fn [sys]
       (let [uid (user-id sys "q@example.com")]
         (is (= "place_unset" (:code (fields/put-basemap sys uid "aerial" (img ".jpg" "image/jpeg")))))
-        (is (= "place_unset" (:code (fields/put-image-extent sys uid {:west 1 :south 2 :east 3 :north 4}))))))))
+        (is (= "place_unset" (:code (fields/put-image-extent sys uid {:west 1 :south 2 :east 3 :north 4}))))
+        (is (= "basemap_kind" (:code (fields/put-basemap-bytes sys uid "nope" (byte-array [1]) "image/jpeg"))))
+        (is (= "place_unset" (:code (fields/put-basemap-bytes sys uid "aerial" (byte-array [1]) "image/jpeg"))))
+        (fields/put-place sys uid {:west 139.0 :south 35.0 :east 141.0 :north 37.0})
+        (is (= "import_invalid" (:code (fields/put-basemap-bytes sys uid "aerial" nil "image/jpeg"))))
+        (is (= "import_invalid" (:code (fields/put-basemap-bytes sys uid "aerial" (byte-array 0) "image/jpeg"))))
+        (is (true? (:ok (fields/put-basemap-bytes sys uid "aerial" (byte-array [1 2 3]) "image/jpeg"))))
+        (is (true? (:ok (fields/put-basemap-bytes sys uid "standard" (byte-array [1 2 3]) "image/png"))))
+        (is (true? (:ok (fields/put-basemap-bytes sys uid "satellite" (byte-array [1 2 3]) nil))))))))
 
 (deftest field-crud-split-merge-import-test
   (tu/with-sys

@@ -60,6 +60,9 @@
   (is (re-find #"入っていません" (ui/code-message "unauthorized")))
   (is (re-find #"この入口" (ui/code-message "forbidden")))
   (is (re-find #"作業場所の範囲を決めて" (ui/code-message "place_unset")))
+  (is (re-find #"自動取込ができませんでした" (ui/code-message "emaff_unavailable")))
+  (is (re-find #"一部だけ自動取込" (ui/code-message "emaff_partial")))
+  (is (re-find #"自動取込ができませんでした" (ui/code-message "emaff_empty")))
   (is (re-find #"作業場所の範囲が正しく" (ui/code-message "place_invalid")))
   (is (re-find #"閉じた形" (ui/code-message "shape_not_area")))
   (is (re-find #"下地の種類" (ui/code-message "basemap_kind")))
@@ -112,12 +115,21 @@
     (is (re-find #"href=\"/fields\"" (ui/render (assoc base :page :home :kind "user" :session {:email "a"}))))
     (is (re-find #"href=\"/map\"" (ui/render (assoc base :page :home :kind "user" :session {:email "a"}))))
     (is (re-find #"下地を西へ" (ui/render (assoc base :page :map :session {:email "a"}
+                                               :map-mode "basemap"
                                                :place {:west 1 :south 2 :east 3 :north 4}
                                                :basemaps [{:kind "aerial" :ready true}]))))
+    (is (re-find #"自動で取り込む" (ui/render (assoc base :page :map :session {:email "a"}
+                                                  :map-mode "basemap"
+                                                  :place {:west 1 :south 2 :east 3 :north 4}
+                                                  :basemaps []))))
+    (is (re-find #"確認用の空中写真" (ui/render (assoc base :page :map-place :kind "user"
+                                                     :place-preview "aerial"
+                                                     :form {:preview-note "確認用の空中写真です"}))))
     (is (not (re-find #"下地を西へ" (ui/render (assoc base :page :map :session {:email "a"}
                                                     :place {:west 1 :south 2 :east 3 :north 4}
                                                     :basemaps [])))))
     (is (re-find #"下地の位置を保存" (ui/render (assoc base :page :map :session {:email "a"}
+                                                     :map-mode "basemap"
                                                      :place {}
                                                      :basemaps [{:kind "aerial" :ready true}]))))
     (is (re-find #"取り消す" (ui/render (assoc base :page :users :kind "admin" :users [{:id 2 :email "z@z.z"}]))))
@@ -131,8 +143,11 @@
                                          :fields [{:id 1 :name "北" :area_ha 0 :area_m2 42}]))))
     (is (re-find #"パソコンで開いてください" (ui/render (assoc base :page :map :kind "user" :narrow? true :session {:email "a"}))))
     (is (re-find #"この範囲を作業場所にする" (ui/render (assoc base :page :map-place :kind "user" :form {:west "1" :south "2" :east "3" :north "4"}))))
+    (is (re-find #"空中写真で最終確認" (ui/render (assoc base :page :map-place :kind "user"))))
+    (is (re-find #"国土地理院" (ui/render (assoc base :page :map-place :kind "user"))))
+    (is (re-find #"data-preview=\"aerial\"" (ui/render (assoc base :page :map-place :kind "user" :place-preview "aerial"))))
     (is (re-find #"先に作業場所の範囲を決めてください" (ui/render (assoc base :page :map :kind "user"))))
-    (is (re-find #"ドラッグで移動" (ui/render (assoc base :page :map :kind "user"))))
+    (is (re-find #"地理院地図を動かして" (ui/render (assoc base :page :map :kind "user"))))
     (is (re-find #"この範囲を作業場所にする" (ui/render (assoc base :page :map :kind "user"))))
     (is (re-find #"空中写真" (ui/render (assoc base :page :map :kind "user"
                                               :place {:west 1 :south 2 :east 3 :north 4}
@@ -141,16 +156,102 @@
                                                                 :place {:west 1 :south 2 :east 3 :north 4}
                                                                 :basemaps [])))))
     (is (re-find #"塗りを確定する" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                                     :map-mode "paint"
+                                                     :form {:work_name "田植え"}
                                                      :place {:west 1 :south 2 :east 3 :north 4}
                                                      :fields [{:id 1 :name "北"}]
                                                      :work-names ["田植え"]))))
     (is (re-find #"option value=\"田植え\"" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                                              :map-mode "paint"
+                                                              :form {:work_name "田植え"}
                                                               :place {:west 1 :south 2 :east 3 :north 4}
                                                               :fields [{:id 1 :name "北"}]
                                                               :work-names ["田植え"]))))
     (is (not (re-find #"塗りを確定する" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
                                                           :place {:west 1 :south 2 :east 3 :north 4}
-                                                          :fields [])))))))
+                                                          :fields [])))))
+    (is (re-find #"手描き" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                            :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (not (re-find #"圃場を保存" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                                      :place {:west 1 :south 2 :east 3 :north 4})))))
+    (is (re-find #"圃場を保存" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                                :map-mode "draw"
+                                                :place {:west 1 :south 2 :east 3 :north 4}))))
+    (let [r (ui/handle (assoc base :page :map :session {:email "a"}
+                              :place {:west 1 :south 2 :east 3 :north 4}
+                              :map-mode "draw")
+                       [:submit {:act "set-map-mode" :form {:mode "cancel"}}])]
+      (is (= "browse" (get-in r [:state :map-mode]))))
+    (let [r (ui/handle (assoc base :page :map :session {:email "a"}
+                              :form {:work_name "田植え"} :map-mode "paint")
+                       [:submit {:act "set-map-mode" :form {:mode "basemap"}}])]
+      (is (= "basemap" (get-in r [:state :map-mode])))
+      (is (= "paint" (get-in r [:state :map-mode-parent]))))
+    (let [r (ui/handle (assoc base :page :map :session {:email "a"}
+                              :map-mode "basemap" :map-mode-parent "paint"
+                              :form {:work_name "田植え"})
+                       [:submit {:act "set-map-mode" :form {:mode "cancel"}}])]
+      (is (= "paint" (get-in r [:state :map-mode]))))
+    (is (= "paint" (ui/map-mode {:form {:work_name "田植え"}})))
+    (is (re-find #"やめる" (ui/render (assoc base :page :map :kind "user" :session {:email "a"}
+                                            :map-mode "paint"
+                                            :place {:west 1 :south 2 :east 3 :north 4}))))
+    (doseq [mode ["edit" "split" "merge" "import" "browse" "paint" "draw"]]
+      (let [r (ui/handle (assoc base :page :map :session {:email "a"}
+                                :place {:west 1 :south 2 :east 3 :north 4})
+                         [:submit {:act "set-map-mode" :form {:mode mode}}])]
+        (is (= mode (get-in r [:state :map-mode])))
+        (is (string? (ui/render (get r :state))))))
+    (is (= :html (ffirst (:fx (ui/handle (assoc base :page :map :session {:email "a"}
+                                               :place {:west 1 :south 2 :east 3 :north 4})
+                                        [:submit {:act "set-map-mode" :form {:mode "nope"}}])))))
+    (is (re-find #"形と名前を保存" (ui/render (assoc base :page :map :session {:email "a"}
+                                                    :map-mode "edit"
+                                                    :form {:id "1" :name "北"}
+                                                    :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"分割を保存" (ui/render (assoc base :page :map :session {:email "a"}
+                                                :map-mode "split"
+                                                :form {:id "1"}
+                                                :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"合筆する" (ui/render (assoc base :page :map :session {:email "a"}
+                                              :map-mode "merge"
+                                              :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"取り込む" (ui/render (assoc base :page :map :session {:email "a"}
+                                              :map-mode "import"
+                                              :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"塗りを確定する" (ui/render (assoc base :page :map :session {:email "a"}
+                                                     :map-mode "paint"
+                                                     :form {:work_name "田植え" :field_id "1" :paint-id "2" :paint-geojson "{}"}
+                                                     :place {:west 1 :south 2 :east 3 :north 4}
+                                                     :fields [{:id 1 :name "北"}]
+                                                     :work-names ["田植え"]))))
+    (is (re-find #"name=\"id\" value=\"3\"" (ui/render (assoc base :page :map :session {:email "a"}
+                                                             :map-mode "paint"
+                                                             :form {:work_name "田植え" :id "3"}
+                                                             :place {:west 1 :south 2 :east 3 :north 4}
+                                                             :fields [{:id 3 :name "北"}]
+                                                             :work-names ["田植え"]))))
+    (is (re-find #"name=\"id\" value=\"9\"" (ui/render (assoc base :page :map :session {:email "a"}
+                                                             :map-mode "split"
+                                                             :form {:split-id "9"}
+                                                             :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"name=\"id\" value=\"8\"" (ui/render (assoc base :page :map :session {:email "a"}
+                                                             :map-mode "split"
+                                                             :form {:id "8"}
+                                                             :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"name=\"id\" value=\"7\"" (ui/render (assoc base :page :map :session {:email "a"}
+                                                             :map-mode "split"
+                                                             :form {:field_id "7"}
+                                                             :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"手描き" (ui/render (assoc base :page :map :session {:email "a"}
+                                            :map-mode "weird"
+                                            :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"いま必要な操作" (ui/render (assoc base :page :map :session {:email "a"}
+                                                    :map-mode "weird"
+                                                    :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (= :html (ffirst (:fx (ui/handle (assoc base :page :map :session {:email "a"}
+                                               :place {:west 1 :south 2 :east 3 :north 4})
+                                        [:submit {:act "set-map-mode" :form {}}])))))))
 
 (deftest handle-flow-test
   (let [s (ui/init-state)
@@ -214,8 +315,42 @@
     (is (= :html (fx-op (assoc s :page :fields) [:basemaps-loaded {:ok true :basemaps []}])))
     (is (= :html (fx-op (assoc s :page :map-place) [:work-names-loaded {:work_names []}])))
     (is (map? (ui/handle s [:basemaps-loaded {}])))
-    (is (= :nav (fx-op s [:place-save-result {:ok true}])))
+    (is (= :api (fx-op s [:place-save-result {:ok true}])))
     (is (true? (get-in (ui/handle s [:place-save-result {:ok false :code "place_invalid"}]) [:state :flash :error?])))
+    (is (= :nav (fx-op (assoc s :page :map-place) [:emaff-import-result {:ok true}])))
+    (is (= :api (fx-op (assoc s :page :map) [:emaff-import-result {:ok true :code "emaff_partial"}])))
+    (is (true? (get-in (ui/handle (assoc s :page :map-place) [:emaff-import-result {:ok false :code "emaff_unavailable"}])
+                       [:state :flash :error?])))
+    (is (= :html (fx-op (assoc s :page :map-place) [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                                          :note "n"
+                                                                          :bbox {:west 1 :south 2 :east 3 :north 4}}])))
+    (is (= "aerial" (:place-preview (:state (ui/handle (assoc s :page :map-place)
+                                                       [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                                               :bbox {:west 1 :south 2 :east 3 :north 4}}])))))
+    (is (nil? (get-in (ui/handle (assoc s :page :map-place :form nil)
+                                 [:place-preview-result {:ok true :source "gsi" :kind "aerial"}])
+                      [:state :form :preview-note])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place :form {})
+                                  [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                          :bbox {:west 1}}])
+                       [:state :form :west])))
+    (is (= "2" (get-in (ui/handle (assoc s :page :map-place :form {})
+                                  [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                          :bbox {:south 2}}])
+                       [:state :form :south])))
+    (is (= "3" (get-in (ui/handle (assoc s :page :map-place :form {})
+                                  [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                          :bbox {:east 3}}])
+                       [:state :form :east])))
+    (is (= "4" (get-in (ui/handle (assoc s :page :map-place :form {})
+                                  [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                          :bbox {:north 4}}])
+                       [:state :form :north])))
+    (is (= "n" (get-in (ui/handle (assoc s :page :map-place :form {})
+                                  [:place-preview-result {:ok true :source "gsi" :kind "aerial" :note "n"}])
+                       [:state :form :preview-note])))
+    (is (true? (get-in (ui/handle (assoc s :page :map-place) [:place-preview-result {:ok false :code "place_invalid"}])
+                       [:state :flash :error?])))
     (is (= :api (fx-op s [:field-save-result {:ok true}])))
     (is (true? (get-in (ui/handle s [:field-save-result {:ok false :code "shape_not_area"}]) [:state :flash :error?])))
     (is (= :api (fx-op s [:field-delete-result {:ok true}])))
@@ -232,6 +367,8 @@
     (let [b (ui/handle (ui/init-state) [:boot {:path "/map" :search "" :narrow? true}])]
       (is (true? (get-in b [:state :narrow?]))))
     (is (= :api (fx-op s [:submit {:act "save-place" :form {:west "1"}}])))
+    (is (= :api (fx-op s [:submit {:act "preview-place" :form {:west "1"}}])))
+    (is (= :api (fx-op s [:submit {:act "emaff-import" :form {}}])))
     (is (= :api (fx-op s [:submit {:act "create-field" :form {:name "n" :geojson "{\"type\":\"Polygon\"}"}}])))
     (is (= :api (fx-op s [:submit {:act "update-field" :form {:id "1" :name "n" :geojson "{\"type\":\"Polygon\"}"}}])))
     (is (= :api (fx-op s [:submit {:act "update-field" :form {:id "1"}}])))

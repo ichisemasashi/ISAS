@@ -162,6 +162,32 @@
           (log/info "下地画像を取り込みました" :user-id user-id :kind kind :path rel)
           {:ok true})))))
 
+(defn put-basemap-bytes [sys user-id kind ^bytes bytes content-type]
+  (cond
+    (not (kind-ok? kind))
+    {:ok false :code "basemap_kind"}
+
+    (nil? (db/find-place (:ds sys) user-id))
+    {:ok false :code "place_unset"}
+
+    (or (nil? bytes) (zero? (alength bytes)))
+    {:ok false :code "import_invalid"}
+
+    :else
+    (let [ext (if (= "image/png" content-type) ".png" ".jpg")
+          ct (or content-type "image/jpeg")
+          dir (user-dir sys user-id)
+          rel (str user-id "/" kind ext)
+          dest (io/file (basemap-root sys) rel)]
+      (.mkdirs dir)
+      (io/copy bytes dest)
+      (db/upsert-basemap! (:ds sys) {:user-id user-id
+                                     :kind (str kind)
+                                     :content-type ct
+                                     :body-ref rel})
+      (log/info "下地画像を自動保存しました" :user-id user-id :kind kind :path rel)
+      {:ok true})))
+
 (defn get-basemap [sys user-id kind]
   (cond
     (not (kind-ok? kind))

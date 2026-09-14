@@ -26,7 +26,8 @@
             uid2 (:id (db/find-user-by-email (:ds sys) "b3-other@example.com"))
             f (fields/create-field sys uid {:name "北" :geojson tu/square})
             fid (get-in f [:field :id])
-            wide (html {:page :map :place place :fields [{:id fid :name "北"}]})]
+            wide (html {:page :map :place place :fields [{:id fid :name "北"}]
+                        :map-mode "paint" :form {:work_name "田植え"}})]
         (testing "B3-2-01 / B3-2-02 所有者のパソコンで塗れる"
           (is (re-find #"ブラシ|塗りを確定する" wide))
           (is (true? (:ok (paints/create-paint sys uid {:field_id fid :work_name "田植え" :geojson tu/square-inner})))))
@@ -92,8 +93,10 @@
             (is (= (count (:fields (fields/list-fields sys uid))) (count (:fields body))))))
         (testing "B3-5.3-01 地図に塗りと全面完了"
           (is (re-find #"全面完了" wide))
-          (is (re-find #"手描き" wide)))
-        (testing "B3-5.3-02 0枚は塗りを出さない"
+          (is (not (re-find #"手描き" wide)))
+          (is (re-find #"圃場を直す" wide))
+          (is (re-find #"手描き" (html {:page :map :place place :fields [{:id fid}] :map-mode "browse"}))))
+        (testing "B3-5.3-02 0枚でも塗りメニューは開けるが作業名なしではブラシ無し"
           (is (not (re-find #"ブラシ|全面完了" (html {:page :map :place place :fields []})))))
         (testing "B3-6-01 塗り単位。下書き表は無い"
           (let [names (tu/table-names (:ds sys))

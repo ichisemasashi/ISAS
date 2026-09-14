@@ -47,7 +47,7 @@
               (is (nil? (http/match-api :get p)))
               (is (nil? (http/match-api :post p)))
               (is (nil? (http/match-api :put p))))))
-        (testing "B3-8 / B6-8 地理院タイルを直接出さない"
+        (testing "B3-8 / B6-8 圃場編集地図に地理院ライブ URL を HTML で埋め込まない"
           (is (not (re-find #"cyberjapandata|tile.openstreetmap" map-html))))
         (testing "P1-7-02 と共通の対象外"
           (is (= 401 (:status (tu/get-path app "/api/user/paints"))))

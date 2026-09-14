@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [isas.accounts :as accounts]
+            [isas.emaff :as emaff]
             [isas.fields :as fields]
             [isas.log :as log]
             [isas.paints :as paints]
@@ -208,6 +209,26 @@
           (log/warn "下地の位置を読めませんでした" :error (.getMessage e))
           (fail "place_invalid"))))))
 
+(defn place-preview [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (emaff/preview-aerial sys uid (read-body req))]
+          (if (:ok r)
+            (ok (dissoc r :ok))
+            (fail (:code r))))
+        (catch Exception e
+          (log/warn "最終確認を読めませんでした" :error (.getMessage e))
+          (fail "place_invalid"))))))
+
+(defn emaff-import [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (emaff/import-for-place sys uid)]
+        (if (:ok r)
+          (ok (dissoc r :ok))
+          (fail (:code r)))))))
+
 (defn basemaps-get [sys req]
   (with-farm sys req
     (fn [uid]
@@ -367,6 +388,8 @@
    [:get "/api/user/place"] [:place-get]
    [:put "/api/user/place"] [:place-put]
    [:put "/api/user/place/image"] [:place-image-put]
+   [:post "/api/user/place/preview"] [:place-preview]
+   [:post "/api/user/emaff/import"] [:emaff-import]
    [:get "/api/user/basemaps"] [:basemaps-get]
    [:get "/api/user/fields"] [:fields-get]
    [:post "/api/user/fields"] [:fields-post]
@@ -418,6 +441,8 @@
         :place-get (place-get sys req)
         :place-put (place-put sys req)
         :place-image-put (place-image-put sys req)
+        :place-preview (place-preview sys req)
+        :emaff-import (emaff-import sys req)
         :basemaps-get (basemaps-get sys req)
         :basemap-put (basemap-put sys req (second spec))
         :basemap-get (basemap-file sys req (second spec))
