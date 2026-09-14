@@ -1,5 +1,6 @@
 (ns isas.map
-  (:require [isas.browser :as browser]
+  (:require [clojure.string :as str]
+            [isas.browser :as browser]
             [isas.ui :as ui]
             ["ol/Map" :default OlMap]
             ["ol/View" :default View]
@@ -183,19 +184,41 @@
 (defn- current-work-name []
   (or (some-> (.querySelector js/document "form[data-act='select-work-name'] input[name='work_name']")
               .-value)
+      (get-in @browser/app-state [:form :work_name])
       ""))
 
+(defn- remember-form! [m]
+  (when (and @browser/app-state (seq m))
+    (swap! browser/app-state update :form merge m)))
+
+(defn- set-field-targets! [id]
+  (when id
+    (let [s (str id)]
+      (set-form-input "confirm-paint" "field_id" s)
+      (set-form-input "complete-field" "id" s)
+      (set-form-input "delete-field-paints" "id" s)
+      (set-form-input "split-field" "id" s)
+      (set-form-input "update-field" "id" s)
+      (remember-form! {:field_id s :id s}))))
+
+(defn- set-work-name-targets! [wn]
+  (let [w (str (or wn ""))]
+    (set-form-input "confirm-paint" "work_name" w)
+    (set-form-input "complete-field" "work_name" w)
+    (set-form-input "delete-field-paints" "work_name" w)
+    (when-not (str/blank? w)
+      (remember-form! {:work_name w}))))
+
 (defn- write-drafts! []
-  (when-let [gj (drafts-geojson (or (:drafts @current) []))]
-    (write-json "confirm-paint" "geojson" gj))
-  (when-let [id (first (:selected @current))]
-    (set-form-input "confirm-paint" "field_id" id)
-    (set-form-input "complete-field" "id" id)
-    (set-form-input "delete-field-paints" "id" id))
-  (let [wn (current-work-name)]
-    (set-form-input "confirm-paint" "work_name" wn)
-    (set-form-input "complete-field" "work_name" wn)
-    (set-form-input "delete-field-paints" "work_name" wn)))
+  (let [gj (drafts-geojson (or (:drafts @current) []))
+        id (first (:selected @current))
+        wn (current-work-name)
+        gj-str (when gj (.stringify js/JSON (clj->js gj)))]
+    (when gj-str
+      (set-form-input "confirm-paint" "geojson" gj-str)
+      (remember-form! {:paint-geojson gj-str}))
+    (set-field-targets! id)
+    (set-work-name-targets! wn)))
 
 (defn- start-draw [mode]
   (when-let [{:keys [^js map ^js source draft-source]} @current]
@@ -221,6 +244,7 @@
     (when (.-clear src)
       (.clear src)))
   (set-form-input "confirm-paint" "geojson" "")
+  (remember-form! {:paint-geojson ""})
   (set-selection ""))
 
 (defn- start-edit []
@@ -272,32 +296,28 @@
        (fn [^js evt]
          (.forEachFeatureAtPixel ol-map (.-pixel evt)
                                  (fn [^js feat]
-                                   (if-let [paint-id (.get feat "paint-id")]
-                                     (do
+                                   (let [paint-id (.get feat "paint-id")
+                                         id (.get feat "id")
+                                         nm (.get feat "name")]
+                                     (when paint-id
                                        (set-form-input "delete-paint" "id" paint-id)
-                                       (set-selection (str "選んでいる塗り: " paint-id))
-                                       true)
-                                     (let [id (.get feat "id")
-                                           nm (.get feat "name")
-                                           ids (vec (distinct (conj (or (:selected @current) []) id)))]
-                                       (swap! current assoc :selected ids)
-                                       (set-form-input "split-field" "id" id)
-                                       (set-form-input "update-field" "id" id)
-                                       (set-form-input "confirm-paint" "field_id" id)
-                                       (set-form-input "complete-field" "id" id)
-                                       (set-form-input "delete-field-paints" "id" id)
-                                       (let [wn (current-work-name)]
-                                         (set-form-input "confirm-paint" "work_name" wn)
-                                         (set-form-input "complete-field" "work_name" wn)
-                                         (set-form-input "delete-field-paints" "work_name" wn))
-                                       (when nm
-                                         (set-form-input "update-field" "name" nm))
-                                       (set-form-input "merge-fields" "keep_id" (first ids))
-                                       (write-json "merge-fields" "ids" ids)
-                                       (set-selection (str "選んでいる圃場: " (or nm id)
-                                                           (when (> (count ids) 1)
-                                                             (str "（合筆の対象 " (count ids) "枚）"))))
-                                       true)))))))
+                                       (remember-form! {:paint-id (str paint-id)})
+                                       (set-selection (str "選んでいる塗り: " paint-id)))
+                                     (when id
+                                       (let [ids (vec (distinct (conj (or (:selected @current) []) id)))]
+                                         (swap! current assoc :selected ids)
+                                         (set-field-targets! id)
+                                         (set-work-name-targets! (current-work-name))
+                                         (when nm
+                                           (set-form-input "update-field" "name" nm)
+                                           (remember-form! {:name (str nm)}))
+                                         (set-form-input "merge-fields" "keep_id" (first ids))
+                                         (write-json "merge-fields" "ids" ids)
+                                         (when-not paint-id
+                                           (set-selection (str "選んでいる圃場: " (or nm id)
+                                                               (when (> (count ids) 1)
+                                                                 (str "（合筆の対象 " (count ids) "枚）")))))))
+                                     true))))))
 
 (defn- sync! [state _dispatch]
   (let [el (.getElementById js/document "ol-map")]
@@ -330,10 +350,19 @@
                                 (when-let [^js v (.getView ol-map)]
                                   (fill-place-form (.calculateExtent v)))))
         (bind-map-click ol-map)
-        (reset! current {:map ol-map :source src :view view :kind kind
-                         :image-layer img :place place :image-ext img-box
-                         :split-polys [] :selected [] :drafts []
-                         :draft-source draft-src :style-fn style-fn})
+        (let [fid (or (get-in state [:form :field_id]) (get-in state [:form :id]))
+              selected (if (and fid (not (str/blank? (str fid))))
+                         (let [n (when (string? fid) (js/parseInt fid 10))
+                               id (if (and n (not (js/isNaN n))) n fid)]
+                           [id])
+                         [])]
+          (reset! current {:map ol-map :source src :view view :kind kind
+                           :image-layer img :place place :image-ext img-box
+                           :split-polys [] :selected selected :drafts []
+                           :draft-source draft-src :style-fn style-fn})
+          (when (seq selected)
+            (set-field-targets! (first selected))
+            (set-work-name-targets! (or (get-in state [:form :work_name]) (current-work-name)))))
         nil))))
 
 (defn install! []

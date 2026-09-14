@@ -578,8 +578,13 @@
 
 (defn after-paint-save [state body]
   (if (:ok body)
-    {:state (assoc state :flash {:error? false :text (:paint-ok messages)})
-     :fx [[:api "GET" "/api/user/work-names" nil :work-names-loaded]]}
+    (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))
+          fid (or (get-in state [:form :field_id]) (get-in state [:form :id]))
+          form (cond-> (dissoc (:form state) :paint-geojson :paint-id)
+                 (not (str/blank? wn)) (assoc :work_name wn)
+                 fid (assoc :field_id (str fid) :id (str fid)))]
+      {:state (assoc state :flash {:error? false :text (:paint-ok messages)} :form form)
+       :fx [[:api "GET" "/api/user/work-names" nil :work-names-loaded]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
@@ -588,6 +593,22 @@
 
 (defn- work-name-of [form state]
   (str/trim (str (or (:work_name form) (get-in state [:form :work_name]) ""))))
+
+(defn- field-id-of [form state]
+  (let [v (or (:field_id form)
+              (:id form)
+              (get-in state [:form :field_id])
+              (get-in state [:form :id]))]
+    (let [s (str/trim (str (or v "")))]
+      (when-not (str/blank? s) s))))
+
+(defn- paint-geojson-of [form state]
+  (or (read-json-str (:geojson form))
+      (read-json-str (get-in state [:form :paint-geojson]))))
+
+(defn- paint-id-of [form state]
+  (let [s (str/trim (str (or (:id form) (get-in state [:form :paint-id]) "")))]
+    (when-not (str/blank? s) s)))
 
 (defn- flash-html-state [state text]
   (let [s (assoc state :flash {:error? true :text text})]
@@ -763,45 +784,60 @@
               {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil)
                :fx [[:api "GET" (paints-query wn) nil :paints-loaded]]}))
           "confirm-paint"
-          (cond
-            (blank-work-name? form state)
-            (flash-html-state state (:work-name-needed messages))
-            (str/blank? (str (:field_id form)))
-            (flash-html-state state (code-message "field_not_found"))
-            :else
-            {:state (assoc state :form (assoc (:form state) :work_name (work-name-of form state)))
-             :fx [[:api "POST" "/api/user/paints"
-                   {:field_id (:field_id form)
-                    :work_name (work-name-of form state)
-                    :geojson (read-json-str (:geojson form))}
-                   :paint-save-result]]})
+          (let [fid (field-id-of form state)
+                wn (work-name-of form state)
+                gj (paint-geojson-of form state)]
+            (cond
+              (blank-work-name? form state)
+              (flash-html-state state (:work-name-needed messages))
+              (nil? fid)
+              (flash-html-state state (code-message "field_not_found"))
+              (nil? gj)
+              (flash-html-state state (code-message "paint_empty"))
+              :else
+              {:state (assoc state :form (assoc (:form state)
+                                               :work_name wn
+                                               :field_id fid
+                                               :id fid
+                                               :paint-geojson ""))
+               :fx [[:api "POST" "/api/user/paints"
+                     {:field_id fid
+                      :work_name wn
+                      :geojson gj}
+                     :paint-save-result]]}))
           "complete-field"
-          (cond
-            (blank-work-name? form state)
-            (flash-html-state state (:work-name-needed messages))
-            (str/blank? (str (:id form)))
-            (flash-html-state state (code-message "field_not_found"))
-            :else
-            {:state (assoc state :form (assoc (:form state) :work_name (work-name-of form state)))
-             :fx [[:api "POST" (str "/api/user/fields/" (:id form) "/complete")
-                   {:work_name (work-name-of form state)}
-                   :paint-save-result]]})
+          (let [fid (field-id-of form state)
+                wn (work-name-of form state)]
+            (cond
+              (blank-work-name? form state)
+              (flash-html-state state (:work-name-needed messages))
+              (nil? fid)
+              (flash-html-state state (code-message "field_not_found"))
+              :else
+              {:state (assoc state :form (assoc (:form state) :work_name wn :field_id fid :id fid))
+               :fx [[:api "POST" (str "/api/user/fields/" fid "/complete")
+                     {:work_name wn}
+                     :paint-save-result]]}))
           "delete-paint"
-          (if (str/blank? (str (:id form)))
-            (flash-html-state state (code-message "paint_not_found"))
+          (if-let [pid (paint-id-of form state)]
             {:state state
-             :fx [[:api "DELETE" (str "/api/user/paints/" (:id form)) nil :paint-save-result]]})
+             :fx [[:api "DELETE" (str "/api/user/paints/" pid) nil :paint-save-result]]}
+            (flash-html-state state (code-message "paint_not_found")))
           "delete-field-paints"
-          (cond
-            (blank-work-name? form state)
-            (flash-html-state state (:work-name-needed messages))
-            (str/blank? (str (:id form)))
-            (flash-html-state state (code-message "field_not_found"))
-            :else
-            {:state state
-             :fx [[:api "DELETE" (field-paints-query (:id form) (work-name-of form state)) nil :paint-save-result]]})
+          (let [fid (field-id-of form state)
+                wn (work-name-of form state)]
+            (cond
+              (blank-work-name? form state)
+              (flash-html-state state (:work-name-needed messages))
+              (nil? fid)
+              (flash-html-state state (code-message "field_not_found"))
+              :else
+              {:state (assoc state :form (assoc (:form state) :work_name wn :field_id fid :id fid))
+               :fx [[:api "DELETE" (field-paints-query fid wn) nil :paint-save-result]]}))
           "discard-drafts"
-          (let [s (assoc state :flash {:error? false :text (:paint-discard messages)})]
+          (let [s (assoc state
+                         :form (dissoc (:form state) :paint-geojson)
+                         :flash {:error? false :text (:paint-discard messages)})]
             {:state s :fx [[:html (render s)]]})
           "import-fields" {:state state :fx [[:upload "POST" "/api/user/fields/import" form :field-save-result]]}
           "save-image-extent" {:state state :fx [[:api "PUT" "/api/user/place/image" form :image-save-result]]}
