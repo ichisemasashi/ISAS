@@ -176,6 +176,7 @@
         (let [draw (last-ol "drawend")]
           (call-ol draw "drawend" #js {:feature draw}))
         (fire "discard" nil)
+        (is (nil? (seq (:drafts @m/current))))
         (fire "merge" nil)
         (fire "image-shift" nil)
         (fire "image-scale" nil)

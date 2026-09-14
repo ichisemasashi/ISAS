@@ -211,7 +211,8 @@
 
 (defn- write-drafts! []
   (let [gj (drafts-geojson (or (:drafts @current) []))
-        id (first (:selected @current))
+        id (or (:active-field @current)
+               (last (:selected @current)))
         wn (current-work-name)
         gj-str (when gj (.stringify js/JSON (clj->js gj)))]
     (when gj-str
@@ -219,6 +220,14 @@
       (remember-form! {:paint-geojson gj-str}))
     (set-field-targets! id)
     (set-work-name-targets! wn)))
+
+(defn- clear-drafts-only! []
+  (swap! current assoc :drafts [])
+  (when-let [^js src (:draft-source @current)]
+    (when (.-clear src)
+      (.clear src)))
+  (set-form-input "confirm-paint" "geojson" "")
+  (remember-form! {:paint-geojson ""}))
 
 (defn- start-draw [mode]
   (when-let [{:keys [^js map ^js source draft-source]} @current]
@@ -239,12 +248,7 @@
                  :else (write-json "create-field" "geojson" gj))))))))
 
 (defn- discard-drafts! []
-  (swap! current assoc :drafts [])
-  (when-let [^js src (:draft-source @current)]
-    (when (.-clear src)
-      (.clear src)))
-  (set-form-input "confirm-paint" "geojson" "")
-  (remember-form! {:paint-geojson ""})
+  (clear-drafts-only!)
   (set-selection ""))
 
 (defn- start-edit []
@@ -304,8 +308,11 @@
                                        (remember-form! {:paint-id (str paint-id)})
                                        (set-selection (str "選んでいる塗り: " paint-id)))
                                      (when id
-                                       (let [ids (vec (distinct (conj (or (:selected @current) []) id)))]
-                                         (swap! current assoc :selected ids)
+                                       (let [prev (:active-field @current)
+                                             ids (vec (distinct (conj (or (:selected @current) []) id)))]
+                                         (when (and prev (not= prev id) (seq (:drafts @current)))
+                                           (clear-drafts-only!))
+                                         (swap! current assoc :selected ids :active-field id)
                                          (set-field-targets! id)
                                          (set-work-name-targets! (current-work-name))
                                          (when nm
@@ -351,17 +358,16 @@
                                   (fill-place-form (.calculateExtent v)))))
         (bind-map-click ol-map)
         (let [fid (or (get-in state [:form :field_id]) (get-in state [:form :id]))
-              selected (if (and fid (not (str/blank? (str fid))))
-                         (let [n (when (string? fid) (js/parseInt fid 10))
-                               id (if (and n (not (js/isNaN n))) n fid)]
-                           [id])
-                         [])]
+              active (when (and fid (not (str/blank? (str fid))))
+                       (let [n (when (string? fid) (js/parseInt fid 10))]
+                         (if (and n (not (js/isNaN n))) n fid)))
+              selected (if active [active] [])]
           (reset! current {:map ol-map :source src :view view :kind kind
                            :image-layer img :place place :image-ext img-box
-                           :split-polys [] :selected selected :drafts []
-                           :draft-source draft-src :style-fn style-fn})
-          (when (seq selected)
-            (set-field-targets! (first selected))
+                           :split-polys [] :selected selected :active-field active
+                           :drafts [] :draft-source draft-src :style-fn style-fn})
+          (when active
+            (set-field-targets! active)
             (set-work-name-targets! (or (get-in state [:form :work_name]) (current-work-name)))))
         nil))))
 
