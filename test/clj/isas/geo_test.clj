@@ -134,6 +134,32 @@
                                                              [140.0005 36.0005]
                                                              [140.0002 36.0005]
                                                              [140.0002 36.0002]]]})))
+  ;; self-intersecting brush stroke (bowtie) overlapping the field must still clip
+  (is (geo/valid-shape? (geo/intersect-shapes square
+                                             {:type "Polygon"
+                                              :coordinates [[[140.0002 36.0002]
+                                                             [140.0005 36.0005]
+                                                             [140.0002 36.0005]
+                                                             [140.0005 36.0002]
+                                                             [140.0002 36.0002]]]})))
+  (let [gf (GeometryFactory.)
+        empty-poly (.createPolygon gf nil nil)]
+    (with-redefs [isas.geo/buffer0 (constantly empty-poly)]
+      (is (nil? (#'geo/fix-geom
+                 (#'geo/gj->jts {:type "Polygon"
+                                 :coordinates [[[140.0002 36.0002]
+                                                [140.0005 36.0005]
+                                                [140.0002 36.0005]
+                                                [140.0005 36.0002]
+                                                [140.0002 36.0002]]]})))))
+    (with-redefs [isas.geo/buffer0 (constantly nil)]
+      (is (nil? (#'geo/fix-geom
+                 (#'geo/gj->jts {:type "Polygon"
+                                 :coordinates [[[140.0002 36.0002]
+                                                [140.0005 36.0005]
+                                                [140.0002 36.0005]
+                                                [140.0005 36.0002]
+                                                [140.0002 36.0002]]]}))))))
   (let [gf (GeometryFactory.)
         p (#'geo/gj->jts square)
         pe (#'geo/gj->jts square-east)

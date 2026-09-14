@@ -189,8 +189,18 @@
     (when (seq geoms)
       (jts->gj (reduce (fn [a b] (.union a b)) geoms)))))
 
-(defn- polygonal-geom [g]
+(defn- buffer0 [g]
+  (.buffer g 0.0))
+
+(defn- fix-geom [g]
   (when (and g (not (.isEmpty g)))
+    (if (.isValid g)
+      g
+      (let [fixed (buffer0 g)]
+        (when (and fixed (not (.isEmpty fixed))) fixed)))))
+
+(defn- polygonal-geom [g]
+  (when-let [g (fix-geom g)]
     (cond
       (instance? Polygon g) g
       (instance? MultiPolygon g) g
@@ -205,8 +215,8 @@
       :else nil)))
 
 (defn intersect-shapes [a b]
-  (let [ga (gj->jts a)
-        gb (gj->jts b)]
+  (let [ga (fix-geom (gj->jts a))
+        gb (fix-geom (gj->jts b))]
     (when (and ga gb)
       (let [gj (jts->gj (polygonal-geom (.intersection ga gb)))]
         (when (valid-shape? gj) gj)))))
