@@ -88,6 +88,14 @@
   (db/delete-basemaps! (:ds sys) user-id)
   (log/info "下地を消しました" :user-id user-id))
 
+(defn clear-user-data
+  "利用者が持つ作業場所・下地・圃場・塗り・再設定トークンをすべて消す。"
+  [sys user-id]
+  (delete-basemap-files sys user-id)
+  (db/delete-user-owned-data! (:ds sys) user-id)
+  (log/info "利用者のデータを消しました" :user-id user-id)
+  {:ok true})
+
 (defn put-place [sys user-id body]
   (let [west (geo/as-number (:west body))
         south (geo/as-number (:south body))

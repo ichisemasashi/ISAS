@@ -1,6 +1,7 @@
 (ns isas.accounts
   (:require [isas.crypto :as crypto]
             [isas.db :as db]
+            [isas.fields :as fields]
             [isas.log :as log]
             [isas.mail :as mail]
             [isas.time :as time]))
@@ -90,10 +91,12 @@
           {:ok false :code "invite_duplicate_user"}
 
           existing
-          (let [pw (crypto/initial-password)]
-            (db/reinvite-user! ds (:id existing) (crypto/hash-secret pw) actor-kind actor-id)
+          (let [pw (crypto/initial-password)
+                uid (:id existing)]
+            (fields/clear-user-data sys uid)
+            (db/reinvite-user! ds uid (crypto/hash-secret pw) actor-kind actor-id)
             (log/info "取り消した利用者を再招待しました"
-                      :email e :by-kind actor-kind :by-id actor-id :user-id (:id existing))
+                      :email e :by-kind actor-kind :by-id actor-id :user-id uid)
             {:ok true :initial_password pw :email e})
 
           :else
@@ -115,6 +118,7 @@
         user (when user-id (db/find-user-by-id ds user-id))]
     (if (and user (nil? (:revoked_at user)))
       (do
+        (fields/clear-user-data sys user-id)
         (db/revoke-user! ds user-id)
         (db/revoke-user-sessions! ds user-id)
         (log/info "利用者の招待を取り消しました" :user-id user-id :email (:email user))

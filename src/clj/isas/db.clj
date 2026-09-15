@@ -218,6 +218,26 @@
 (defn delete-basemaps! [ds user-id]
   (jdbc/execute-one! ds ["DELETE FROM basemaps WHERE user_id = ?" user-id]))
 
+(defn delete-place! [ds user-id]
+  (jdbc/execute-one! ds ["DELETE FROM work_places WHERE user_id = ?" user-id]))
+
+(defn delete-fields-for-user! [ds user-id]
+  (jdbc/execute-one! ds ["DELETE FROM paints WHERE field_id IN (SELECT id FROM fields WHERE user_id = ?)"
+                         user-id])
+  (jdbc/execute-one! ds ["DELETE FROM fields WHERE user_id = ?" user-id]))
+
+(defn delete-reset-tokens-for-account! [ds kind account-id]
+  (jdbc/execute-one! ds ["DELETE FROM reset_tokens WHERE kind = ? AND account_id = ?"
+                         kind account-id]))
+
+(defn delete-user-owned-data!
+  "作業場所・下地行・圃場・塗り・再設定トークンを消す（下地ファイルは呼び出し側）。"
+  [ds user-id]
+  (delete-fields-for-user! ds user-id)
+  (delete-basemaps! ds user-id)
+  (delete-place! ds user-id)
+  (delete-reset-tokens-for-account! ds "user" user-id))
+
 (defn insert-field! [ds {:keys [user-id name geojson]}]
   (jdbc/execute-one! ds
                      ["INSERT INTO fields (user_id, name, geojson, created_at, updated_at)

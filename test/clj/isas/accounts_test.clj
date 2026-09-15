@@ -3,6 +3,8 @@
             [isas.accounts :as accounts]
             [isas.crypto :as crypto]
             [isas.db :as db]
+            [isas.fields :as fields]
+            [isas.geo :as geo]
             [isas.test-util :as tu]
             [isas.time :as time])
   (:import [java.time Instant]))
@@ -55,12 +57,20 @@
         (is (true? (:ok a)))
         (is (= "invite_duplicate_user" (:code (accounts/invite sys "admin" 1 "a@example.com"))))
         (let [uid (:id (db/find-user-by-email (:ds sys) "a@example.com"))]
+          (is (true? (:ok (fields/put-place sys uid {:west 139.0 :south 35.0 :east 141.0 :north 37.0}))))
+          (is (true? (:ok (fields/create-field sys uid {:name "旧圃場" :geojson tu/square}))))
+          (let [fid (get-in (fields/create-field sys uid {:name "塗" :geojson tu/square}) [:field :id])]
+            (db/insert-paint! (:ds sys) {:field-id fid :work-name "刈" :geojson (geo/to-json tu/square)}))
           (accounts/revoke-user sys uid)
+          (is (= "place_unset" (:code (fields/get-place sys uid))))
+          (is (empty? (:fields (fields/list-fields sys uid))))
           (accounts/revoke-user sys uid)
           (accounts/revoke-user sys 99999)
           (let [b (accounts/invite sys "user" uid "a@example.com")]
             (is (true? (:ok b)))
             (is (not= (:initial_password a) (:initial_password b)))
+            (is (= "place_unset" (:code (fields/get-place sys uid))))
+            (is (empty? (:fields (fields/list-fields sys uid))))
             (is (true? (:ok (accounts/login sys "user" "a@example.com" (:initial_password b)))))))))))
 
 (deftest password-change-test

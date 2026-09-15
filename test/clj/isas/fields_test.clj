@@ -124,7 +124,12 @@
         (is (= "import_invalid" (:code (fields/put-basemap-bytes sys uid "aerial" (byte-array 0) "image/jpeg"))))
         (is (true? (:ok (fields/put-basemap-bytes sys uid "aerial" (byte-array [1 2 3]) "image/jpeg"))))
         (is (true? (:ok (fields/put-basemap-bytes sys uid "standard" (byte-array [1 2 3]) "image/png"))))
-        (is (true? (:ok (fields/put-basemap-bytes sys uid "satellite" (byte-array [1 2 3]) nil))))))))
+        (is (true? (:ok (fields/put-basemap-bytes sys uid "satellite" (byte-array [1 2 3]) nil))))
+        (is (true? (:ok (fields/create-field sys uid {:name "消す" :geojson square}))))
+        (is (true? (:ok (fields/clear-user-data sys uid))))
+        (is (= "place_unset" (:code (fields/get-place sys uid))))
+        (is (empty? (:fields (fields/list-fields sys uid))))
+        (is (every? (comp false? :ready) (:basemaps (fields/list-basemap-status sys uid))))))))
 
 (deftest field-crud-split-merge-import-test
   (tu/with-sys

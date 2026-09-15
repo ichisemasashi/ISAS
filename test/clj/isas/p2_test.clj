@@ -226,15 +226,15 @@
             (is (integer? (:area_m2 f)))
             (is (number? (:area_ha f)))
             (is (pos? (:area_m2 f)))))
-        (testing "P2-3.1-03 取消ししても圃場は残る"
-          (let [c (fields/create-field sys uid {:name "残" :geojson tu/square})
-                n (count (db/list-fields (:ds sys) uid))]
+        (testing "P2-3.1-03 取消しで圃場などを消す"
+          (let [c (fields/create-field sys uid {:name "残" :geojson tu/square})]
+            (is (true? (:ok c)))
             (accounts/revoke-user sys uid)
-            (is (= n (count (db/list-fields (:ds sys) uid))))
+            (is (empty? (db/list-fields (:ds sys) uid)))
+            (is (= "place_unset" (:code (fields/get-place sys uid))))
             (accounts/invite sys "admin" 1 "farm@example.com")
             (is (= uid (:id (db/find-user-by-email (:ds sys) "farm@example.com"))))
-            (is (= n (count (db/list-fields (:ds sys) uid))))
-            (is (some? c))))
+            (is (empty? (db/list-fields (:ds sys) uid)))))
         (testing "P2-3.2-02 重なってよい"
           (let [inv (accounts/invite sys "admin" 1 "overlap@example.com")
                 sid (tu/user-sid app "overlap@example.com" (:initial_password inv))]

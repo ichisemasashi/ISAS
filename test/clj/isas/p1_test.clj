@@ -8,6 +8,7 @@
             [isas.core :as core]
             [isas.crypto :as crypto]
             [isas.db :as db]
+            [isas.fields :as fields]
             [isas.http :as http]
             [isas.mail :as mail]
             [isas.test-util :as tu]
@@ -293,12 +294,19 @@
         (testing "P1-3.3-04 期限切れは使えない"
           (db/insert-session! (:ds sys) {:id "expired" :kind "admin" :account-id 1 :expires-at "2000-01-01T00:00:00Z"})
           (is (nil? (accounts/current-session sys "admin" "expired"))))
-        (testing "P1-3.4-01 再招待は同じ行"
+        (testing "P1-3.4-01 再招待は同じ行でデータを消す"
           (let [u (db/find-user-by-email (:ds sys) "helper@example.com")
-                id (:id u)]
+                id (:id u)
+                place {:west 139.0 :south 35.0 :east 141.0 :north 37.0}]
+            (is (true? (:ok (fields/put-place sys id place))))
+            (is (true? (:ok (fields/create-field sys id {:name "旧" :geojson tu/square}))))
             (accounts/revoke-user sys id)
+            (is (= "place_unset" (:code (fields/get-place sys id))))
+            (is (empty? (:fields (fields/list-fields sys id))))
             (accounts/invite sys "admin" 1 "helper@example.com")
-            (is (= id (:id (db/find-user-by-email (:ds sys) "helper@example.com"))))))
+            (is (= id (:id (db/find-user-by-email (:ds sys) "helper@example.com"))))
+            (is (= "place_unset" (:code (fields/get-place sys id))))
+            (is (empty? (:fields (fields/list-fields sys id))))))
         (testing "P1-3.4-02 / P1-3.7-01 招待で管理者は増えない"
           (is (= 1 (db/count-admins (:ds sys))))
           (is (not (re-find #"管理者を招待|増やす" (html {:page :home :kind "admin"})))))
