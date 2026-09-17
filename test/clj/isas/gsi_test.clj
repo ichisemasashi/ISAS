@@ -35,11 +35,16 @@
 (deftest layer-url-and-zoom
   (is (re-find #"/xyz/std/10/1/2\.png$" (gsi/layer-url "std" 10 1 2)))
   (is (re-find #"/xyz/seamlessphoto/8/3/4\.jpg$" (gsi/layer-url "seamlessphoto" 8 3 4)))
-  (is (= 6 (gsi/zoom-for-bbox 120 20 140 40)))
-  (is (= 8 (gsi/zoom-for-bbox 139 35 142 37)))
-  (is (= 10 (gsi/zoom-for-bbox 139.0 35.0 139.8 35.6)))
-  (is (= 12 (gsi/zoom-for-bbox 139.0 35.0 139.2 35.1)))
-  (is (= 14 (gsi/zoom-for-bbox 139.0 35.0 139.05 35.04)))
+  (is (>= (gsi/zoom-for-bbox 139.0 35.0 139.05 35.04) 14))
+  (is (>= (gsi/zoom-for-bbox 139.0 35.0 139.05 35.04 "aerial") 14))
+  (is (<= 9 (gsi/zoom-for-bbox 139.0 35.0 139.05 35.04 "satellite") 13))
+  (is (<= 6 (gsi/zoom-for-bbox 120 20 140 40 "standard") 18))
+  (is (<= 9 (gsi/zoom-for-bbox 139 35 142 37 "satellite") 13))
+  (is (>= (gsi/zoom-for-bbox 139.0 35.0 139.2 35.1 "aerial") 14))
+  ;; 広域では優先帯に収まらず下げる
+  (is (< (gsi/zoom-for-bbox -170 -70 170 70 "aerial") 14))
+  (with-redefs [gsi/max-tiles 0]
+    (is (= 14 (gsi/zoom-for-bbox 139.0 35.0 139.05 35.04 "aerial"))))
   (is (true? (gsi/complete-bbox? {:west 1 :south 2 :east 3 :north 4})))
   (is (false? (gsi/complete-bbox? {:west 1 :south 2 :east 3})))
   (is (false? (gsi/complete-bbox? {:west 1 :south 2})))
@@ -68,10 +73,16 @@
             (let [bytes (gsi/stitch-bbox box "aerial")]
               (is (bytes? bytes))
               (is (some? (ImageIO/read (io/input-stream bytes)))))))))
-    (testing "mock 取得で standard / satellite"
+    (testing "mock 取得で standard / aerial / satellite。衛星は空中より低いズーム"
       (with-redefs [gsi/http-get-bytes (fn [_] tile)]
         (is (some? (gsi/stitch-bbox box "standard")))
-        (is (some? (gsi/stitch-bbox box "satellite")))))
+        (is (some? (gsi/stitch-bbox box "aerial")))
+        (is (some? (gsi/stitch-bbox box "satellite")))
+        (let [za (gsi/zoom-for-bbox (:west box) (:south box) (:east box) (:north box) "aerial")
+              zs (gsi/zoom-for-bbox (:west box) (:south box) (:east box) (:north box) "satellite")]
+          (is (>= za 14))
+          (is (<= 9 zs 13))
+          (is (> za zs)))))
     (testing "不明な kind / 不完全な範囲"
       (is (nil? (gsi/stitch-bbox box "moon")))
       (is (nil? (gsi/stitch-bbox {} "aerial")))
@@ -85,6 +96,6 @@
     (testing "東西南北が逆／タイル数上限"
       (is (nil? (gsi/stitch-bbox {:west 140.0 :south 35.0 :east 139.0 :north 35.04} "aerial")))
       (is (nil? (gsi/stitch-bbox {:west 139.0 :south 36.0 :east 139.05 :north 35.0} "aerial")))
-      (with-redefs [gsi/max-tiles 1
+      (with-redefs [gsi/max-tiles 0
                     gsi/http-get-bytes (fn [_] tile)]
-        (is (nil? (gsi/stitch-bbox {:west 139.0 :south 35.0 :east 139.2 :north 35.2} "aerial")))))))
+        (is (nil? (gsi/stitch-bbox box "aerial")))))))

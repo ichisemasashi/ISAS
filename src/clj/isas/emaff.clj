@@ -96,17 +96,8 @@
    {:basemaps [] :warnings []}
    ["standard" "aerial" "satellite"]))
 
-(defn- import-polygons!
-  "筆ポリゴンの自動取得。現状 eMAFF 公開 API が無いため警告のみ返す。"
-  [sys user-id]
-  (log/warn "筆ポリゴンの自動取得は eMAFF 公開 API が無いため手作業取込を使ってください"
-            :user-id user-id)
-  {:fields []
-   :warnings [{:code "emaff_unavailable"
-               :msg "筆ポリゴンは自動取得できません。区画ファイルを取り込んでください"}]})
-
 (defn import-for-place
-  "作業場所について下地を自動取得し、筆ポリゴンの自動取得を試みる。"
+  "作業場所について下地3種を自動取得する。筆ポリゴンは手作業の区画取込を使う。"
   [sys user-id]
   (let [place (db/find-place (:ds sys) user-id)]
     (cond
@@ -123,25 +114,25 @@
       :else
       (try
         (let [box (select-keys place [:west :south :east :north])
-              _ (log/info "作業場所の自動取込を始めます" :user-id user-id
+              _ (log/info "作業場所の下地自動取込を始めます" :user-id user-id
                           :west (:west box) :south (:south box)
                           :east (:east box) :north (:north box))
               bm (import-basemaps! sys user-id box)
-              pg (import-polygons! sys user-id)
-              warnings (vec (concat (:warnings bm) (:warnings pg)))
+              warnings (vec (:warnings bm))
               ok-bm (seq (:basemaps bm))]
+          (log/info "筆ポリゴンは手作業の区画取込を使います" :user-id user-id)
           (cond
             (and ok-bm (empty? warnings))
             (do
-              (log/info "eMAFF／代替の自動取込が完了しました" :user-id user-id :basemaps (:basemaps bm))
-              {:ok true :basemaps (:basemaps bm) :fields (:fields pg) :warnings []})
+              (log/info "下地の自動取込が完了しました" :user-id user-id :basemaps (:basemaps bm))
+              {:ok true :basemaps (:basemaps bm) :fields [] :warnings []})
 
             ok-bm
             (do
               (log/info "下地の自動取込は一部または警告付きです"
                         :user-id user-id :basemaps (:basemaps bm) :warnings warnings)
               {:ok true :code "emaff_partial"
-               :basemaps (:basemaps bm) :fields (:fields pg) :warnings warnings})
+               :basemaps (:basemaps bm) :fields [] :warnings warnings})
 
             :else
             (do

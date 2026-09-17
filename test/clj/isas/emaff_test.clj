@@ -56,22 +56,23 @@
        (testing "場所未設定"
          (is (= "place_unset" (:code (emaff/import-for-place sys uid)))))
        (fields/put-place sys uid {:west 139.0 :south 35.0 :east 139.05 :north 35.04})
-       (testing "下地が取れて筆が取れないときは partial"
+       (testing "下地3種が取れたら完了（区画は手作業）"
          (with-redefs [gsi/stitch-bbox (fn [_ _] tile)]
            (let [r (emaff/import-for-place sys uid)]
              (is (true? (:ok r)))
-             (is (= "emaff_partial" (:code r)))
+             (is (nil? (:code r)))
              (is (= 3 (count (:basemaps r))))
-             (is (seq (:warnings r)))
+             (is (empty? (:warnings r)))
              (is (every? :ready (:basemaps (fields/list-basemap-status sys uid)))))))
-       (testing "warnings 無しの完了"
-         (with-redefs [gsi/stitch-bbox (fn [_ _] tile)]
-           (with-redefs-fn {#'emaff/import-polygons! (fn [_ _] {:fields [] :warnings []})}
-             (fn []
-               (fields/put-place sys uid {:west 139.2 :south 35.2 :east 139.25 :north 35.24})
-               (let [r (emaff/import-for-place sys uid)]
-                 (is (true? (:ok r)))
-                 (is (nil? (:code r))))))))
+       (testing "下地の一部だけ取れたときは partial"
+         (with-redefs [gsi/stitch-bbox (fn [_ kind]
+                                         (when (= "aerial" (str kind)) tile))]
+           (fields/put-place sys uid {:west 139.2 :south 35.2 :east 139.25 :north 35.24})
+           (let [r (emaff/import-for-place sys uid)]
+             (is (true? (:ok r)))
+             (is (= "emaff_partial" (:code r)))
+             (is (= ["aerial"] (:basemaps r)))
+             (is (seq (:warnings r))))))
        (testing "下地も取れないときは unavailable"
          (with-redefs [gsi/stitch-bbox (fn [_ _] nil)]
            (fields/put-place sys uid {:west 139.1 :south 35.1 :east 139.15 :north 35.14})
