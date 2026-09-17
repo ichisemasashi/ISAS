@@ -105,10 +105,12 @@
                                                  :geometry (:geojson p)
                                                  :properties {:paint-id (:id p)
                                                               :kind "paint"
-                                                              :id (:id pf)}}))]
+                                                              :id (:id pf)
+                                                              :name (:name pf)}}))]
             (.set feat "paint-id" (:id p))
             (.set feat "kind" "paint")
             (.set feat "id" (:id pf))
+            (.set feat "name" (:name pf))
             (.push arr feat)))))
     arr))
 
@@ -390,7 +392,8 @@
                                        (when paint-id
                                          (set-form-input "delete-paint" "id" paint-id)
                                          (remember-form! {:paint-id (str paint-id)})
-                                         (set-selection (str "選んでいる塗り: " paint-id)))
+                                         ;; 画面には圃場名を出す。塗り行の内部 ID は出さない。
+                                         (set-selection (str "選んでいる塗り: " (or nm id))))
                                        (when id
                                          (let [prev (:active-field @current)
                                                ids (if merge?

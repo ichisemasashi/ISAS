@@ -41,6 +41,7 @@
         clipped (when union (or (geo/intersect-shapes union fgj) union))
         pa (or (geo/area-m2 clipped) 0.0)]
     {:id (:id field-row)
+     :name (:name field-row)
      :status (paint-status pa fa)
      :area_m2 (geo/area-m2-int pa)
      :field_area_m2 (geo/area-m2-int fa)

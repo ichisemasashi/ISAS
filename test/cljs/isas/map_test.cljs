@@ -148,8 +148,10 @@
     (let [click (last-ol "click")]
       (call-ol click "click" #js {:pixel #js [1 1]})
       (when click
-        (set! (.-props click) (js-obj "paint-id" 9 "id" 1))
-        (call-ol click "click" #js {:pixel #js [1 1]})))
+        (set! (.-props click) (js-obj "paint-id" 9 "id" 1 "name" "北"))
+        (call-ol click "click" #js {:pixel #js [1 1]})
+        (is (= "選んでいる塗り: 北"
+               (.-textContent (.getElementById js/document "map-selection"))))))
     (when (seq @clicks)
       (let [fire (fn [op kind]
                    ((first @clicks)

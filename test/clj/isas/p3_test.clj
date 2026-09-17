@@ -162,7 +162,8 @@
                     row (first (filter #(= id (:id %)) (:fields body)))]
                 (is (true? (:ok body)))
                 (is (= "田植え" (:work_name body)))
-                (is (every? #(contains? row %) [:id :status :area_m2 :field_area_m2 :paints]))
+                (is (every? #(contains? row %) [:id :name :status :area_m2 :field_area_m2 :paints]))
+                (is (string? (:name row)))
                 (is (pos? (:area_m2 row)))
                 (is (< (:area_m2 row) (:field_area_m2 row)))
                 (is (= "partial" (:status row)))
