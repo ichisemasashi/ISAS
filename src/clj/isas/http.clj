@@ -193,10 +193,21 @@
   (with-farm sys req
     (fn [uid]
       (try
-        (let [r (fields/put-place sys uid (read-body req))]
-          (if (:ok r) (ok {}) (fail (:code r))))
+        (let [body (read-body req)
+              _ (log/info "作業場所の保存要求を受けました"
+                          :user-id uid
+                          :west (:west body) :south (:south body)
+                          :east (:east body) :north (:north body))
+              r (fields/put-place sys uid body)]
+          (if (:ok r)
+            (do
+              (log/info "作業場所の保存 API が成功しました" :user-id uid)
+              (ok {}))
+            (do
+              (log/warn "作業場所の保存 API が失敗しました" :user-id uid :code (:code r))
+              (fail (:code r)))))
         (catch Exception e
-          (log/warn "作業場所を読めませんでした" :error (.getMessage e))
+          (log/warn "作業場所を読めませんでした" :user-id uid :error (.getMessage e))
           (fail "place_invalid"))))))
 
 (defn place-image-put [sys req]
@@ -206,19 +217,31 @@
         (let [r (fields/put-image-extent sys uid (read-body req))]
           (if (:ok r) (ok {}) (fail (:code r))))
         (catch Exception e
-          (log/warn "下地の位置を読めませんでした" :error (.getMessage e))
+          (log/warn "下地の位置を読めませんでした" :user-id uid :error (.getMessage e))
           (fail "place_invalid"))))))
 
 (defn place-preview [sys req]
   (with-farm sys req
     (fn [uid]
       (try
-        (let [r (emaff/preview-aerial sys uid (read-body req))]
+        (let [body (read-body req)
+              _ (log/info "作業場所の最終確認要求を受けました"
+                          :user-id uid
+                          :west (:west body) :south (:south body)
+                          :east (:east body) :north (:north body))
+              r (emaff/preview-aerial sys uid body)]
           (if (:ok r)
-            (ok (dissoc r :ok))
-            (fail (:code r))))
+            (do
+              (log/info "作業場所の最終確認 API が成功しました"
+                        :user-id uid :source (:source r) :kind (:kind r)
+                        :west (get-in r [:bbox :west]) :south (get-in r [:bbox :south])
+                        :east (get-in r [:bbox :east]) :north (get-in r [:bbox :north]))
+              (ok (dissoc r :ok)))
+            (do
+              (log/warn "作業場所の最終確認 API が失敗しました" :user-id uid :code (:code r))
+              (fail (:code r)))))
         (catch Exception e
-          (log/warn "最終確認を読めませんでした" :error (.getMessage e))
+          (log/warn "最終確認を読めませんでした" :user-id uid :error (.getMessage e))
           (fail "place_invalid"))))))
 
 (defn emaff-import [sys req]

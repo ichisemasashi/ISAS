@@ -167,7 +167,13 @@
             (is (true? (:ok prev)))
             (is (= "gsi" (:source prev)))
             (is (= "aerial" (:kind prev))))
-          (is (re-find #"data-preview=\"aerial\"" (html {:page :map-place :place-preview "aerial"}))))
+          (is (re-find #"data-preview=\"aerial\"" (html {:page :map-place :place-preview "aerial"})))
+          (is (re-find #"地理院地図に戻って範囲を直す"
+                       (html {:page :map-place :place-preview "aerial"
+                              :form {:west "140.1" :south "35.1" :east "140.2" :north "35.2"}})))
+          (is (re-find #"data-west=\"140.1\""
+                       (html {:page :map-place :place-preview "aerial"
+                              :form {:west "140.1" :south "35.1" :east "140.2" :north "35.2"}}))))
         (testing "P2-2.4-02a 自動取込 API"
           (with-redefs [isas.gsi/stitch-bbox (fn [_ _]
                                                (let [img (java.awt.image.BufferedImage. 8 8 java.awt.image.BufferedImage/TYPE_INT_RGB)

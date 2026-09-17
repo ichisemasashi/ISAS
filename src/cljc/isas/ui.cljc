@@ -26,8 +26,9 @@
    :place-move "地理院地図を動かして範囲を決め、空中写真で確認してから確定してください"
    :place-set "この範囲を作業場所にする"
    :place-preview "空中写真で最終確認"
-   :place-preview-note "確認用の空中写真です（eMAFF が取れないときは地理院）"
+   :place-preview-note "確認用の空中写真です（eMAFF が取れないときは地理院）。この範囲でよければ確定、直すなら地理院地図に戻ってください"
    :place-gsi-attr "地図：国土地理院"
+   :place-back-gsi "地理院地図に戻って範囲を直す"
    :emaff-import "この範囲の区画と下地を自動で取り込む"
    :emaff-import-ok "自動取込が終わりました"
    :emaff-unavailable "自動取込ができませんでした。手作業の取込を使ってください"
@@ -538,29 +539,37 @@
            (cancel-form)))))
 
 (defn map-place-view [state]
-  (let [preview? (= "aerial" (str (:place-preview state)))]
+  (let [preview? (= "aerial" (str (:place-preview state)))
+        west (esc (get-in state [:form :west] "129"))
+        south (esc (get-in state [:form :south] "26"))
+        east (esc (get-in state [:form :east] "146"))
+        north (esc (get-in state [:form :north] "46"))
+        hidden (fn [act]
+                 (str "<form data-act=\"" act "\" method=\"post\">"
+                      "<input type=\"hidden\" name=\"west\" value=\"" west "\">"
+                      "<input type=\"hidden\" name=\"south\" value=\"" south "\">"
+                      "<input type=\"hidden\" name=\"east\" value=\"" east "\">"
+                      "<input type=\"hidden\" name=\"north\" value=\"" north "\">"))]
     (layout (:map-title messages)
             (str (nav-user)
                  (flash-html state)
                  "<p>" (esc (:place-needed messages)) "</p>"
-                 "<p>" (esc (:place-move messages)) "</p>"
+                 "<p>" (esc (if preview?
+                              (or (get-in state [:form :preview-note]) (:place-preview-note messages))
+                              (:place-move messages))) "</p>"
                  "<p class=\"attr\">" (esc (:place-gsi-attr messages)) "</p>"
-                 (when preview?
-                   (str "<p>" (esc (or (get-in state [:form :preview-note]) (:place-preview-note messages))) "</p>"))
                  "<p id=\"place-extent\"></p>"
-                 "<form data-act=\"preview-place\" method=\"post\">"
-                 "<input type=\"hidden\" name=\"west\" value=\"" (esc (get-in state [:form :west] "129")) "\">"
-                 "<input type=\"hidden\" name=\"south\" value=\"" (esc (get-in state [:form :south] "26")) "\">"
-                 "<input type=\"hidden\" name=\"east\" value=\"" (esc (get-in state [:form :east] "146")) "\">"
-                 "<input type=\"hidden\" name=\"north\" value=\"" (esc (get-in state [:form :north] "46")) "\">"
-                 "<button type=\"submit\">" (esc (:place-preview messages)) "</button></form>"
-                 "<form data-act=\"save-place\" method=\"post\">"
-                 "<input type=\"hidden\" name=\"west\" value=\"" (esc (get-in state [:form :west] "129")) "\">"
-                 "<input type=\"hidden\" name=\"south\" value=\"" (esc (get-in state [:form :south] "26")) "\">"
-                 "<input type=\"hidden\" name=\"east\" value=\"" (esc (get-in state [:form :east] "146")) "\">"
-                 "<input type=\"hidden\" name=\"north\" value=\"" (esc (get-in state [:form :north] "46")) "\">"
-                 "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>"
+                 (if preview?
+                   (str (hidden "cancel-place-preview")
+                        "<button type=\"submit\">" (esc (:place-back-gsi messages)) "</button></form>"
+                        (hidden "save-place")
+                        "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>")
+                   (str (hidden "preview-place")
+                        "<button type=\"submit\">" (esc (:place-preview messages)) "</button></form>"
+                        (hidden "save-place")
+                        "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>"))
                  "<div id=\"ol-map\" class=\"ol-map\" data-place-mode=\"1\""
+                 " data-west=\"" west "\" data-south=\"" south "\" data-east=\"" east "\" data-north=\"" north "\""
                  (when preview? " data-preview=\"aerial\"")
                  "></div>"))))
 
@@ -886,6 +895,10 @@
           "password" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password" "/api/user/password") form :password-result]]}
           "revoke" {:state state :fx [[:api "POST" "/api/admin/users/revoke" form :revoke-result]]}
           "preview-place" {:state state :fx [[:api "POST" "/api/user/place/preview" form :place-preview-result]]}
+          "cancel-place-preview"
+          (let [s (assoc state :place-preview nil :flash nil
+                         :form (merge (or (:form state) {}) (select-keys form [:west :south :east :north])))]
+            {:state s :fx [[:html (render s)]]})
           "save-place" {:state state :fx [[:api "PUT" "/api/user/place" form :place-save-result]]}
           "emaff-import" {:state state :fx [[:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}
           "set-map-mode"

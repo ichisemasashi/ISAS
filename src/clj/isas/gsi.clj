@@ -95,7 +95,16 @@
             y1 (lat->tile south z)
             cols (inc (- x1 x0))
             rows (inc (- y1 y0))]
-        (when (tile-grid-ok? cols rows)
+        (log/info "地理院タイル合成の範囲を決めました"
+                  :kind kind :layer layer :z z
+                  :west west :south south :east east :north north
+                  :x0 x0 :x1 x1 :y0 y0 :y1 y1 :cols cols :rows rows
+                  :tiles (* cols rows) :max-tiles max-tiles)
+        (if-not (tile-grid-ok? cols rows)
+          (do
+            (log/warn "地理院タイル数が上限を超えるか不正です"
+                      :kind kind :cols cols :rows rows :max-tiles max-tiles)
+            nil)
           (let [img (BufferedImage. (* cols tile-size) (* rows tile-size) BufferedImage/TYPE_INT_RGB)
                 g (.createGraphics img)
                 xs (range x0 (inc x1))
@@ -107,4 +116,9 @@
                     (run! (fn [y] (paint-tile! g layer z x0 y0 x y)) ys))
                   xs)
             (.dispose g)
-            (write-jpeg img)))))))
+            (let [out (write-jpeg img)]
+              (log/info "地理院タイルを JPEG に合成しました"
+                        :kind kind :layer layer :z z
+                        :width (.getWidth img) :height (.getHeight img)
+                        :bytes (alength ^bytes out))
+              out)))))))

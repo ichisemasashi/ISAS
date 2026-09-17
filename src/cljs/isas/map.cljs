@@ -21,6 +21,24 @@
 
 (def japan-extent #js [129 26 146 46])
 
+(defn- finite-num [v]
+  (let [n (js/Number v)]
+    (when (js/isFinite n) n)))
+
+(defn- form-extent-4326 [form]
+  (let [w (finite-num (:west form))
+        s (finite-num (:south form))
+        e (finite-num (:east form))
+        n (finite-num (:north form))]
+    (when (and w s e n (< w e) (< s n))
+      #js [w s e n])))
+
+(defn- place-extent-4326 [place]
+  (when place
+    (let [w (:west place) s (:south place) e (:east place) n (:north place)]
+      (when (and w s e n)
+        #js [w s e n]))))
+
 (defonce current (atom nil))
 
 (defonce installed? (atom false))
@@ -406,9 +424,14 @@
             map-proj (if place-mode? "EPSG:3857" "EPSG:4326")
             ^js view (View. #js {:projection map-proj})
             ^js ol-map (OlMap. #js {:target el :layers layers :view view})
-            ext-4326 (if place
-                       #js [(:west place) (:south place) (:east place) (:north place)]
-                       japan-extent)
+            ext-4326 (or (when place-mode? (form-extent-4326 (:form state)))
+                         (when place-mode?
+                           (form-extent-4326 {:west (.getAttribute el "data-west")
+                                              :south (.getAttribute el "data-south")
+                                              :east (.getAttribute el "data-east")
+                                              :north (.getAttribute el "data-north")}))
+                         (place-extent-4326 place)
+                         japan-extent)
             fit-ext (if place-mode?
                       (ol-proj/transformExtent ext-4326 "EPSG:4326" "EPSG:3857")
                       ext-4326)

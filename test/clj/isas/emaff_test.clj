@@ -29,13 +29,19 @@
          (is (= "place_unset" (:code (emaff/preview-aerial sys uid {}))))
          (is (= "place_unset" (:code (emaff/preview-aerial sys uid {:west 1}))))
          (is (= "place_unset" (:code (emaff/preview-aerial sys uid {:west 1 :south 2}))))
-         (is (= "place_unset" (:code (emaff/preview-aerial sys uid {:west 1 :south 2 :east 3})))))
+         (is (= "place_unset" (:code (emaff/preview-aerial sys uid {:west 1 :south 2 :east 3}))))
+         (is (= "place_unset" (:code (emaff/preview-aerial sys uid {:west "x" :south "35" :east "36" :north "37"})))))
        (testing "bbox 指定で地理院へフォールバック"
          (let [r (emaff/preview-aerial sys uid {:west 139.0 :south 35.0 :east 141.0 :north 37.0})]
            (is (true? (:ok r)))
            (is (= "gsi" (:source r)))
            (is (= "aerial" (:kind r)))
-           (is (= 139.0 (get-in r [:bbox :west])))))
+           (is (= 139.0 (get-in r [:bbox :west]))))
+         (let [r (emaff/preview-aerial sys uid {:west "140.05" :south "35.10" :east "140.12" :north "35.18"})]
+           (is (true? (:ok r)))
+           (is (= 140.05 (get-in r [:bbox :west])))
+           (is (= 35.18 (get-in r [:bbox :north]))))
+         (is (= "place_unset" (:code (emaff/preview-aerial sys uid {:west 141.0 :south 35.0 :east 139.0 :north 37.0})))))
        (testing "保存済み作業場所を使う"
          (fields/put-place sys uid {:west 139.0 :south 35.0 :east 141.0 :north 37.0})
          (let [r (emaff/preview-aerial sys uid nil)]

@@ -146,6 +146,13 @@
     (is (re-find #"空中写真で最終確認" (ui/render (assoc base :page :map-place :kind "user"))))
     (is (re-find #"国土地理院" (ui/render (assoc base :page :map-place :kind "user"))))
     (is (re-find #"data-preview=\"aerial\"" (ui/render (assoc base :page :map-place :kind "user" :place-preview "aerial"))))
+    (is (re-find #"地理院地図に戻って範囲を直す"
+                 (ui/render (assoc base :page :map-place :kind "user" :place-preview "aerial"
+                                   :form {:west "140" :south "35" :east "141" :north "36"}))))
+    (is (re-find #"data-west=\"140\"" (ui/render (assoc base :page :map-place :kind "user"
+                                                        :form {:west "140" :south "35" :east "141" :north "36"}))))
+    (is (not (re-find #"空中写真で最終確認"
+                      (ui/render (assoc base :page :map-place :kind "user" :place-preview "aerial")))))
     (is (re-find #"先に作業場所の範囲を決めてください" (ui/render (assoc base :page :map :kind "user"))))
     (is (re-find #"地理院地図を動かして" (ui/render (assoc base :page :map :kind "user"))))
     (is (re-find #"この範囲を作業場所にする" (ui/render (assoc base :page :map :kind "user"))))
@@ -368,6 +375,19 @@
       (is (true? (get-in b [:state :narrow?]))))
     (is (= :api (fx-op s [:submit {:act "save-place" :form {:west "1"}}])))
     (is (= :api (fx-op s [:submit {:act "preview-place" :form {:west "1"}}])))
+    (is (= :html (fx-op (assoc s :page :map-place :place-preview "aerial")
+                        [:submit {:act "cancel-place-preview" :form {:west "140" :south "35" :east "141" :north "36"}}])))
+    (is (nil? (:place-preview (:state (ui/handle (assoc s :page :map-place :place-preview "aerial")
+                                                 [:submit {:act "cancel-place-preview"
+                                                           :form {:west "140" :south "35" :east "141" :north "36"}}])))))
+    (is (= "140" (get-in (ui/handle (assoc s :page :map-place :place-preview "aerial")
+                                    [:submit {:act "cancel-place-preview"
+                                              :form {:west "140" :south "35" :east "141" :north "36"}}])
+                         [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place :place-preview "aerial" :form nil)
+                                  [:submit {:act "cancel-place-preview"
+                                            :form {:west "1" :south "2" :east "3" :north "4"}}])
+                       [:state :form :west])))
     (is (= :api (fx-op s [:submit {:act "emaff-import" :form {}}])))
     (is (= :api (fx-op s [:submit {:act "create-field" :form {:name "n" :geojson "{\"type\":\"Polygon\"}"}}])))
     (is (= :api (fx-op s [:submit {:act "update-field" :form {:id "1" :name "n" :geojson "{\"type\":\"Polygon\"}"}}])))
