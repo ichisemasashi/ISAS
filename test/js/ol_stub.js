@@ -8,6 +8,7 @@ function OlStub(opts) {
 OlStub.prototype.setTarget = function () {};
 OlStub.prototype.setSource = function () {};
 OlStub.prototype.addInteraction = function () {};
+OlStub.prototype.removeInteraction = function () {};
 OlStub.prototype.fit = function () {};
 OlStub.prototype.getView = function () { return this; };
 OlStub.prototype.calculateExtent = function () { return [129, 26, 146, 46]; };

@@ -42,6 +42,15 @@
           r (ui/handle s [:path {:path "/map" :search ""}])]
       (is (nil? (get-in r [:state :form :work_name])))
       (is (nil? (get-in r [:state :paint-data])))))
+  (testing "P3-2.1-01a browse でも作業名を入れられる"
+    (let [h (html {:page :map
+                   :place {:west 139 :south 35 :east 141 :north 37}
+                   :fields [{:id 1 :name "北"}]
+                   :map-mode "browse"
+                   :work-names ["田植え"]})]
+      (is (re-find #"name=\"work_name\"" h))
+      (is (re-find #"この作業名で見る" h))
+      (is (not (re-find #"ブラシ" h)))))
   (testing "P3-2.1-01b 作業名ありは塗り優先"
     (let [h (map-html [{:id 1 :name "北"}])]
       (is (re-find #"ブラシ" h))
@@ -54,6 +63,7 @@
                    :map-mode "browse"
                    :form {:work_name "田植え"}})]
       (is (re-find #"手描き" h))
+      (is (re-find #"name=\"work_name\"" h))
       (is (not (re-find #"ブラシ" h)))))
   (testing "P3-2.1-02 / P3-2.4-02〜04 色の具体値とラベル"
     (let [h (map-html [{:id 1 :name "北" :area_ha 1 :area_m2 10000}])]

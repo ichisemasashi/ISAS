@@ -281,35 +281,49 @@
   (or (< (.now js/Date) @suppress-select-until)
       (boolean (:drawing? @current))))
 
+(defn- stop-draw!
+  "Draw インタラクションを外し、地図のドラッグ（パン）を取り戻す。"
+  []
+  (when-let [{:keys [^js map draw]} @current]
+    (when (and map draw)
+      (.removeInteraction map draw))
+    (swap! current assoc :draw nil :drawing? false)))
+
 (defn- start-draw [mode]
   (when-let [{:keys [^js map ^js source draft-source]} @current]
+    (stop-draw!)
     (let [src (if (= mode :brush) (or draft-source source) source)
           typ (if (= mode :split) "LineString" "Polygon")
           opts #js {:source src :type typ :freehand (= mode :brush)}
           ^js draw (Draw. opts)]
-      (swap! current assoc :drawing? true :tool mode)
+      (swap! current assoc :drawing? true :tool mode :draw draw)
       (.addInteraction map draw)
       (.on draw "drawend"
            (fn [^js ev]
              (let [^js fmt (geojson-fmt)
                    ^js feat (.-feature ev)
                    gj (js->clj (.writeGeometryObject fmt (.getGeometry feat)) :keywordize-keys true)]
-               (swap! current assoc :drawing? false)
                (suppress-select!)
                (cond
                  (= mode :split) (write-json "split-field" "line" gj)
                  (= mode :brush) (do (swap! current update :drafts (fnil conj []) gj)
                                      (write-drafts!))
-                 :else (write-json "create-field" "geojson" gj))))))))
+                 :else (write-json "create-field" "geojson" gj))
+               ;; 一筆ごとに Draw を外し、拡大・ドラッグ（パン）を可能にする。
+               (stop-draw!)
+               (when (= mode :brush)
+                 (swap! current assoc :tool :brush))))))))
 
 (defn- discard-drafts! []
+  (stop-draw!)
   (clear-drafts-only!)
   (set-selection ""))
 
 (defn- start-edit []
+  (stop-draw!)
   (when-let [{:keys [^js map ^js source]} @current]
     (let [^js modify (Modify. #js {:source source})]
-      (swap! current assoc :tool :edit :drawing? false)
+      (swap! current assoc :tool :edit :drawing? false :draw nil)
       (.addInteraction map modify)
       (.on modify "modifyend"
            (fn [^js ev]
@@ -328,13 +342,15 @@
 
 (defn- apply-map-mode! [state]
   (let [mode (ui/map-mode state)]
+    (stop-draw!)
     (case mode
       "draw" (start-draw :create)
       "edit" (start-edit)
       "split" (start-draw :split)
       "merge" (do (swap! current assoc :tool :merge :drawing? false)
                   (set-selection ""))
-      "paint" (swap! current assoc :tool :brush :drawing? false)
+      ;; 塗りモードではブラシボタンを押すまで Draw を付けない（地図ドラッグを残す）
+      "paint" (swap! current assoc :tool nil :drawing? false)
       (swap! current assoc :tool nil :drawing? false))))
 
 (defn- on-tool [op kind dir factor]

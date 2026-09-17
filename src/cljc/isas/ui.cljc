@@ -48,8 +48,8 @@
    :merge-too-few "合筆は2枚以上選んでください"
    :merge-keep-missing "残す圃場を対象に含めてください"
    :map-hint "いま必要な操作のボタンだけ出しています。やめるとメニューに戻ります"
-   :map-hint-browse "塗りをするか、圃場の形・下地のどれかを選んでください"
-   :map-hint-paint "作業名を入れ、圃場をクリックしてからブラシで塗ります。圃場の形を直すときは「圃場を直す」"
+   :map-hint-browse "作業名を入れるか、塗り・圃場の形・下地のどれかを選んでください"
+   :map-hint-paint "作業名を入れ、圃場をクリックしてからブラシで塗ります。塗り終わったら地図をドラッグして動かせます。圃場の形を直すときは「圃場を直す」"
    :map-hint-draw "閉じた形を描き、名前を付けて「圃場を保存」してください"
    :map-hint-edit "頂点を動かして「形と名前を保存」してください"
    :map-hint-split "分割する圃場をクリックし、圃場を横切る線を引いて「分割を保存」してください"
@@ -86,7 +86,7 @@
    :status-done "済"
    :paint-empty "圃場の内側に塗れる場所がありません"
    :paint-not-found "その塗りはありません"
-   :map-hint-brush "作業名を入れ、圃場をクリックしてからブラシで塗ります。重ねて「塗りを確定する」まで正本になりません"
+   :map-hint-brush "ブラシを押してからなぞります。一筆ごとに終わり、そのあと地図をドラッグできます"
    :paint-ok "塗りを保存しました"})
 
 (def paint-colors
@@ -403,6 +403,17 @@
              (str "<button type=\"button\" data-map=\"basemap\" data-kind=\"" k "\">" label "</button>")
              ""))))
 
+(defn- work-name-form [state]
+  (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))]
+    (str "<form data-act=\"select-work-name\" method=\"post\">"
+         "<label>" (esc (:work-name messages))
+         "<input name=\"work_name\" list=\"work-name-list\" value=\"" (esc wn) "\">"
+         "<datalist id=\"work-name-list\">"
+         (apply str (for [nm (:work-names state)]
+                      (str "<option value=\"" (esc nm) "\">")))
+         "</datalist></label>"
+         "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>")))
+
 (defn- paint-panel [state]
   (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))
         fid (str/trim (str (or (get-in state [:form :field_id]) (get-in state [:form :id]) "")))
@@ -412,14 +423,7 @@
      "<div class=\"paint-tools\" data-none=\"" (:none paint-colors)
      "\" data-partial=\"" (:partial paint-colors)
      "\" data-done=\"" (:done paint-colors) "\">"
-     "<form data-act=\"select-work-name\" method=\"post\">"
-     "<label>" (esc (:work-name messages))
-     "<input name=\"work_name\" list=\"work-name-list\" value=\"" (esc wn) "\">"
-     "<datalist id=\"work-name-list\">"
-     (apply str (for [nm (:work-names state)]
-                  (str "<option value=\"" (esc nm) "\">")))
-     "</datalist></label>"
-     "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>"
+     (work-name-form state)
      (when-not (str/blank? wn)
        (str
         "<p id=\"paint-legend\">"
@@ -449,7 +453,8 @@
      "</div>")))
 
 (defn- browse-panel [state]
-  (str "<div class=\"toolbar\">"
+  (str (work-name-form state)
+       "<div class=\"toolbar\">"
        (mode-form "paint" (:map-do-paint messages))
        (mode-form "draw" "手描き")
        (mode-form "edit" "修正")
