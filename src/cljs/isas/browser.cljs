@@ -6,8 +6,13 @@
 
 (defonce map-sync-fn (atom nil))
 
+(defonce gantt-sync-fn (atom nil))
+
 (defn register-map-sync! [f]
   (reset! map-sync-fn f))
+
+(defn register-gantt-sync! [f]
+  (reset! gantt-sync-fn f))
 
 (defn narrow-screen? []
   (let [w (.-innerWidth js/window)]
@@ -32,7 +37,14 @@
 (defn form->map [form]
   (let [fd (js/FormData. form)
         out (atom {})]
-    (.forEach fd (fn [v k] (swap! out assoc (keyword k) v)))
+    (.forEach fd (fn [v k]
+                   (let [key (keyword k)]
+                     (swap! out update key
+                            (fn [prev]
+                              (cond
+                                (nil? prev) v
+                                (vector? prev) (conj prev v)
+                                :else [prev v]))))))
     @out))
 
 (defn parse-json [text]
@@ -74,6 +86,8 @@
     (case op
       :html (do (set-html! a)
                 (when-let [f @map-sync-fn]
+                  (f @app-state dispatch!))
+                (when-let [f @gantt-sync-fn]
                   (f @app-state dispatch!)))
       :nav (do (push-path! a)
                (dispatch! [:path {:path a :search ""}]))

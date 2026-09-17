@@ -35,9 +35,9 @@
           (is (re-find #"圃場台帳" (html {:page :fields :fields []})))
           (is (re-find #"パソコンで開いてください" (html {:page :map :narrow? true})))
           (is (not (re-find #"手描き" (html {:page :map :narrow? true})))))
-        (testing "B2-2-05 ガント・指示・言語切替は出さない"
-          (is (not (re-find #"ガント|指示" (html {:page :map :place place}))))
-          (is (nil? (http/match-api :get "/api/user/gantt"))))
+        (testing "B2-2-05 指示・言語切替は出さない（ガントは工程4）"
+          (is (not (re-find #"指示" (html {:page :map :place place}))))
+          (is (some? (http/match-api :get "/api/user/gantt"))))
         (testing "B2-2-06 管理者は圃場を持たない"
           (is (= 403 (:status (tu/get-path app "/api/user/fields" "admin" asid))))
           (is (not (re-find #"href=\"/fields\"" (html {:page :home :kind "admin"})))))
@@ -99,7 +99,7 @@
             (is (contains? names "work_places"))
             (is (contains? names "basemaps"))
             (is (contains? names "fields"))
-            (is (not (contains? names "gantt_rows")))))
+            (is (contains? names "gantt_rows"))))
         (testing "B2-7.2 流れ"
           (is (true? (:ok (fields/put-place sys uid place))))
           (is (re-find #"この範囲を作業場所にする|空中写真|手描き" (html {:page :map :place place})))
@@ -113,4 +113,4 @@
             (is (= 2 (count (:fields r))))))
         (testing "B2-9 / B2-10"
           (is (nil? (http/match-api :post "/api/user/offline")))
-          (is (nil? (http/match-api :get "/api/user/gantt"))))))))
+          (is (nil? (http/match-api :post "/api/user/orders"))))))))

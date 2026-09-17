@@ -5,7 +5,9 @@
         :asset-path "/js"
         :modules {:main {:init-fn isas.browser/main!}
                   :farmmap {:init-fn isas.map/install!
-                            :depends-on #{:main}}}
+                            :depends-on #{:main}}
+                  :gantt {:init-fn isas.gantt/install!
+                          :depends-on #{:main :farmmap}}}
         :devtools {:enabled false}}
   :test {:target :node-test
          :output-to "target/node-tests.js"

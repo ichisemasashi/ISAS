@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [isas.db :as db]
+            [isas.gantt :as gantt]
             [isas.geo :as geo]
             [isas.log :as log]
             [isas.paints :as paints]))
@@ -264,6 +265,7 @@
       {:ok false :code "field_not_found"}
       (do
         (paints/delete-paints-for-field! sys fid)
+        (gantt/remove-field-targets! sys fid)
         (db/delete-field! (:ds sys) fid)
         (log/info "圃場を消しました" :user-id user-id :id fid)
         {:ok true}))))
@@ -296,6 +298,7 @@
 
       :else
       (let [names (next-temp-names (db/field-names (:ds sys) user-id) (count polys))]
+        (gantt/remove-field-targets! sys fid)
         (db/delete-field! (:ds sys) fid)
         (let [created (mapv (fn [nm gj]
                               (db/insert-field! (:ds sys) {:user-id user-id :name nm :geojson (geo/to-json gj)}))
@@ -330,6 +333,7 @@
                 (db/update-field! (:ds sys) keep-id {:name (:name keep-row) :geojson (geo/to-json union)})
                 (run! (fn [id]
                         (when (not= id keep-id)
+                          (gantt/remove-field-targets! sys id)
                           (db/delete-field! (:ds sys) id)))
                       ids)
                 (log/info "圃場を合筆しました" :user-id user-id :keep keep-id :ids ids)

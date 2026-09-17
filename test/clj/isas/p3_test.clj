@@ -299,7 +299,7 @@
                 (is (not (contains? cols "complete")))
                 (is (not (contains? cols "user_id")))
                 (is (not (contains? names "work_names")))
-                (is (not (contains? names "gantt_rows")))))
+                (is (contains? names "gantt_rows"))))
             (testing "P3-6-02 改名 API は無い"
               (is (nil? (http/match-api :put "/api/user/work-names")))
               (is (nil? (http/match-api :post "/api/user/work-names/rename"))))

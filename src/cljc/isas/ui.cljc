@@ -1,6 +1,7 @@
 (ns isas.ui
   (:require [clojure.string :as str]
-            #?(:clj [clojure.data.json :as json])))
+            #?(:clj [clojure.data.json :as json])
+            #?(:clj [isas.time :as time])))
 
 (def messages
   {:user-login-title "利用者ログイン"
@@ -87,12 +88,32 @@
    :paint-empty "圃場の内側に塗れる場所がありません"
    :paint-not-found "その塗りはありません"
    :map-hint-brush "ブラシを押してからなぞります。一筆ごとに終わり、そのあと地図をドラッグできます"
-   :paint-ok "塗りを保存しました"})
+   :paint-ok "塗りを保存しました"
+   :gantt-title "ガント"
+   :phone-gantt "ガントの編集はパソコンで開いてください"
+   :gantt-no-fields "圃場が1枚以上あるときだけ、ガントを使えます"
+   :gantt-work-needed "対象圃場がある行は、作業名を入れてください"
+   :gantt-time-order "終了は開始より後にしてください"
+   :gantt-add "予定を足す"
+   :gantt-title-label "題名"
+   :gantt-start "開始"
+   :gantt-end "終了"
+   :gantt-targets "対象圃場"
+   :gantt-axis-day "日"
+   :gantt-axis-week "週"
+   :gantt-axis-month "月"
+   :gantt-percent-unit "％"
+   :gantt-dim-color "#e8e8e8"
+   :title-required "題名を入れてください"
+   :title-too-long "題名は200文字以内にしてください"
+   :time-invalid "開始と終了は分までの日時にしてください"
+   :gantt-not-found "その予定はありません"})
 
 (def paint-colors
   {:none "#c8c8c8"
    :partial "#e6b800"
-   :done "#2e7d32"})
+   :done "#2e7d32"
+   :dim "#e8e8e8"})
 
 (defn code-message [code]
   (case code
@@ -125,6 +146,12 @@
     "field_has_paint" (:split-has-paint messages)
     "paint_not_found" (:paint-not-found messages)
     "paint_empty" (:paint-empty messages)
+    "no_fields" (:gantt-no-fields messages)
+    "gantt_not_found" (:gantt-not-found messages)
+    "title_required" (:title-required messages)
+    "title_too_long" (:title-too-long messages)
+    "time_invalid" (:time-invalid messages)
+    "time_order" (:gantt-time-order messages)
     (:api-error messages)))
 
 (defn encode-q [s]
@@ -216,6 +243,7 @@
     "/fields" {:page :fields :kind "user"}
     "/map" {:page :map :kind "user"}
     "/map/place" {:page :map-place :kind "user"}
+    "/gantt" {:page :gantt :kind "user"}
     "/admin" {:page :login :kind "admin"}
     "/admin/reset/request" {:page :reset-request :kind "admin"}
     "/admin/reset" {:page :reset :kind "admin"}
@@ -235,7 +263,7 @@
   (if (= kind "admin") "/admin/home" "/home"))
 
 (defn needs-auth? [page]
-  (contains? #{:home :invite :password :users :fields :map :map-place} page))
+  (contains? #{:home :invite :password :users :fields :map :map-place :gantt} page))
 
 (defn init-state []
   {:path "/"
@@ -256,7 +284,11 @@
    :paint-data nil
    :last-field-act nil
    :map-mode nil
-   :map-mode-parent nil})
+   :map-mode-parent nil
+   :gantt-rows []
+   :gantt-selected nil
+   :gantt-progress nil
+   :gantt-axis "day"})
 
 (defn map-mode [state]
   (let [m (:map-mode state)
@@ -335,7 +367,9 @@
     (layout title
             (str (if admin? (nav-admin) (nav-user))
                  (flash-html state)
-                 "<p>" (esc (get-in state [:session :email])) "</p>"))))
+                 "<p>" (esc (get-in state [:session :email])) "</p>"
+                 (when (and (not admin?) (seq (:fields state)))
+                   (str "<p><a data-nav href=\"/gantt\">" (esc (:gantt-title messages)) "</a></p>"))))))
 
 (defn invite-view [state]
   (layout "利用者を招待"
@@ -374,8 +408,11 @@
   (layout "ISAS" "<p>このページはありません。</p><p><a data-nav href=\"/\">利用者入口</a></p>"))
 
 (defn phone-view [state]
-  (layout (:map-title messages)
-          (str (nav-user) (flash-html state) "<p>" (esc (:phone-map messages)) "</p>")))
+  (if (= :gantt (:page state))
+    (layout (:gantt-title messages)
+            (str (nav-user) (flash-html state) "<p>" (esc (:phone-gantt messages)) "</p>"))
+    (layout (:map-title messages)
+            (str (nav-user) (flash-html state) "<p>" (esc (:phone-map messages)) "</p>"))))
 
 (defn fields-view [state]
   (layout (:fields-title messages)
@@ -612,8 +649,198 @@
                    (browse-panel state))
                  "<div id=\"ol-map\" class=\"ol-map\"></div>"))))
 
+(defn- pad2 [n]
+  (let [s (str n)]
+    (if (= 1 (count s)) (str "0" s) s)))
+
+(defn- tokyo-ymd []
+  #?(:clj
+     (let [d (time/today-tokyo)]
+       [(.getYear d) (.getMonthValue d) (.getDayOfMonth d)])
+     :cljs
+     (let [parts (.formatToParts
+                  (js/Intl.DateTimeFormat. "en-US"
+                                           #js {:timeZone "Asia/Tokyo"
+                                                :year "numeric"
+                                                :month "2-digit"
+                                                :day "2-digit"})
+                  (js/Date.))
+           get (fn [t]
+                 (some (fn [p]
+                         (when (= t (.-type p)) (.-value p)))
+                       (array-seq parts)))]
+       [(js/parseInt (get "year") 10)
+        (js/parseInt (get "month") 10)
+        (js/parseInt (get "day") 10)])))
+
+(defn- ymd-minute [y m d h mi]
+  (str y "-" (pad2 m) "-" (pad2 d) "T" (pad2 h) ":" (pad2 mi)))
+
+(defn- add-calendar-days [y m d days]
+  #?(:clj
+     (let [ld (.plusDays (java.time.LocalDate/of (int y) (int m) (int d)) (long days))]
+       [(.getYear ld) (.getMonthValue ld) (.getDayOfMonth ld)])
+     :cljs
+     (let [ms (.getTime (js/Date. (str y "-" (pad2 m) "-" (pad2 d) "T12:00:00+09:00")))
+           nd (js/Date. (+ ms (* days 24 60 60 1000)))
+           parts (.formatToParts
+                  (js/Intl.DateTimeFormat. "en-US"
+                                           #js {:timeZone "Asia/Tokyo"
+                                                :year "numeric"
+                                                :month "2-digit"
+                                                :day "2-digit"})
+                  nd)
+           get (fn [t]
+                 (some (fn [p]
+                         (when (= t (.-type p)) (.-value p)))
+                       (array-seq parts)))]
+       [(js/parseInt (get "year") 10)
+        (js/parseInt (get "month") 10)
+        (js/parseInt (get "day") 10)])))
+
+(defn gantt-axis-bounds [axis]
+  (let [[y m d] (tokyo-ymd)
+        start (ymd-minute y m d 0 0)
+        range-key (str (or axis "day"))]
+    (case range-key
+      "week"
+      (let [[ey em ed] (add-calendar-days y m d 7)]
+        {:start start :end (ymd-minute ey em ed 0 0) :range "week"})
+      "month"
+      (let [ny (if (= m 12) (inc y) y)
+            nm (if (= m 12) 1 (inc m))]
+        {:start start :end (ymd-minute ny nm 1 0 0) :range "month"})
+      (let [[ey em ed] (add-calendar-days y m d 3)]
+        {:start start :end (ymd-minute ey em ed 0 0) :range "day"}))))
+
+(defn- as-text [v]
+  (if (nil? v) "" (str v)))
+
+(defn- same-gantt-id? [a b]
+  (cond
+    (nil? a) false
+    (nil? b) false
+    :else (= (str a) (str b))))
+
+(defn- gantt-row-by-id [state id]
+  (some (fn [r] (when (same-gantt-id? (:id r) id) r)) (:gantt-rows state)))
+
+(defn- gantt-row-applicable? [row]
+  (and row
+       (seq (:field_ids row))
+       (not (str/blank? (str/trim (as-text (:work_name row)))))))
+
+(defn- form-field-ids [form]
+  (let [v (:field_ids form)]
+    (cond
+      (nil? v) []
+      (vector? v) (->> v (map str) (map str/trim) (remove str/blank?) vec)
+      (sequential? v) (->> v (map str) (map str/trim) (remove str/blank?) vec)
+      (str/blank? (str v)) []
+      :else [(str/trim (str v))])))
+
+(defn- gantt-body-from-form [form]
+  (let [title (str/trim (as-text (:title form)))
+        start (str/trim (as-text (:start_at form)))
+        end (str/trim (as-text (:end_at form)))
+        wn (str/trim (as-text (:work_name form)))
+        fids (form-field-ids form)]
+    (cond-> {:title title
+             :start_at start
+             :end_at end
+             :field_ids fids}
+      (not (str/blank? wn)) (assoc :work_name wn)
+      (str/blank? wn) (assoc :work_name nil))))
+
+(defn gantt-view [state]
+  (let [fields (:fields state)]
+    (layout (:gantt-title messages)
+            (str (nav-user)
+                 (flash-html state)
+                 (if (empty? fields)
+                   (str "<p>" (esc (:gantt-no-fields messages)) "</p>")
+                   (let [axis (if (nil? (:gantt-axis state)) "day" (:gantt-axis state))
+                         bounds (gantt-axis-bounds axis)
+                         sel (gantt-row-by-id state (:gantt-selected state))
+                         progress (:gantt-progress state)
+                         applicable? (cond
+                                        (nil? sel) false
+                                        (not (gantt-row-applicable? sel)) false
+                                        (nil? progress) false
+                                        :else (boolean (:applicable progress)))
+                         target-ids (when applicable? (:field_ids sel))
+                         work-name (when applicable? (str (:work_name sel)))]
+                     (str
+                      "<div class=\"toolbar\">"
+                      "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
+                      "<input type=\"hidden\" name=\"axis\" value=\"day\">"
+                      "<button type=\"submit\">" (esc (:gantt-axis-day messages)) "</button></form>"
+                      "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
+                      "<input type=\"hidden\" name=\"axis\" value=\"week\">"
+                      "<button type=\"submit\">" (esc (:gantt-axis-week messages)) "</button></form>"
+                      "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
+                      "<input type=\"hidden\" name=\"axis\" value=\"month\">"
+                      "<button type=\"submit\">" (esc (:gantt-axis-month messages)) "</button></form>"
+                      "</div>"
+                      "<div id=\"gantt-axis\" class=\"gantt-axis\" data-start=\"" (esc (:start bounds))
+                      "\" data-end=\"" (esc (:end bounds))
+                      "\" data-range=\"" (esc (:range bounds)) "\">"
+                      (apply str
+                             (for [r (:gantt-rows state)]
+                               (let [selected? (same-gantt-id? (:id r) (:gantt-selected state))]
+                                 (str "<form class=\"gantt-row" (when selected? " selected") "\" data-act=\"select-gantt-row\" method=\"post\""
+                                      " data-start=\"" (esc (:start_at r)) "\" data-end=\"" (esc (:end_at r)) "\""
+                                      " data-id=\"" (esc (:id r)) "\">"
+                                      "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
+                                      "<button type=\"submit\">" (esc (:title r))
+                                      " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")</button>"
+                                      "<div class=\"gantt-bar\"></div></form>"))))
+                      "</div>"
+                      "<form data-act=\"add-gantt-row\" method=\"post\">"
+                      "<label>" (esc (:gantt-title-label messages))
+                      "<input id=\"gantt-new-title\" name=\"title\" placeholder=\"新しい予定\"></label>"
+                      "<label>" (esc (:gantt-start messages))
+                      "<input id=\"gantt-new-start\" name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<label>" (esc (:gantt-end messages))
+                      "<input id=\"gantt-new-end\" name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<button type=\"submit\">" (esc (:gantt-add messages)) "</button></form>"
+                      (when sel
+                        (str
+                         "<form data-act=\"save-gantt-row\" method=\"post\">"
+                         "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
+                         "<label>" (esc (:gantt-title-label messages))
+                         "<input name=\"title\" value=\"" (esc (:title sel)) "\" required></label>"
+                         "<label>" (esc (:gantt-start messages))
+                         "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
+                         "<label>" (esc (:gantt-end messages))
+                         "<input name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
+                         "<label>" (esc (:work-name messages))
+                         "<input name=\"work_name\" list=\"gantt-work-name-list\" value=\"" (esc (or (:work_name sel) "")) "\">"
+                         "<datalist id=\"gantt-work-name-list\">"
+                         (apply str (for [nm (:work-names state)]
+                                      (str "<option value=\"" (esc nm) "\">")))
+                         "</datalist></label>"
+                         "<fieldset><legend>" (esc (:gantt-targets messages)) "</legend>"
+                         (apply str
+                                (for [f fields]
+                                  (let [checked? (some #(same-gantt-id? % (:id f)) (:field_ids sel))]
+                                    (str "<label><input type=\"checkbox\" name=\"field_ids\" value=\"" (esc (:id f)) "\""
+                                         (when checked? " checked") "> "
+                                         (esc (:name f)) "</label>"))))
+                         "</fieldset>"
+                         "<button type=\"submit\">保存</button></form>"))
+                      "<div id=\"gantt-circle\" class=\"gantt-circle\""
+                      (when applicable?
+                        (str " data-percent=\"" (esc (:percent progress)) "\""))
+                      "></div>"
+                      "<div id=\"ol-map\" class=\"ol-map\" data-gantt-mode=\"1\""
+                      (when applicable?
+                        (str " data-target-ids=\"" (esc (str/join "," target-ids)) "\""
+                             " data-work-name=\"" (esc work-name) "\""))
+                      "></div>")))))))
+
 (defn render [state]
-  (if (and (:narrow? state) (contains? #{:fields :map :map-place} (:page state)))
+  (if (and (:narrow? state) (contains? #{:fields :map :map-place :gantt} (:page state)))
     (phone-view state)
     (case (:page state)
       :login (login-view state)
@@ -626,6 +853,7 @@
       :fields (fields-view state)
       :map (if (:place state) (map-view state) (map-place-view state))
       :map-place (map-place-view state)
+      :gantt (gantt-view state)
       (unknown-view))))
 
 (defn apply-route [state path search]
@@ -665,11 +893,16 @@
       (and (= :users (:page s)) (:session s))
       {:state s :fx [[:api "GET" "/api/admin/users" nil :users-loaded]]}
 
-      (and (#{:map :map-place} (:page s)) (:session s) (not (:narrow? s)))
+      (and (#{:map :map-place :gantt} (:page s)) (:session s) (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/place" nil :place-loaded]]}
 
       (and (= :fields (:page s)) (:session s) (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+
+      (= :home (:page s))
+      (if (and (= "user" (:kind s)) (some? (:session s)))
+        {:state s :fx [[:api "GET" "/api/user/fields" nil :home-fields-loaded]]}
+        (guarded s))
 
       :else
       (guarded s))))
@@ -699,14 +932,31 @@
 
 (defn fields-loaded [state body]
   (let [s (assoc state :fields (or (:fields body) []))]
-    (if (#{:map :map-place} (:page s))
+    (cond
+      (and (= :gantt (:page s)) (empty? (:fields s)))
+      (guarded s)
+
+      (#{:map :map-place :gantt} (:page s))
       {:state s :fx [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]]}
+
+      :else
       (guarded s))))
+
+(defn home-fields-loaded [state body]
+  (guarded (assoc state :fields (or (:fields body) []))))
 
 (defn basemaps-loaded [state body]
   (let [s (assoc state :basemaps (or (:basemaps body) []))]
-    (if (#{:map :map-place} (:page s))
-      {:state s :fx [[:api "GET" "/api/user/work-names" nil :work-names-loaded]]}
+    (cond
+      (= :gantt (:page s))
+      {:state s
+       :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
+            [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]}
+
+      (#{:map :map-place} (:page s))
+      {:state s :fx [[:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]}
+
+      :else
       (guarded s))))
 
 (defn work-names-loaded [state body]
@@ -720,6 +970,42 @@
   (if (:ok body)
     (guarded (assoc state :paint-data body))
     (let [s (assoc state :paint-data nil :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn gantt-loaded [state body]
+  (if-not (:ok body)
+    (let [s (assoc state :gantt-rows [] :gantt-selected nil :gantt-progress nil
+                   :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})
+    (let [rows (if (nil? (:rows body)) [] (:rows body))
+          sel (:gantt-selected state)
+          sel' (when (and sel (some #(same-gantt-id? (:id %) sel) rows)) sel)
+          row (when sel' (gantt-row-by-id (assoc state :gantt-rows rows) sel'))
+          s (assoc state :gantt-rows rows :gantt-selected sel' :flash nil)]
+      (if (gantt-row-applicable? row)
+        {:state (assoc s :gantt-progress nil)
+         :fx [[:api "GET" (str "/api/user/gantt/" (:id row) "/progress") nil :gantt-progress-loaded]]}
+        (guarded (assoc s :gantt-progress nil))))))
+
+(defn gantt-save-result [state body]
+  (if (:ok body)
+    (let [row (:row body)
+          id (:id row)]
+      {:state (assoc state :gantt-selected id :flash nil)
+       :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
+            [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]})
+    (let [code (:code body)
+          text (if (= "work_name_required" code)
+                 (:gantt-work-needed messages)
+                 (code-message code))
+          s (assoc state :flash {:error? true :text text})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn gantt-progress-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :gantt-progress body))
+    (let [s (assoc state :gantt-progress nil
+                   :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn after-place-preview [state body]
@@ -793,7 +1079,7 @@
                  fid (assoc :field_id (str fid) :id (str fid)))]
       {:state (assoc state :flash {:error? false :text (:paint-ok messages)} :form form
                      :map-mode "paint")
-       :fx [[:api "GET" "/api/user/work-names" nil :work-names-loaded]]})
+       :fx [[:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
@@ -902,6 +1188,10 @@
       :basemaps-loaded (basemaps-loaded state arg)
       :work-names-loaded (work-names-loaded state arg)
       :paints-loaded (paints-loaded state arg)
+      :home-fields-loaded (home-fields-loaded state arg)
+      :gantt-loaded (gantt-loaded state arg)
+      :gantt-save-result (gantt-save-result state arg)
+      :gantt-progress-loaded (gantt-progress-loaded state arg)
       :place-preview-result (after-place-preview state arg)
       :place-save-result (after-place-save state arg)
       :emaff-import-result (after-emaff-import state arg)
@@ -925,10 +1215,16 @@
           (guarded s)))
       :path
       (let [s (apply-route (assoc state :session (:session state) :flash nil) (:path arg) (:search arg))
-            s (if (#{:map :map-place} (:page s))
+            s (cond
+                (#{:map :map-place} (:page s))
                 (assoc s :form {} :paint-data nil :map-mode nil :map-mode-parent nil
                        :place-preview nil :place-busy nil)
-                s)]
+
+                (= :gantt (:page s))
+                (assoc s :gantt-selected nil :gantt-progress nil :gantt-axis "day"
+                       :form {} :paint-data nil)
+
+                :else s)]
         (if (and (:session s) (= (:kind s) (:kind state)))
           (session-loaded s {:ok true :email (get-in s [:session :email])})
           {:state (assoc s :session nil)
@@ -1099,5 +1395,50 @@
           "import-fields" {:state state :fx [[:upload "POST" "/api/user/fields/import" form :field-save-result]]}
           "save-image-extent" {:state state :fx [[:api "PUT" "/api/user/place/image" form :image-save-result]]}
           "upload-basemap" {:state state :fx [[:upload "PUT" (str "/api/user/basemaps/" (:kind form)) form :basemap-upload-result]]}
+          "set-gantt-axis"
+          (let [axis (str/trim (as-text (:axis form)))
+                axis' (if (#{"day" "week" "month"} axis) axis "day")
+                s (assoc state :gantt-axis axis' :flash nil)]
+            {:state s :fx [[:html (render s)]]})
+          "select-gantt-row"
+          (let [id (str/trim (as-text (:id form)))
+                row (gantt-row-by-id state id)
+                s (assoc state :gantt-selected (when-not (str/blank? id) id) :flash nil)]
+            (if (gantt-row-applicable? row)
+              {:state (assoc s :gantt-progress nil)
+               :fx [[:api "GET" (str "/api/user/gantt/" (:id row) "/progress") nil :gantt-progress-loaded]]}
+              (guarded (assoc s :gantt-progress nil))))
+          "add-gantt-row"
+          (let [title (str/trim (as-text (:title form)))
+                title' (if (str/blank? title) "新しい予定" title)
+                start (str/trim (as-text (:start_at form)))
+                end (str/trim (as-text (:end_at form)))]
+            (cond
+              (or (str/blank? start) (str/blank? end))
+              (flash-html-state state (:time-invalid messages))
+              :else
+              {:state state
+               :fx [[:api "POST" "/api/user/gantt"
+                     {:title title'
+                      :start_at start
+                      :end_at end
+                      :work_name nil
+                      :field_ids []}
+                     :gantt-save-result]]}))
+          "save-gantt-row"
+          (let [id (str/trim (as-text (if (nil? (:id form)) (:gantt-selected state) (:id form))))
+                body (gantt-body-from-form form)
+                fids (:field_ids body)
+                wn (str/trim (as-text (:work_name body)))]
+            (cond
+              (str/blank? id)
+              (flash-html-state state (:gantt-not-found messages))
+              (and (seq fids) (str/blank? wn))
+              (flash-html-state state (:gantt-work-needed messages))
+              (or (str/blank? (:start_at body)) (str/blank? (:end_at body)))
+              (flash-html-state state (:time-invalid messages))
+              :else
+              {:state state
+               :fx [[:api "PUT" (str "/api/user/gantt/" id) body :gantt-save-result]]}))
           {:state state :fx [[:html (render state)]]}))
       {:state state :fx [[:html (render state)]]})))

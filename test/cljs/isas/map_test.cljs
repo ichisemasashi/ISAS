@@ -120,6 +120,7 @@
     (is (some? (m/style-for nil "none" true)))
     (is (some? (m/style-for nil "partial" true)))
     (is (some? (m/style-for nil "done" true)))
+    (is (some? (m/style-for nil "dim" true)))
     (is (some? (m/style-for nil "x" true)))
     (is (some? (m/style-for "paint" "none" true)))
     (is (nil? (m/drafts-geojson [])))
@@ -228,4 +229,40 @@
       (let [mod (last-ol "modifyend")]
         (when mod
           (set! (.-_arr mod) #js [])
-          (call-ol mod "modifyend" #js {:features mod}))))))
+          (call-ol mod "modifyend" #js {:features mod})))))
+  (let [ol-el (js-obj "id" "ol-map"
+                      "getAttribute" (fn [a]
+                                       (case a
+                                         "data-gantt-mode" "1"
+                                         "data-target-ids" "1"
+                                         nil)))
+        app-el (js-obj "innerHTML" "")]
+    (set! js/document (js-obj "getElementById" (fn [id]
+                                                 (case id
+                                                   "ol-map" ol-el
+                                                   "app" app-el
+                                                   "map-extent" (js-obj "textContent" "")
+                                                   nil))
+                              "querySelector" (fn [_] nil)
+                              "addEventListener" (fn [_ _])))
+    (set! js/window (js-obj "innerWidth" 1200 "addEventListener" (fn [_ _])))
+    (reset! m/current nil)
+    (reset! m/installed? false)
+    (reset! b/app-state (assoc (ui/init-state)
+                               :page :gantt
+                               :place {:west 139 :south 35 :east 141 :north 37}
+                               :basemaps [{:kind "aerial" :ready true}]
+                               :fields [{:id 1 :name "北"
+                                         :geojson {:type "Polygon"
+                                                   :coordinates [[[140 36] [140.1 36] [140.1 36.1] [140 36.1] [140 36]]]}}
+                                        {:id 2 :name "南"
+                                         :geojson {:type "Polygon"
+                                                   :coordinates [[[140.2 36] [140.3 36] [140.3 36.1] [140.2 36.1] [140.2 36]]]}}]
+                               :gantt-progress {:ok true :applicable true :percent 10
+                                                :fields [{:id 1 :status "partial"}]}
+                               :paint-data {:work_name "田植え"
+                                            :fields [{:id 1 :status "done"}]}))
+    (m/install!)
+    (b/apply-fx! [:html "<div id=\"ol-map\" data-gantt-mode=\"1\"></div>"])
+    (is (some? (:map @m/current)))
+    (is (nil? (:draw @m/current)))))

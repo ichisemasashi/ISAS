@@ -71,11 +71,29 @@
           (is (some? bm))
           (db/delete-basemaps! ds (:id u))
           (is (empty? (db/list-basemaps ds (:id u)))))
-        (let [f (db/insert-field! ds {:user-id (:id u) :name "A" :geojson "{\"type\":\"Polygon\"}"})]
+        (let [f (db/insert-field! ds {:user-id (:id u) :name "A" :geojson "{\"type\":\"Polygon\"}"})
+              f2 (db/insert-field! ds {:user-id (:id u) :name "C" :geojson "{\"type\":\"Polygon\"}"})
+              gr (db/insert-gantt-row! ds {:user-id (:id u)
+                                           :title "予定"
+                                           :start-at "2026-09-18T08:00"
+                                           :end-at "2026-09-18T17:00"
+                                           :work-name "田植え"})]
           (is (= "A" (:name (db/find-field ds (:id u) (:id f)))))
-          (is (= ["A"] (db/field-names ds (:id u))))
-          (is (= 1 (count (db/list-fields ds (:id u)))))
+          (is (= ["A" "C"] (db/field-names ds (:id u))))
+          (is (= 2 (count (db/list-fields ds (:id u)))))
+          (db/replace-gantt-targets! ds (:id gr) [])
+          (is (= [] (db/list-gantt-targets ds (:id gr))))
+          (db/replace-gantt-targets! ds (:id gr) [(:id f) (:id f2)])
+          (is (= [(:id f) (:id f2)] (db/list-gantt-targets ds (:id gr))))
+          (db/update-gantt-row! ds (:id gr) {:title "直" :start-at "2026-09-18T09:00"
+                                             :end-at "2026-09-18T18:00" :work-name "候補"})
+          (is (= "直" (:title (db/find-gantt-row ds (:id u) (:id gr)))))
+          (is (= ["候補"] (db/list-gantt-work-names ds (:id u))))
+          (is (= ["候補"] (db/list-work-name-candidates ds (:id u))))
+          (db/delete-gantt-targets-for-field! ds (:id f2))
+          (is (= [(:id f)] (db/list-gantt-targets ds (:id gr))))
           (db/update-field! ds (:id f) {:name "B" :geojson "{}"})
           (is (= "B" (:name (db/find-field ds (:id u) (:id f)))))
+          (db/delete-field! ds (:id f2))
           (db/delete-field! ds (:id f))
           (is (nil? (db/find-field ds (:id u) (:id f)))))))))

@@ -19,6 +19,7 @@
                             ["/fields" :fields "user"]
                             ["/map" :map "user"]
                             ["/map/place" :map-place "user"]
+                            ["/gantt" :gantt "user"]
                             ["/admin" :login "admin"]
                             ["/admin/reset/request" :reset-request "admin"]
                             ["/admin/reset" :reset "admin"]
@@ -48,6 +49,7 @@
   (is (true? (ui/needs-auth? :fields)))
   (is (true? (ui/needs-auth? :map)))
   (is (true? (ui/needs-auth? :map-place)))
+  (is (true? (ui/needs-auth? :gantt)))
   (is (false? (ui/needs-auth? :login)))
   (is (= "メールアドレスまたはパスワードが違います" (ui/code-message "login_failed")))
   (is (= "この案内は使えません。もう一度やり直してください" (ui/code-message "reset_invalid")))
@@ -102,7 +104,7 @@
 
 (deftest render-all-pages-test
   (let [base (ui/init-state)]
-    (doseq [page [:login :reset-request :reset :home :invite :password :users :unknown :fields :map :map-place]]
+    (doseq [page [:login :reset-request :reset :home :invite :password :users :unknown :fields :map :map-place :gantt]]
       (let [st (assoc base :page page :kind "user" :session {:email "a@b.c"}
                       :flash {:error? true :text "e"} :initial-password "pw"
                       :users [{:id 1 :email "x@y.z"}]
@@ -439,7 +441,8 @@
     (is (= :html (fx-op (assoc (dissoc s :session) :page :login) [:narrow {:narrow? true}])))
     (is (= :api (fx-op (assoc s :page :home) [:path {:path "/map" :search ""}])))
     (is (= :api (fx-op (assoc s :page :home) [:path {:path "/fields" :search ""}])))
-    (is (= :html (fx-op (assoc s :page :map) [:path {:path "/home" :search ""}])))
+    (is (= :api (fx-op (assoc s :page :map) [:path {:path "/home" :search ""}])))
+    (is (= :api (fx-op (assoc s :page :home) [:path {:path "/gantt" :search ""}])))
     (is (= :session (fx-op (assoc (dissoc s :session) :page :home) [:path {:path "/map" :search ""}])))
     (is (= :session (fx-op (assoc s :page :home :kind "user") [:path {:path "/admin/users" :search ""}])))
     (let [b (ui/handle (ui/init-state) [:boot {:path "/map" :search "" :narrow? true}])]

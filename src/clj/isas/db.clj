@@ -1,5 +1,6 @@
 (ns isas.db
-  (:require [next.jdbc :as jdbc]
+  (:require [clojure.string :as str]
+            [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [isas.log :as log]
             [isas.time :as time]))
@@ -73,6 +74,24 @@
       work_name TEXT NOT NULL,
       geojson TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      FOREIGN KEY (field_id) REFERENCES fields(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS gantt_rows (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      start_at TEXT NOT NULL,
+      end_at TEXT NOT NULL,
+      work_name TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS gantt_targets (
+      gantt_id INTEGER NOT NULL,
+      field_id INTEGER NOT NULL,
+      PRIMARY KEY (gantt_id, field_id),
+      FOREIGN KEY (gantt_id) REFERENCES gantt_rows(id),
       FOREIGN KEY (field_id) REFERENCES fields(id)
     )"])
 
@@ -222,6 +241,9 @@
   (jdbc/execute-one! ds ["DELETE FROM work_places WHERE user_id = ?" user-id]))
 
 (defn delete-fields-for-user! [ds user-id]
+  (jdbc/execute-one! ds ["DELETE FROM gantt_targets WHERE field_id IN (SELECT id FROM fields WHERE user_id = ?)"
+                         user-id])
+  (jdbc/execute-one! ds ["DELETE FROM gantt_rows WHERE user_id = ?" user-id])
   (jdbc/execute-one! ds ["DELETE FROM paints WHERE field_id IN (SELECT id FROM fields WHERE user_id = ?)"
                          user-id])
   (jdbc/execute-one! ds ["DELETE FROM fields WHERE user_id = ?" user-id]))
@@ -303,3 +325,52 @@
 
 (defn update-paint-geojson! [ds id geojson]
   (jdbc/execute-one! ds ["UPDATE paints SET geojson = ? WHERE id = ?" geojson id]))
+
+(defn insert-gantt-row! [ds {:keys [user-id title start-at end-at work-name]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO gantt_rows (user_id, title, start_at, end_at, work_name, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *"
+                      user-id title start-at end-at work-name (time/now-utc) (time/now-utc)]))
+
+(defn update-gantt-row! [ds id {:keys [title start-at end-at work-name]}]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_rows SET title = ?, start_at = ?, end_at = ?, work_name = ?, updated_at = ?
+                       WHERE id = ? RETURNING *"
+                      title start-at end-at work-name (time/now-utc) id]))
+
+(defn find-gantt-row [ds user-id id]
+  (jdbc/execute-one! ds ["SELECT * FROM gantt_rows WHERE id = ? AND user_id = ?" id user-id]))
+
+(defn list-gantt-rows [ds user-id]
+  (jdbc/execute! ds ["SELECT * FROM gantt_rows WHERE user_id = ? ORDER BY start_at, id" user-id]))
+
+(defn list-gantt-targets [ds gantt-id]
+  (mapv :field_id
+        (jdbc/execute! ds ["SELECT field_id FROM gantt_targets WHERE gantt_id = ? ORDER BY field_id"
+                           gantt-id])))
+
+(defn replace-gantt-targets! [ds gantt-id field-ids]
+  (jdbc/execute-one! ds ["DELETE FROM gantt_targets WHERE gantt_id = ?" gantt-id])
+  (run! (fn [fid]
+          (jdbc/execute-one! ds ["INSERT INTO gantt_targets (gantt_id, field_id) VALUES (?, ?)"
+                                 gantt-id fid]))
+        field-ids))
+
+(defn delete-gantt-targets-for-field! [ds field-id]
+  (jdbc/execute-one! ds ["DELETE FROM gantt_targets WHERE field_id = ?" field-id]))
+
+(defn list-gantt-work-names [ds user-id]
+  (mapv :work_name
+        (jdbc/execute! ds
+                       ["SELECT DISTINCT work_name AS work_name FROM gantt_rows
+                         WHERE user_id = ? AND work_name IS NOT NULL AND work_name <> ''
+                         ORDER BY work_name"
+                        user-id])))
+
+(defn list-work-name-candidates [ds user-id]
+  (->> (concat (list-work-names ds user-id)
+               (list-gantt-work-names ds user-id))
+       (remove str/blank?)
+       distinct
+       sort
+       vec))

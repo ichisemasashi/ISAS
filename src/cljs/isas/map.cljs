@@ -56,10 +56,11 @@
                "rgba(21,101,192,0.25)"
                (if painted?
                  (case (str status)
-                   "none" "#c8c8c8"
-                   "partial" "#e6b800"
-                   "done" "#2e7d32"
-                   "#c8c8c8")
+                   "none" (:none ui/paint-colors)
+                   "partial" (:partial ui/paint-colors)
+                   "done" (:done ui/paint-colors)
+                   "dim" (:dim ui/paint-colors)
+                   (:none ui/paint-colors))
                  "rgba(0,0,0,0)"))
         stroke (if (= "paint" (str kind)) "#1565c0" "#333333")
         width (if (= "paint" (str kind)) 2 1)]
@@ -78,26 +79,44 @@
                                     (first (or (:coordinates g) []))))
                                 ds)})))
 
-(defn- features-from [fields paint-data]
+(defn- features-from [fields paint-data gantt-ctx]
   (let [^js fmt (geojson-fmt)
         arr #js []
         by (into {} (map (fn [f] [(:id f) f]) (or (:fields paint-data) [])))
-        colored? (some? paint-data)]
+        colored? (some? paint-data)
+        gantt-mode? (boolean (:gantt-mode? gantt-ctx))
+        targets (or (:targets gantt-ctx) #{})
+        progress-by (into {}
+                          (mapcat (fn [f]
+                                    (let [id (:id f)]
+                                      [[id f] [(str id) f]]))
+                                  (or (:fields (:progress gantt-ctx)) [])))]
     (doseq [f fields]
       (when (:geojson f)
-        (let [p (get by (:id f))
+        (let [fid (:id f)
+              p (get by fid)
+              is-target? (or (contains? targets fid)
+                             (contains? targets (str fid)))
+              status (cond
+                       (and gantt-mode? is-target?)
+                       (str (or (:status (or (get progress-by fid)
+                                             (get progress-by (str fid))))
+                                "none"))
+                       gantt-mode? "dim"
+                       :else (or (:status p) "none"))
+              painted (boolean (or gantt-mode? colored?))
               feat (.readFeature fmt (clj->js {:type "Feature"
                                                :geometry (:geojson f)
-                                               :properties {:id (:id f)
+                                               :properties {:id fid
                                                             :name (:name f)
-                                                            :status (or (:status p) "none")
-                                                            :painted colored?}}))]
-          (.set feat "id" (:id f))
+                                                            :status status
+                                                            :painted painted}}))]
+          (.set feat "id" fid)
           (.set feat "name" (:name f))
-          (.set feat "status" (or (:status p) "none"))
-          (.set feat "painted" colored?)
+          (.set feat "status" status)
+          (.set feat "painted" painted)
           (.push arr feat))))
-    (when paint-data
+    (when (and paint-data (not gantt-mode?))
       (doseq [pf (:fields paint-data)
               p (:paints pf)]
         (when (:geojson p)
@@ -423,11 +442,31 @@
       (let [place (:place state)
             place-mode? (= "1" (.getAttribute el "data-place-mode"))
             preview? (= "aerial" (.getAttribute el "data-preview"))
+            gantt-mode-attr? (= "1" (.getAttribute el "data-gantt-mode"))
+            target-attr (str (or (.getAttribute el "data-target-ids") ""))
+            target-ids (->> (str/split target-attr #",")
+                            (map str/trim)
+                            (remove str/blank?)
+                            (mapcat (fn [s]
+                                      (let [n (js/parseInt s 10)]
+                                        (cond-> [s]
+                                          (js/isFinite n) (conj n)))))
+                            set)
+            progress (:gantt-progress state)
+            gantt-applicable? (and gantt-mode-attr?
+                                   (seq target-ids)
+                                   progress
+                                   (:applicable progress))
+            gantt-ctx (when gantt-applicable?
+                        {:gantt-mode? true
+                         :targets target-ids
+                         :progress progress})
             kind (or (:basemap-kind state) "aerial")
             ready? (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state)))
             style-fn (fn [feat _]
                        (style-for (.get feat "kind") (.get feat "status") (.get feat "painted")))
-            src (VectorSource. #js {:features (features-from (or (:fields state) []) (:paint-data state))})
+            paint-data (when-not gantt-applicable? (:paint-data state))
+            src (VectorSource. #js {:features (features-from (or (:fields state) []) paint-data gantt-ctx)})
             draft-src (VectorSource. #js {:features #js []})
             vec-layer (VectorLayer. #js {:source src :style style-fn})
             draft-layer (VectorLayer. #js {:source draft-src})
@@ -467,16 +506,18 @@
                                                 (ol-proj/transformExtent e "EPSG:3857" "EPSG:4326")
                                                 e)]
                                     (fill-place-form e4326)))))
-        (bind-map-click ol-map)
+        (when-not gantt-mode-attr?
+          (bind-map-click ol-map))
         (reset! current {:map ol-map :source src :view view :kind kind
                          :image-layer img :place place :image-ext img-box
                          :split-polys [] :selected selected :active-field active
                          :drafts [] :draft-source draft-src :style-fn style-fn
                          :tool nil :drawing? false})
-        (when active
+        (when (and active (not gantt-mode-attr?))
           (set-field-targets! active)
           (set-work-name-targets! (or (get-in state [:form :work_name]) (current-work-name))))
-        (apply-map-mode! state)
+        (when-not gantt-mode-attr?
+          (apply-map-mode! state))
         nil))))
 
 (defn install! []

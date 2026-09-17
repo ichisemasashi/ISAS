@@ -20,11 +20,21 @@
     .error { color: #a40000; }
     .ok { color: #0b5; }
     code { user-select: all; }
+    .gantt-axis { position: relative; overflow-x: auto; margin: 1rem 0; border: 1px solid #ccc; min-height: 4rem; padding: 0.5rem; }
+    .gantt-row { position: relative; display: block; margin: 0.4rem 0; min-height: 1.6rem; }
+    .gantt-row.selected button { font-weight: bold; }
+    .gantt-bar { background: #1565c0; border-radius: 2px; pointer-events: none; opacity: 0.75; }
+    #gantt-circle { margin: 1rem 0; }
+    form.inline { display: inline; margin-right: 0.4rem; }
+    form.inline button { margin-top: 0; }
+    fieldset label { display: inline-block; margin-right: 0.75rem; width: auto; }
+    fieldset input[type="checkbox"] { width: auto; margin-right: 0.25rem; }
   </style>
 </head>
 <body>
   <div id="app">読み込み中</div>
   <script src="/js/main.js"></script>
   <script src="/js/farmmap.js"></script>
+  <script src="/js/gantt.js"></script>
 </body>
 </html>

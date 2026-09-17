@@ -5,6 +5,7 @@
             [isas.accounts :as accounts]
             [isas.emaff :as emaff]
             [isas.fields :as fields]
+            [isas.gantt :as gantt]
             [isas.log :as log]
             [isas.paints :as paints]
             [ring.middleware.cookies :as cookies]
@@ -391,6 +392,43 @@
       (let [r (paints/delete-field-paints sys uid id (:work_name (query-params req)))]
         (if (:ok r) (ok {}) (fail (:code r)))))))
 
+(defn gantt-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/list-rows sys uid)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn gantt-post [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/create-row sys uid (read-body req))]
+          (if (:ok r) (ok {:row (:row r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "ガント行の追加を読めませんでした" :error (.getMessage e))
+          (fail "title_required"))))))
+
+(defn gantt-put [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/update-row sys uid id (read-body req))]
+          (if (:ok r) (ok {:row (:row r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "ガント行の更新を読めませんでした" :error (.getMessage e))
+          (fail "title_required"))))))
+
+(defn gantt-progress [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/row-progress sys uid id)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn work-name-candidates-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (ok (select-keys (gantt/work-name-candidates sys uid) [:work_names])))))
+
 (def api-routes
   {[:get "/api/user/session"] [:session "user"]
    [:post "/api/user/login"] [:login "user"]
@@ -419,8 +457,11 @@
    [:post "/api/user/fields/merge"] [:fields-merge]
    [:post "/api/user/fields/import"] [:fields-import]
    [:get "/api/user/work-names"] [:work-names-get]
+   [:get "/api/user/work-name-candidates"] [:work-name-candidates-get]
    [:get "/api/user/paints"] [:paints-get]
-   [:post "/api/user/paints"] [:paints-post]})
+   [:post "/api/user/paints"] [:paints-post]
+   [:get "/api/user/gantt"] [:gantt-get]
+   [:post "/api/user/gantt"] [:gantt-post]})
 
 (defn match-api [method uri]
   (or (get api-routes [method uri])
@@ -437,6 +478,10 @@
         (when (= method :post) [:field-split id]))
       (when-let [[_ id] (re-matches #"/api/user/paints/(\d+)" (str uri))]
         (when (= method :delete) [:paint-delete id]))
+      (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)/progress" (str uri))]
+        (when (= method :get) [:gantt-progress id]))
+      (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)" (str uri))]
+        (when (= method :put) [:gantt-put id]))
       (when-let [[_ id] (re-matches #"/api/user/fields/(\d+)" (str uri))]
         (cond
           (= method :put) [:field-put id]
@@ -477,11 +522,16 @@
         :fields-merge (fields-merge sys req)
         :fields-import (fields-import sys req)
         :work-names-get (work-names-get sys req)
+        :work-name-candidates-get (work-name-candidates-get sys req)
         :paints-get (paints-get sys req)
         :paints-post (paints-post sys req)
         :field-complete (field-complete sys req (second spec))
         :field-paints-delete (field-paints-delete sys req (second spec))
         :paint-delete (paint-delete sys req (second spec))
+        :gantt-get (gantt-get sys req)
+        :gantt-post (gantt-post sys req)
+        :gantt-put (gantt-put sys req (second spec))
+        :gantt-progress (gantt-progress sys req (second spec))
         (fail "unauthorized")))))
 
 (defn index-html []
