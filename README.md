@@ -23,7 +23,7 @@ npm install
 
 試験項目は二段である。論理は各工程の基本試験仕様書（基本設計の表が目次）、経路と API は各工程の詳細試験仕様書（詳細設計の表が目次）。いずれも [工程表.md](docs/工程表.md) から辿る。ソースのカバレッジはこれらに代えない。
 
-Clojure / ClojureScript のソースを cloverage 100% と cljs.test で確認する。工程2・3の操作シナリオ（詳細試験 §8）は Playwright でも確認する（`./scripts/test.sh` の末尾で `./scripts/e2e.sh`）。
+Clojure / ClojureScript のソースを cloverage 100% と cljs.test で確認する。**cloverage 100% はソース実行経路の確認であり、試験仕様書の項番網羅（仕様カバレッジ）とは別である**（[工程表.md](docs/工程表.md) のとおり、ソースのカバレッジは試験仕様に代えない）。工程2・3の操作シナリオ（詳細試験 §8）は Playwright でも確認する（`./scripts/test.sh` の末尾で `./scripts/e2e.sh`）。
 
 ```bash
 npm install

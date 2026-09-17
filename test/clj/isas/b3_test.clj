@@ -79,6 +79,13 @@
         (testing "B3-4.4-07 / B3-4.5-01 消すと未に戻る"
           (is (true? (:ok (paints/delete-field-paints sys uid fid "田植え"))))
           (is (= "none" (:status (first (filter #(= fid (:id %)) (:fields (paints/list-paints sys uid "田植え"))))))))
+        (testing "B3-4.4-07a 選択表示用に圃場名が取れる（内部 ID は画面に出さない）"
+          ;; 画面文言のクリック確認は map_test（cljs）。ここでは選択表示の材料である name を固定する。
+          (paints/create-paint sys uid {:field_id fid :work_name "表示" :geojson tu/square-inner})
+          (let [row (first (filter #(= fid (:id %)) (:fields (paints/list-paints sys uid "表示"))))]
+            (is (= "北" (:name row)))
+            (is (number? (:id (first (:paints row)))))
+            (is (not= (str (:name row)) (str (:id (first (:paints row))))))))
         (testing "B3-4.5-02 一部"
           (paints/create-paint sys uid {:field_id fid :work_name "田植え" :geojson tu/square-inner})
           (is (= "partial" (:status (first (filter #(= fid (:id %)) (:fields (paints/list-paints sys uid "田植え"))))))))

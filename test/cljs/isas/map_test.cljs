@@ -112,7 +112,7 @@
                                                     :coordinates [[[140 36] [140.1 36] [140.1 36.1] [140 36.1] [140 36]]]}}
                                         {:id 2 :name "無"}]
                                :paint-data {:work_name "田植え"
-                                            :fields [{:id 1 :status "partial"
+                                            :fields [{:id 1 :name "北" :status "partial"
                                                       :paints [{:id 9
                                                                 :geojson {:type "Polygon"
                                                                           :coordinates [[[140 36] [140.05 36] [140.05 36.05] [140 36.05] [140 36]]]}}]}]}))
@@ -145,13 +145,29 @@
     (is (string? (.-value west)))
     (let [move (last-ol "moveend")]
       (call-ol move "moveend" #js {}))
-    (let [click (last-ol "click")]
+    (let [click (last-ol "click")
+          sel #(.getElementById js/document "map-selection")]
       (call-ol click "click" #js {:pixel #js [1 1]})
       (when click
+        ;; P3-2.1-05a / P3-5-07a: paint click shows field name, never paints.id
         (set! (.-props click) (js-obj "paint-id" 9 "id" 1 "name" "北"))
         (call-ol click "click" #js {:pixel #js [1 1]})
-        (is (= "選んでいる塗り: 北"
-               (.-textContent (.getElementById js/document "map-selection"))))))
+        (let [t (.-textContent (sel))]
+          (is (= "選んでいる塗り: 北" t))
+          (is (nil? (re-find #"選んでいる塗り: 9" t)))
+          (is (nil? (re-find #"選んでいる塗り: 1" t))))
+        ;; P3-2.1-05b / P3-5-07b: field click shows field name, never fields.id
+        (set! (.-props click) (js-obj "id" 1 "name" "北"))
+        (call-ol click "click" #js {:pixel #js [1 1]})
+        (let [t (.-textContent (sel))]
+          (is (= "選んでいる圃場: 北" t))
+          (is (nil? (re-find #"選んでいる圃場: 1" t))))
+        ;; Regression: missing name must not fall back to paints.id
+        (set! (.-props click) (js-obj "paint-id" 9 "id" 1))
+        (call-ol click "click" #js {:pixel #js [1 1]})
+        (let [t (.-textContent (sel))]
+          (is (nil? (re-find #"選んでいる塗り: 9" t)))
+          (is (re-find #"選んでいる塗り:" t)))))
     (when (seq @clicks)
       (let [fire (fn [op kind]
                    ((first @clicks)

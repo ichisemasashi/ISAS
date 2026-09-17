@@ -109,6 +109,15 @@
       (is (re-find #"この圃場をこの作業名で全面完了にする" h))
       (is (re-find #"この塗りを消す" h))
       (is (re-find #"この圃場のこの作業名の塗りを全部消す" h))))
+  (testing "P3-2.1-05a / P3-2.1-05b / P3-5-07a / P3-5-07b 選択表示は圃場名（試験書）"
+    ;; 動的文言は cljs の map_test で確認する。ここでは試験書に項があり、API が name を返すことを固定する。
+    (let [doc (slurp (io/file "docs/詳細試験仕様書_工程3.md"))]
+      (doseq [id ["P3-2.1-05a" "P3-2.1-05b" "P3-5-07a" "P3-5-07b"]]
+        (is (re-find (re-pattern id) doc)))
+      (is (re-find #"選んでいる塗り: \{圃場名\}" doc))
+      (is (re-find #"選んでいる圃場: \{圃場名\}" doc))
+      (is (re-find #"塗り行の数字 ID は出ない" doc))
+      (is (re-find #"圃場の数字 ID は出ない" doc))))
   (testing "P3-5-08 / P3-5-09 分割・合筆の拒否文言"
     (is (= "塗りが残っている圃場は分割できません。塗りを消してから行ってください"
            (ui/paint-block-text "split")))
@@ -163,7 +172,7 @@
                 (is (true? (:ok body)))
                 (is (= "田植え" (:work_name body)))
                 (is (every? #(contains? row %) [:id :name :status :area_m2 :field_area_m2 :paints]))
-                (is (string? (:name row)))
+                (is (= "北" (:name row)))
                 (is (pos? (:area_m2 row)))
                 (is (< (:area_m2 row) (:field_area_m2 row)))
                 (is (= "partial" (:status row)))
