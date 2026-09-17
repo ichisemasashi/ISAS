@@ -9,6 +9,8 @@ target/
 .cpcache/
 .shadow-cljs/
 node_modules/
+test-results/
+playwright-report/
 .nrepl-port
 .clj-kondo/.cache
 *.iml

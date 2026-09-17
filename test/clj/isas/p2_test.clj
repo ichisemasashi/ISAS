@@ -265,4 +265,14 @@
           (is (nil? (http/match-api :get "/api/user/gantt")))
           (is (not (re-find #"cyberjapandata|openstreetmap|tile.openstreetmap" (html {:page :map :place place}))))
           (is (not (re-find #"地名検索" (html {:page :map-place}))))
-          (is (not (re-find #"面積<input" (html {:page :fields :fields []})))))))))
+          (is (not (re-find #"面積<input" (html {:page :fields :fields []})))))
+        (testing "P2-S 操作シナリオ（試験書と画面の要点）"
+          (let [doc (slurp (io/file "docs/詳細試験仕様書_工程2.md"))]
+            (doseq [id ["P2-S-01" "P2-S-02" "P2-S-03" "P2-S-04" "P2-S-05"]]
+              (is (re-find (re-pattern id) doc))))
+          (let [change (html {:page :map-place :place place
+                              :form {:west "140.04" :south "37.88" :east "140.06" :north "37.90"}})]
+            (is (re-find #"いまの作業場所を変えられます" change))
+            (is (not (re-find #"先に作業場所の範囲を決めてください" change)))
+            (is (re-find #"data-west=\"140.04\"" change))
+            (is (re-find #"作業場所を変える" (html {:page :map :place place})))))))))

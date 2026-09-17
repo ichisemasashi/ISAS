@@ -181,7 +181,10 @@
         (enter "paint")
         (fire "brush" nil)
         (let [draw (last-ol "drawend")]
-          (call-ol draw "drawend" #js {:feature draw}))
+          (call-ol draw "drawend" #js {:feature draw})
+          ;; P3-S-02: one brush stroke clears Draw so pan works again
+          (is (nil? (:draw @m/current)))
+          (is (false? (:drawing? @m/current))))
         (fire "discard" nil)
         (is (nil? (seq (:drafts @m/current))))
         (enter "merge")

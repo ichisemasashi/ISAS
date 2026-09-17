@@ -15,3 +15,4 @@ clojure -M:coverage
 npx --no-install shadow-cljs compile app
 npx --no-install shadow-cljs compile test
 node target/node-tests.js
+./scripts/e2e.sh

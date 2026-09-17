@@ -1,6 +1,7 @@
 (ns isas.p3-test
   "詳細試験仕様書_工程3 の項番に対応する自動試験。"
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.java.io :as io]
+            [clojure.test :refer [deftest is testing]]
             [isas.db :as db]
             [isas.fields :as fields]
             [isas.geo :as geo]
@@ -386,4 +387,21 @@
     (is (true? (#'ui/blank-work-name? {} {})))
     (testing "P3-6-03 他人地図の経路は無い"
       (is (nil? (http/match-api :get "/api/user/others/paints")))
-      (is (nil? (http/match-api :post "/api/user/others/paints"))))))
+      (is (nil? (http/match-api :post "/api/user/others/paints"))))
+    (testing "P3-S 操作シナリオ（試験書と画面の要点）"
+      (let [doc (slurp (io/file "docs/詳細試験仕様書_工程3.md"))]
+        (doseq [id ["P3-S-01" "P3-S-02" "P3-S-03" "P3-S-04"]]
+          (is (re-find (re-pattern id) doc))))
+      (let [browse (html {:page :map
+                          :place {:west 1 :south 2 :east 3 :north 4}
+                          :fields [{:id 1 :name "北"}]
+                          :map-mode "browse"})]
+        (is (re-find #"select-work-name" browse))
+        (is (re-find #"この作業名で見る" browse))
+        (is (not (re-find #"ブラシ" browse))))
+      (let [paint (html {:page :map
+                         :place {:west 1 :south 2 :east 3 :north 4}
+                         :fields [{:id 1 :name "北"}]
+                         :map-mode "paint"
+                         :form {:work_name "田植え"}})]
+        (is (re-find #"ブラシ" paint))))))
