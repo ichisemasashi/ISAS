@@ -6,6 +6,18 @@
             [isas.gsi :as gsi]
             [isas.log :as log]))
 
+(def ^:private import-inflight (atom #{}))
+
+(defn- try-begin-import! [user-id]
+  (let [id (long user-id)
+        [old _] (swap-vals! import-inflight
+                            (fn [s]
+                              (if (contains? s id) s (conj s id))))]
+    (not (contains? old id))))
+
+(defn- end-import! [user-id]
+  (swap! import-inflight disj (long user-id)))
+
 (defn- parse-coord [v]
   (cond
     (number? v) (double v)
@@ -55,7 +67,7 @@
         {:ok true
          :source "gsi"
          :kind "aerial"
-         :note "eMAFF 空中写真を直接取得できないため、座標付きの地理院空中写真で確認します"
+         :note "確認用の空中写真です（地理院）。この範囲でよければ確定してください"
          :bbox box}))))
 
 (defn- import-basemaps! [sys user-id place]
@@ -97,32 +109,43 @@
   "作業場所について下地を自動取得し、筆ポリゴンの自動取得を試みる。"
   [sys user-id]
   (let [place (db/find-place (:ds sys) user-id)]
-    (if-not place
+    (cond
+      (nil? place)
       (do
         (log/warn "自動取込できません（作業場所が未設定）" :user-id user-id)
         {:ok false :code "place_unset"})
-      (let [box (select-keys place [:west :south :east :north])
-            _ (log/info "作業場所の自動取込を始めます" :user-id user-id
-                        :west (:west box) :south (:south box)
-                        :east (:east box) :north (:north box))
-            bm (import-basemaps! sys user-id box)
-            pg (import-polygons! sys user-id)
-            warnings (vec (concat (:warnings bm) (:warnings pg)))
-            ok-bm (seq (:basemaps bm))]
-        (cond
-          (and ok-bm (empty? warnings))
-          (do
-            (log/info "eMAFF／代替の自動取込が完了しました" :user-id user-id :basemaps (:basemaps bm))
-            {:ok true :basemaps (:basemaps bm) :fields (:fields pg) :warnings []})
 
-          ok-bm
-          (do
-            (log/info "下地の自動取込は一部または警告付きです"
-                      :user-id user-id :basemaps (:basemaps bm) :warnings warnings)
-            {:ok true :code "emaff_partial"
-             :basemaps (:basemaps bm) :fields (:fields pg) :warnings warnings})
+      (not (try-begin-import! user-id))
+      (do
+        (log/warn "自動取込を拒否しました（別の取込が進行中）" :user-id user-id)
+        {:ok false :code "emaff_busy"})
 
-          :else
-          (do
-            (log/warn "自動取込に失敗しました" :user-id user-id :warnings warnings)
-            {:ok false :code "emaff_unavailable" :warnings warnings}))))))
+      :else
+      (try
+        (let [box (select-keys place [:west :south :east :north])
+              _ (log/info "作業場所の自動取込を始めます" :user-id user-id
+                          :west (:west box) :south (:south box)
+                          :east (:east box) :north (:north box))
+              bm (import-basemaps! sys user-id box)
+              pg (import-polygons! sys user-id)
+              warnings (vec (concat (:warnings bm) (:warnings pg)))
+              ok-bm (seq (:basemaps bm))]
+          (cond
+            (and ok-bm (empty? warnings))
+            (do
+              (log/info "eMAFF／代替の自動取込が完了しました" :user-id user-id :basemaps (:basemaps bm))
+              {:ok true :basemaps (:basemaps bm) :fields (:fields pg) :warnings []})
+
+            ok-bm
+            (do
+              (log/info "下地の自動取込は一部または警告付きです"
+                        :user-id user-id :basemaps (:basemaps bm) :warnings warnings)
+              {:ok true :code "emaff_partial"
+               :basemaps (:basemaps bm) :fields (:fields pg) :warnings warnings})
+
+            :else
+            (do
+              (log/warn "自動取込に失敗しました" :user-id user-id :warnings warnings)
+              {:ok false :code "emaff_unavailable" :warnings warnings})))
+        (finally
+          (end-import! user-id))))))

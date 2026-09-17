@@ -23,16 +23,19 @@
    :fields-title "圃場台帳"
    :map-title "地図"
    :place-needed "先に作業場所の範囲を決めてください"
+   :place-change "いまの作業場所を変えられます。地理院地図で範囲を直し、空中写真で確認してから確定してください"
    :place-move "地理院地図を動かして範囲を決め、空中写真で確認してから確定してください"
    :place-set "この範囲を作業場所にする"
    :place-preview "空中写真で最終確認"
-   :place-preview-note "確認用の空中写真です（eMAFF が取れないときは地理院）。この範囲でよければ確定、直すなら地理院地図に戻ってください"
+   :place-preview-note "確認用の空中写真です。この範囲でよければ確定、直すなら地理院地図に戻ってください"
    :place-gsi-attr "地図：国土地理院"
    :place-back-gsi "地理院地図に戻って範囲を直す"
+   :place-saving "作業場所を保存し、下地を取り込んでいます。完了するまでお待ちください"
    :emaff-import "この範囲の区画と下地を自動で取り込む"
    :emaff-import-ok "自動取込が終わりました"
    :emaff-unavailable "自動取込ができませんでした。手作業の取込を使ってください"
    :emaff-partial "一部だけ自動取込できました"
+   :emaff-busy "いま下地を取り込んでいます。終わるまで待ってから操作してください"
    :phone-map "台帳と地図の編集はパソコンで開いてください"
    :shape-not-area "閉じた形で、面積が取れるものにしてください"
    :import-invalid "このファイルは区画として読めません"
@@ -107,6 +110,7 @@
     "place_invalid" (:place-invalid messages)
     "emaff_unavailable" (:emaff-unavailable messages)
     "emaff_partial" (:emaff-partial messages)
+    "emaff_busy" (:emaff-busy messages)
     "emaff_empty" (:emaff-unavailable messages)
     "shape_not_area" (:shape-not-area messages)
     "basemap_kind" (:basemap-kind messages)
@@ -540,10 +544,20 @@
 
 (defn map-place-view [state]
   (let [preview? (= "aerial" (str (:place-preview state)))
+        busy? (boolean (:place-busy state))
         west (esc (get-in state [:form :west] "129"))
         south (esc (get-in state [:form :south] "26"))
         east (esc (get-in state [:form :east] "146"))
         north (esc (get-in state [:form :north] "46"))
+        lead (cond
+               busy? (:place-saving messages)
+               (:place state) (:place-change messages)
+               :else (:place-needed messages))
+        guide (cond
+                busy? ""
+                preview? (:place-preview-note messages)
+                :else (:place-move messages))
+        disabled (if busy? " disabled" "")
         hidden (fn [act]
                  (str "<form data-act=\"" act "\" method=\"post\">"
                       "<input type=\"hidden\" name=\"west\" value=\"" west "\">"
@@ -553,21 +567,21 @@
     (layout (:map-title messages)
             (str (nav-user)
                  (flash-html state)
-                 "<p>" (esc (:place-needed messages)) "</p>"
-                 "<p>" (esc (if preview?
-                              (or (get-in state [:form :preview-note]) (:place-preview-note messages))
-                              (:place-move messages))) "</p>"
+                 "<p>" (esc lead) "</p>"
+                 (when-not (str/blank? guide) (str "<p>" (esc guide) "</p>"))
                  "<p class=\"attr\">" (esc (:place-gsi-attr messages)) "</p>"
                  "<p id=\"place-extent\"></p>"
-                 (if preview?
-                   (str (hidden "cancel-place-preview")
-                        "<button type=\"submit\">" (esc (:place-back-gsi messages)) "</button></form>"
-                        (hidden "save-place")
-                        "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>")
-                   (str (hidden "preview-place")
-                        "<button type=\"submit\">" (esc (:place-preview messages)) "</button></form>"
-                        (hidden "save-place")
-                        "<button type=\"submit\">" (esc (:place-set messages)) "</button></form>"))
+                 (if busy?
+                   ""
+                   (if preview?
+                     (str (hidden "cancel-place-preview")
+                          "<button type=\"submit\"" disabled ">" (esc (:place-back-gsi messages)) "</button></form>"
+                          (hidden "save-place")
+                          "<button type=\"submit\"" disabled ">" (esc (:place-set messages)) "</button></form>")
+                     (str (hidden "preview-place")
+                          "<button type=\"submit\"" disabled ">" (esc (:place-preview messages)) "</button></form>"
+                          (hidden "save-place")
+                          "<button type=\"submit\"" disabled ">" (esc (:place-set messages)) "</button></form>")))
                  "<div id=\"ol-map\" class=\"ol-map\" data-place-mode=\"1\""
                  " data-west=\"" west "\" data-south=\"" south "\" data-east=\"" east "\" data-north=\"" north "\""
                  (when preview? " data-preview=\"aerial\"")
@@ -655,11 +669,27 @@
       :else
       (guarded s))))
 
+(defn- form-has-bbox? [form]
+  (let [w (:west form) s (:south form) e (:east form) n (:north form)]
+    (and (some? w) (some? s) (some? e) (some? n)
+         (not (or (str/blank? (str w)) (str/blank? (str s))
+                  (str/blank? (str e)) (str/blank? (str n)))))))
+
+(defn- seed-place-form [state place]
+  (if (and (= :map-place (:page state)) place (not (form-has-bbox? (:form state))))
+    (merge (or (:form state) {})
+           {:west (str (:west place))
+            :south (str (:south place))
+            :east (str (:east place))
+            :north (str (:north place))})
+    (:form state)))
+
 (defn place-loaded [state body]
-  (let [s (assoc state :place (when (:ok body)
-                                (select-keys body [:west :south :east :north
-                                                   :image_west :image_south
-                                                   :image_east :image_north])))]
+  (let [place (when (:ok body)
+                (select-keys body [:west :south :east :north
+                                   :image_west :image_south
+                                   :image_east :image_north]))
+        s (assoc state :place place :form (seed-place-form state place))]
     {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}))
 
 (defn fields-loaded [state body]
@@ -690,35 +720,52 @@
 (defn after-place-preview [state body]
   (if (:ok body)
     (let [box (or (:bbox body) {})
-          form (cond-> (or (:form state) {})
-                 (:west box) (assoc :west (str (:west box)))
-                 (:south box) (assoc :south (str (:south box)))
-                 (:east box) (assoc :east (str (:east box)))
-                 (:north box) (assoc :north (str (:north box)))
-                 (:note body) (assoc :preview-note (:note body)))
-          s (assoc state :place-preview "aerial" :form form :flash nil)]
+          form (-> (into {} (:form state))
+                   (cond->
+                     (:west box) (assoc :west (str (:west box)))
+                     (:south box) (assoc :south (str (:south box)))
+                     (:east box) (assoc :east (str (:east box)))
+                     (:north box) (assoc :north (str (:north box))))
+                   (dissoc :preview-note))
+          s (assoc state :place-preview "aerial" :form form :flash nil :place-busy nil)]
       {:state s :fx [[:html (render s)]]})
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [s (assoc state :place-busy nil
+                   :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn after-place-save [state body]
   (if (:ok body)
-    {:state (assoc state :flash nil :place-preview nil)
-     :fx [[:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [s (assoc state :flash {:error? false :text (:place-saving messages)}
+                   :place-preview nil :place-busy true)]
+      {:state s
+       :fx [[:html (render s)]
+            [:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]})
+    (let [s (assoc state :place-busy nil
+                   :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn after-emaff-import [state body]
   (let [ok? (:ok body)
+        busy? (= "emaff_busy" (:code body))
         text (cond
+               busy? (:emaff-busy messages)
                (and ok? (= "emaff_partial" (:code body))) (:emaff-partial messages)
                ok? (:emaff-import-ok messages)
                :else (code-message (:code body)))
-        s (assoc state :flash {:error? (not ok?) :text text} :place-preview nil)]
+        s (assoc state
+                 :flash {:error? (not (or ok? busy?)) :text text}
+                 :place-preview nil
+                 :place-busy nil)]
     {:state s
-     :fx (if (= :map (:page state))
+     :fx (cond
+           busy?
+           [[:html (render s)]]
+
+           (= :map (:page state))
            [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]
             [:api "GET" "/api/user/fields" nil :fields-loaded]]
+
+           :else
            [[:nav "/map"]])}))
 
 (defn after-field-save [state body]
@@ -874,7 +921,8 @@
       :path
       (let [s (apply-route (assoc state :session (:session state) :flash nil) (:path arg) (:search arg))
             s (if (#{:map :map-place} (:page s))
-                (assoc s :form {} :paint-data nil :map-mode nil :map-mode-parent nil :place-preview nil)
+                (assoc s :form {} :paint-data nil :map-mode nil :map-mode-parent nil
+                       :place-preview nil :place-busy nil)
                 s)]
         (if (and (:session s) (= (:kind s) (:kind state)))
           (session-loaded s {:ok true :email (get-in s [:session :email])})
@@ -894,13 +942,32 @@
           "invite" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/invite" "/api/user/invite") form :invite-result]]}
           "password" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password" "/api/user/password") form :password-result]]}
           "revoke" {:state state :fx [[:api "POST" "/api/admin/users/revoke" form :revoke-result]]}
-          "preview-place" {:state state :fx [[:api "POST" "/api/user/place/preview" form :place-preview-result]]}
+          "preview-place"
+          (if (:place-busy state)
+            {:state state :fx [[:html (render state)]]}
+            (let [s (assoc state :form (merge (or (:form state) {}) form) :flash nil)]
+              {:state s :fx [[:api "POST" "/api/user/place/preview" form :place-preview-result]]}))
           "cancel-place-preview"
-          (let [s (assoc state :place-preview nil :flash nil
+          (let [s (assoc state :place-preview nil :flash nil :place-busy nil
                          :form (merge (or (:form state) {}) (select-keys form [:west :south :east :north])))]
             {:state s :fx [[:html (render s)]]})
-          "save-place" {:state state :fx [[:api "PUT" "/api/user/place" form :place-save-result]]}
-          "emaff-import" {:state state :fx [[:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}
+          "save-place"
+          (if (:place-busy state)
+            {:state state :fx [[:html (render state)]]}
+            (let [s (assoc state :place-busy true
+                           :form (merge (or (:form state) {}) form)
+                           :flash {:error? false :text (:place-saving messages)})]
+              {:state s
+               :fx [[:html (render s)]
+                    [:api "PUT" "/api/user/place" form :place-save-result]]}))
+          "emaff-import"
+          (if (:place-busy state)
+            {:state state :fx [[:html (render state)]]}
+            (let [s (assoc state :place-busy true
+                           :flash {:error? false :text (:place-saving messages)})]
+              {:state s
+               :fx [[:html (render s)]
+                    [:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}))
           "set-map-mode"
           (let [mode (str/trim (str (or (:mode form) "")))
                 cur (map-mode state)

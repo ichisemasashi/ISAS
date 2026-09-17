@@ -194,7 +194,7 @@
   (.toFixed (js/Number n) 2))
 
 (defn- fill-place-form [ext]
-  (doseq [act ["save-place" "preview-place"]]
+  (doseq [act ["save-place" "preview-place" "cancel-place-preview"]]
     (set-form-input act "west" (aget ext 0))
     (set-form-input act "south" (aget ext 1))
     (set-form-input act "east" (aget ext 2))
@@ -425,6 +425,7 @@
             ^js view (View. #js {:projection map-proj})
             ^js ol-map (OlMap. #js {:target el :layers layers :view view})
             ext-4326 (or (when place-mode? (form-extent-4326 (:form state)))
+                         (when place-mode? (place-extent-4326 place))
                          (when place-mode?
                            (form-extent-4326 {:west (.getAttribute el "data-west")
                                               :south (.getAttribute el "data-south")

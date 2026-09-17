@@ -62,6 +62,7 @@
   (is (re-find #"作業場所の範囲を決めて" (ui/code-message "place_unset")))
   (is (re-find #"自動取込ができませんでした" (ui/code-message "emaff_unavailable")))
   (is (re-find #"一部だけ自動取込" (ui/code-message "emaff_partial")))
+  (is (re-find #"取り込んでいます" (ui/code-message "emaff_busy")))
   (is (re-find #"自動取込ができませんでした" (ui/code-message "emaff_empty")))
   (is (re-find #"作業場所の範囲が正しく" (ui/code-message "place_invalid")))
   (is (re-find #"閉じた形" (ui/code-message "shape_not_area")))
@@ -123,8 +124,14 @@
                                                   :place {:west 1 :south 2 :east 3 :north 4}
                                                   :basemaps []))))
     (is (re-find #"確認用の空中写真" (ui/render (assoc base :page :map-place :kind "user"
-                                                     :place-preview "aerial"
-                                                     :form {:preview-note "確認用の空中写真です"}))))
+                                                     :place-preview "aerial"))))
+    (is (re-find #"いまの作業場所を変えられます"
+                 (ui/render (assoc base :page :map-place :kind "user"
+                                   :place {:west 1 :south 2 :east 3 :north 4}))))
+    (is (re-find #"取り込んでいます"
+                 (ui/render (assoc base :page :map-place :kind "user" :place-busy true))))
+    (is (not (re-find #"この範囲を作業場所にする"
+                      (ui/render (assoc base :page :map-place :kind "user" :place-busy true)))))
     (is (not (re-find #"下地を西へ" (ui/render (assoc base :page :map :session {:email "a"}
                                                     :place {:west 1 :south 2 :east 3 :north 4}
                                                     :basemaps [])))))
@@ -315,6 +322,58 @@
     (is (= :api (fx-op (assoc s :page :map) [:place-loaded {:ok false :code "place_unset"}])))
     (is (= :api (fx-op (assoc s :page :map) [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])))
     (is (= :api (fx-op (assoc s :page :map-place) [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place :form {})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place :form nil)
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place
+                                         :form {:west "" :south "8" :east "7" :north "6"})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place
+                                         :form {:west "9" :south "" :east "7" :north "6"})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place
+                                         :form {:west "9" :south "8" :east "" :north "6"})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place
+                                         :form {:west "9" :south "8" :east "7" :north ""})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place
+                                         :form {:west "9" :south "8" :east "7"})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place
+                                         :form {:west "9" :south "8"})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place
+                                         :form {:west "9"})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (= "9" (get-in (ui/handle (assoc s :page :map-place
+                                         :form {:west "9" :south "8" :east "7" :north "6"})
+                                  [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                       [:state :form :west])))
+    (is (nil? (get-in (ui/handle (assoc s :page :map :form nil)
+                                 [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])
+                      [:state :form :west])))
+    (is (nil? (get-in (ui/handle (assoc s :page :map-place :form nil)
+                                 [:place-loaded {:ok false :code "place_unset"}])
+                      [:state :form :west])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place :form {:preview-note "x"})
+                                  [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                          :bbox {:west 1 :south 2 :east 3 :north 4}}])
+                       [:state :form :west])))
+    (is (nil? (get-in (ui/handle (assoc s :page :map-place :form {:preview-note "x"})
+                                 [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                         :bbox {:west 1 :south 2 :east 3 :north 4}}])
+                      [:state :form :preview-note])))
     (is (= :api (fx-op (assoc s :page :map) [:fields-loaded {:fields [{:id 1}]}])))
     (is (= :html (fx-op (assoc s :page :fields) [:fields-loaded {:fields []}])))
     (is (map? (ui/handle s [:fields-loaded {}])))
@@ -322,10 +381,17 @@
     (is (= :html (fx-op (assoc s :page :fields) [:basemaps-loaded {:ok true :basemaps []}])))
     (is (= :html (fx-op (assoc s :page :map-place) [:work-names-loaded {:work_names []}])))
     (is (map? (ui/handle s [:basemaps-loaded {}])))
-    (is (= :api (fx-op s [:place-save-result {:ok true}])))
+    (is (= :html (fx-op s [:place-save-result {:ok true}])))
+    (is (true? (get-in (ui/handle s [:place-save-result {:ok true}]) [:state :place-busy])))
     (is (true? (get-in (ui/handle s [:place-save-result {:ok false :code "place_invalid"}]) [:state :flash :error?])))
+    (is (nil? (:place-busy (:state (ui/handle (assoc s :place-busy true)
+                                              [:place-save-result {:ok false :code "place_invalid"}])))))
     (is (= :nav (fx-op (assoc s :page :map-place) [:emaff-import-result {:ok true}])))
     (is (= :api (fx-op (assoc s :page :map) [:emaff-import-result {:ok true :code "emaff_partial"}])))
+    (is (= :html (fx-op (assoc s :page :map-place) [:emaff-import-result {:ok false :code "emaff_busy"}])))
+    (is (re-find #"取り込んでいます" (get-in (ui/handle (assoc s :page :map-place)
+                                                       [:emaff-import-result {:ok false :code "emaff_busy"}])
+                                            [:state :flash :text])))
     (is (true? (get-in (ui/handle (assoc s :page :map-place) [:emaff-import-result {:ok false :code "emaff_unavailable"}])
                        [:state :flash :error?])))
     (is (= :html (fx-op (assoc s :page :map-place) [:place-preview-result {:ok true :source "gsi" :kind "aerial"
@@ -335,8 +401,13 @@
                                                        [:place-preview-result {:ok true :source "gsi" :kind "aerial"
                                                                                :bbox {:west 1 :south 2 :east 3 :north 4}}])))))
     (is (nil? (get-in (ui/handle (assoc s :page :map-place :form nil)
-                                 [:place-preview-result {:ok true :source "gsi" :kind "aerial"}])
+                                 [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                         :bbox {:west 1 :south 2 :east 3 :north 4}}])
                       [:state :form :preview-note])))
+    (is (= "1" (get-in (ui/handle (assoc s :page :map-place :form nil)
+                                  [:place-preview-result {:ok true :source "gsi" :kind "aerial"
+                                                          :bbox {:west 1 :south 2 :east 3 :north 4}}])
+                       [:state :form :west])))
     (is (= "1" (get-in (ui/handle (assoc s :page :map-place :form {})
                                   [:place-preview-result {:ok true :source "gsi" :kind "aerial"
                                                           :bbox {:west 1}}])
@@ -353,9 +424,9 @@
                                   [:place-preview-result {:ok true :source "gsi" :kind "aerial"
                                                           :bbox {:north 4}}])
                        [:state :form :north])))
-    (is (= "n" (get-in (ui/handle (assoc s :page :map-place :form {})
-                                  [:place-preview-result {:ok true :source "gsi" :kind "aerial" :note "n"}])
-                       [:state :form :preview-note])))
+    (is (nil? (get-in (ui/handle (assoc s :page :map-place :form {})
+                                 [:place-preview-result {:ok true :source "gsi" :kind "aerial" :note "n"}])
+                      [:state :form :preview-note])))
     (is (true? (get-in (ui/handle (assoc s :page :map-place) [:place-preview-result {:ok false :code "place_invalid"}])
                        [:state :flash :error?])))
     (is (= :api (fx-op s [:field-save-result {:ok true}])))
@@ -373,8 +444,16 @@
     (is (= :session (fx-op (assoc s :page :home :kind "user") [:path {:path "/admin/users" :search ""}])))
     (let [b (ui/handle (ui/init-state) [:boot {:path "/map" :search "" :narrow? true}])]
       (is (true? (get-in b [:state :narrow?]))))
-    (is (= :api (fx-op s [:submit {:act "save-place" :form {:west "1"}}])))
+    (is (= :html (fx-op s [:submit {:act "save-place" :form {:west "1" :south "2" :east "3" :north "4"}}])))
+    (is (true? (:place-busy (:state (ui/handle s [:submit {:act "save-place"
+                                                           :form {:west "1" :south "2" :east "3" :north "4"}}])))))
+    (is (= :html (fx-op (assoc s :form nil)
+                        [:submit {:act "save-place" :form {:west "1" :south "2" :east "3" :north "4"}}])))
+    (is (= :html (fx-op (assoc s :place-busy true)
+                        [:submit {:act "save-place" :form {:west "1" :south "2" :east "3" :north "4"}}])))
     (is (= :api (fx-op s [:submit {:act "preview-place" :form {:west "1"}}])))
+    (is (= :api (fx-op (assoc s :form nil) [:submit {:act "preview-place" :form {:west "1"}}])))
+    (is (= :html (fx-op (assoc s :place-busy true) [:submit {:act "preview-place" :form {:west "1"}}])))
     (is (= :html (fx-op (assoc s :page :map-place :place-preview "aerial")
                         [:submit {:act "cancel-place-preview" :form {:west "140" :south "35" :east "141" :north "36"}}])))
     (is (nil? (:place-preview (:state (ui/handle (assoc s :page :map-place :place-preview "aerial")
@@ -388,7 +467,9 @@
                                   [:submit {:act "cancel-place-preview"
                                             :form {:west "1" :south "2" :east "3" :north "4"}}])
                        [:state :form :west])))
-    (is (= :api (fx-op s [:submit {:act "emaff-import" :form {}}])))
+    (is (= :html (fx-op s [:submit {:act "emaff-import" :form {}}])))
+    (is (= :api (ffirst (rest (:fx (ui/handle s [:submit {:act "emaff-import" :form {}}]))))))
+    (is (= :html (fx-op (assoc s :place-busy true) [:submit {:act "emaff-import" :form {}}])))
     (is (= :api (fx-op s [:submit {:act "create-field" :form {:name "n" :geojson "{\"type\":\"Polygon\"}"}}])))
     (is (= :api (fx-op s [:submit {:act "update-field" :form {:id "1" :name "n" :geojson "{\"type\":\"Polygon\"}"}}])))
     (is (= :api (fx-op s [:submit {:act "update-field" :form {:id "1"}}])))

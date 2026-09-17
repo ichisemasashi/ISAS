@@ -84,4 +84,17 @@
            (fields/put-place sys uid {:west 139.3 :south 35.3 :east 139.35 :north 35.34})
            (let [r (emaff/import-for-place sys uid)]
              (is (false? (:ok r)))
-             (is (= "emaff_unavailable" (:code r))))))))))
+             (is (= "emaff_unavailable" (:code r))))))
+       (testing "同時取込は emaff_busy"
+         (reset! @#'emaff/import-inflight #{})
+         (fields/put-place sys uid {:west 139.4 :south 35.4 :east 139.45 :north 35.44})
+         (with-redefs [gsi/stitch-bbox (fn [_ _]
+                                         (Thread/sleep 300)
+                                         tile)]
+           (let [f (future (emaff/import-for-place sys uid))
+                 _ (Thread/sleep 50)
+                 r2 (emaff/import-for-place sys uid)
+                 r1 @f]
+             (is (= "emaff_busy" (:code r2)))
+             (is (true? (:ok r1)))
+             (is (empty? @@#'emaff/import-inflight)))))))))

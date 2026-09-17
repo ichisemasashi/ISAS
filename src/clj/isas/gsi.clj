@@ -39,19 +39,21 @@
       (> span 0.1) 12
       :else 14)))
 
+(def ^:private http-client
+  (-> (HttpClient/newBuilder)
+      (.connectTimeout (Duration/ofSeconds 10))
+      (.build)))
+
 (defn http-get-bytes
   "地理院タイル取得。試験では with-redefs で差し替え可能。"
   [url]
   (try
-    (let [client (-> (HttpClient/newBuilder)
-                     (.connectTimeout (Duration/ofSeconds 10))
-                     (.build))
-          req (-> (HttpRequest/newBuilder)
+    (let [req (-> (HttpRequest/newBuilder)
                   (.uri (URI/create url))
                   (.timeout (Duration/ofSeconds 20))
                   (.GET)
                   (.build))
-          res (.send client req (HttpResponse$BodyHandlers/ofByteArray))]
+          res (.send http-client req (HttpResponse$BodyHandlers/ofByteArray))]
       (when (= 200 (.statusCode res))
         (.body res)))
     (catch Exception e
