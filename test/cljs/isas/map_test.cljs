@@ -277,4 +277,36 @@
     (m/install!)
     (b/apply-fx! [:html "<div id=\"ol-map\" data-gantt-mode=\"1\"></div>"])
     (is (some? (:map @m/current)))
-    (is (nil? (:draw @m/current)))))
+    (is (nil? (:draw @m/current))))
+  ;; 指示地図: order-map の status で色付け
+  (let [ol-el (js-obj "id" "ol-map"
+                      "getAttribute" (fn [a]
+                                       (case a
+                                         "data-order-mode" "1"
+                                         "data-target-ids" "1"
+                                         nil)))
+        app-el (js-obj "innerHTML" "")]
+    (set! js/document (js-obj "getElementById" (fn [id]
+                                                 (case id
+                                                   "ol-map" ol-el
+                                                   "app" app-el
+                                                   "map-extent" (js-obj "textContent" "")
+                                                   nil))
+                              "querySelector" (fn [_] nil)
+                              "addEventListener" (fn [_ _])))
+    (set! js/window (js-obj "innerWidth" 1200 "addEventListener" (fn [_ _])))
+    (reset! m/current nil)
+    (reset! m/installed? false)
+    (reset! b/app-state (assoc (ui/init-state)
+                               :page :order
+                               :place {:west 139 :south 35 :east 141 :north 37}
+                               :basemaps [{:kind "aerial" :ready true}]
+                               :order-map {:work_name "田植え"
+                                           :fields [{:id 1 :name "北" :status "partial"
+                                                     :geojson {:type "Polygon"
+                                                               :coordinates [[[140 36] [140.1 36]
+                                                                              [140.1 36.1] [140 36.1] [140 36]]]}}]}))
+    (m/install!)
+    (b/apply-fx! [:html "<div id=\"ol-map\" data-order-mode=\"1\" data-target-ids=\"1\"></div>"])
+    (is (some? (:map @m/current)))
+    (is (false? (:drawing? @m/current)))))

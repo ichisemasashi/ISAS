@@ -55,7 +55,7 @@
         (is (re-find #"17:00" h))))
     (is (re-find #"圃場が1枚以上あるときだけ、指示を出せます"
                  (html {:page :orders-new :fields []}))))
-  (testing "P5-2.1-03 / P5-2.2-01〜04 詳細"
+  (testing "P5-2.1-03 / P5-2.2-01〜04 / P5-2.2-02 詳細"
     (let [h (html {:page :order
                    :order {:id 1 :role "issuer" :status "open"
                            :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
@@ -67,14 +67,26 @@
                                :fields [{:id 1 :name "北" :status "partial" :geojson tu/square}]}})]
       (is (re-find #"田植え" h))
       (is (re-find #"b@example.com" h))
-      (is (re-find #"北" h))
+      (is (re-find #"北（一部）" h))
       (is (re-find #"進行中" h))
-      (is (re-find #"ol-map" h))
+      (is (re-find #"id=\"ol-map\"" h))
       (is (re-find #"data-order-mode=\"1\"" h))
+      (is (re-find #"data-target-ids=\"1\"" h))
       (is (re-find #"この指示を閉じる" h))
       (is (re-find #"依頼文と時刻を直す" h))
       (is (not (re-find #"受け手の追加|対象の追加" h)))
       (is (not (re-find #"gantt-circle|パーセント" h)))))
+  (testing "P5-2.1-08 狭い画面でも指示地図の色"
+    (let [h (html {:page :order :narrow? true
+                   :order {:id 1 :role "recipient" :status "open"
+                           :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
+                           :work_name "田植え" :body "" :recipient_emails []
+                           :fields [{:id 1 :name "北" :visible true}] :journals []}
+                   :order-map {:work_name "田植え"
+                               :fields [{:id 1 :name "北" :status "none" :geojson tu/square}]}})]
+      (is (re-find #"北（未）" h))
+      (is (re-find #"id=\"ol-map\"" h))
+      (is (re-find #"data-order-mode=\"1\"" h))))
   (testing "P5-2.1-04 / P5-5-05 他人"
     (is (re-find #"他人の対象圃場" (html {:page :others :others-fields [] :others-work-names []}))))
   (testing "P5-2.1-05 / P5-5-06 関係"

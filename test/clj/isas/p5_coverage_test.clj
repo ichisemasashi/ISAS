@@ -315,6 +315,16 @@
                                             [:session-loaded {:ok true :email "a"}])))))
         (is (= :api (ffirst (:fx (ui/handle (assoc s0 :page :others :session {:email "a"} :narrow? false)
                                             [:session-loaded {:ok true :email "a"}])))))
+        (is (= :api (ffirst (:fx (ui/handle (assoc s0 :page :order :order-id "9" :session {:email "a"})
+                                            [:session-loaded {:ok true :email "a"}])))))
+        (let [r (ui/handle (assoc s0 :page :order :order-id "9")
+                           [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])]
+          (is (= :api (ffirst (:fx r))))
+          (is (re-find #"/api/user/orders/9" (pr-str (:fx r)))))
+        (let [r (ui/handle (assoc s0 :page :others)
+                           [:place-loaded {:ok true :west 1 :south 2 :east 3 :north 4}])]
+          (is (= :api (ffirst (:fx r))))
+          (is (re-find #"/api/user/others/fields" (pr-str (:fx r)))))
         (let [r (ui/handle (assoc s0 :page :orders-new)
                            [:fields-loaded {:fields [{:id 1 :name "北"}]}])]
           (is (= "2026-09-12" (get-in r [:state :form :work_date])))
@@ -337,7 +347,10 @@
                                            :recipient_emails [] :fields [] :journals []}])]
           (is (= :api (ffirst (:fx r)))))
         (is (map? (:state (ui/handle s0 [:order-loaded {:ok false :code "order_not_found"}]))))
-        (is (map? (:state (ui/handle s0 [:order-map-loaded {:ok true :fields []}]))))
+        (let [r (ui/handle (assoc s0 :page :order)
+                           [:order-map-loaded {:ok true :fields [{:id 1 :status "none"}]}])]
+          (is (= :api (ffirst (:fx r))))
+          (is (re-find #"/api/user/basemaps" (pr-str (:fx r)))))
         (is (map? (:state (ui/handle s0 [:order-map-loaded {:ok false}]))))
         (is (= :nav (ffirst (:fx (ui/handle s0 [:order-save-result {:ok true :id 3}])))))
         (doseq [code ["time_invalid" "time_order" "recipient_self"]]
@@ -350,7 +363,9 @@
                            [:others-fields-loaded {:ok true :fields [{:id 1}]}])]
           (is (= :api (ffirst (:fx r)))))
         (is (map? (:state (ui/handle s0 [:others-fields-loaded {:ok false :code "unauthorized"}]))))
-        (is (map? (:state (ui/handle s0 [:others-work-names-loaded {:work_names ["a"]}]))))
+        (let [r (ui/handle (assoc s0 :page :others)
+                           [:others-work-names-loaded {:work_names ["a"]}])]
+          (is (= :api (ffirst (:fx r)))))
         (is (map? (:state (ui/handle s0 [:others-paints-loaded {:ok true :fields []}]))))
         (is (true? (get-in (ui/handle s0 [:others-paints-loaded {:ok false :code "work_name_unrelated"}])
                            [:state :flash :error?])))

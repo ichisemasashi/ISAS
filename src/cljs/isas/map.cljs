@@ -133,6 +133,42 @@
             (.push arr feat)))))
     arr))
 
+(defn- status-map-features
+  "指示／他人地図用。status がある枚は進捗色、無い枚は輪郭だけ。"
+  [fields]
+  (let [^js fmt (geojson-fmt)
+        arr #js []]
+    (doseq [f fields]
+      (when (:geojson f)
+        (let [fid (:id f)
+              has-status? (contains? f :status)
+              status (str (or (:status f) "none"))
+              painted has-status?
+              feat (.readFeature fmt (clj->js {:type "Feature"
+                                               :geometry (:geojson f)
+                                               :properties {:id fid
+                                                            :name (:name f)
+                                                            :status status
+                                                            :painted painted}}))]
+          (.set feat "id" fid)
+          (.set feat "name" (:name f))
+          (.set feat "status" status)
+          (.set feat "painted" painted)
+          (.push arr feat))))
+    arr))
+
+(defn- source-extent [^js src]
+  (when (and src (fn? (.-getExtent src)))
+    (let [e (.getExtent src)]
+      (when (and e
+                 (js/isFinite (aget e 0))
+                 (js/isFinite (aget e 1))
+                 (js/isFinite (aget e 2))
+                 (js/isFinite (aget e 3))
+                 (< (aget e 0) (aget e 2))
+                 (< (aget e 1) (aget e 3)))
+        e))))
+
 (defn- image-source [kind box]
   (ImageStatic.
    #js {:url (str "/api/user/basemaps/" kind)
@@ -449,6 +485,9 @@
             place-mode? (= "1" (.getAttribute el "data-place-mode"))
             preview? (= "aerial" (.getAttribute el "data-preview"))
             gantt-mode-attr? (= "1" (.getAttribute el "data-gantt-mode"))
+            order-mode? (= "1" (.getAttribute el "data-order-mode"))
+            others-mode? (= "1" (.getAttribute el "data-others-mode"))
+            progress-map? (or order-mode? others-mode?)
             target-attr (str (or (.getAttribute el "data-target-ids") ""))
             target-ids (->> (str/split target-attr #",")
                             (map str/trim)
@@ -467,12 +506,31 @@
                         {:gantt-mode? true
                          :targets target-ids
                          :progress progress})
+            order-fields (when order-mode?
+                           (or (:fields (:order-map state)) []))
+            others-fields
+            (when others-mode?
+              (let [ofs (or (:others-fields state) [])
+                    by (into {} (map (fn [f] [(:id f) f])
+                                     (or (:fields (:others-paint-data state)) [])))]
+                (mapv (fn [f]
+                        (if-let [p (get by (:id f))]
+                          (assoc f :status (:status p))
+                          f))
+                      ofs)))
+            map-fields (cond
+                         order-mode? order-fields
+                         others-mode? others-fields
+                         :else (or (:fields state) []))
             kind (or (:basemap-kind state) "aerial")
             ready? (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state)))
             style-fn (fn [feat _]
                        (style-for (.get feat "kind") (.get feat "status") (.get feat "painted")))
-            paint-data (when-not gantt-applicable? (:paint-data state))
-            src (VectorSource. #js {:features (features-from (or (:fields state) []) paint-data gantt-ctx)})
+            paint-data (when-not (or gantt-applicable? progress-map?) (:paint-data state))
+            feats (if progress-map?
+                    (status-map-features map-fields)
+                    (features-from map-fields paint-data gantt-ctx))
+            src (VectorSource. #js {:features feats})
             draft-src (VectorSource. #js {:features #js []})
             vec-layer (VectorLayer. #js {:source src :style style-fn})
             draft-layer (VectorLayer. #js {:source draft-src})
@@ -488,7 +546,9 @@
             map-proj (if place-mode? "EPSG:3857" "EPSG:4326")
             ^js view (View. #js {:projection map-proj})
             ^js ol-map (OlMap. #js {:target el :layers layers :view view})
-            ext-4326 (or (when place-mode? (form-extent-4326 (:form state)))
+            field-ext (when progress-map? (source-extent src))
+            ext-4326 (or field-ext
+                         (when place-mode? (form-extent-4326 (:form state)))
                          (when place-mode? (place-extent-4326 place))
                          (when place-mode?
                            (form-extent-4326 {:west (.getAttribute el "data-west")
@@ -501,28 +561,31 @@
                       (ol-proj/transformExtent ext-4326 "EPSG:4326" "EPSG:3857")
                       ext-4326)
             active (field-key (or (get-in state [:form :field_id]) (get-in state [:form :id])))
-            selected (if active [active] [])]
+            selected (if active [active] [])
+            read-only? (or gantt-mode-attr? progress-map?)]
         (.fit view fit-ext #js {:padding #js [16 16 16 16]})
-        (fill-place-form ext-4326)
-        (fill-image-form img-box)
+        (when-not progress-map?
+          (fill-place-form ext-4326)
+          (fill-image-form img-box))
         (.on ol-map "moveend" (fn [_]
                                 (when-let [^js v (.getView ol-map)]
                                   (let [e (.calculateExtent v)
                                         e4326 (if place-mode?
                                                 (ol-proj/transformExtent e "EPSG:3857" "EPSG:4326")
                                                 e)]
-                                    (fill-place-form e4326)))))
-        (when-not gantt-mode-attr?
+                                    (when-not progress-map?
+                                      (fill-place-form e4326))))))
+        (when-not read-only?
           (bind-map-click ol-map))
         (reset! current {:map ol-map :source src :view view :kind kind
                          :image-layer img :place place :image-ext img-box
                          :split-polys [] :selected selected :active-field active
                          :drafts [] :draft-source draft-src :style-fn style-fn
                          :tool nil :drawing? false})
-        (when (and active (not gantt-mode-attr?))
+        (when (and active (not read-only?))
           (set-field-targets! active)
           (set-work-name-targets! (or (get-in state [:form :work_name]) (current-work-name))))
-        (when-not gantt-mode-attr?
+        (when-not read-only?
           (apply-map-mode! state))
         nil))))
 

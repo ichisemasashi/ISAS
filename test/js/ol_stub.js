@@ -12,6 +12,7 @@ OlStub.prototype.removeInteraction = function () {};
 OlStub.prototype.fit = function () {};
 OlStub.prototype.getView = function () { return this; };
 OlStub.prototype.calculateExtent = function () { return [129, 26, 146, 46]; };
+OlStub.prototype.getExtent = function () { return [140, 36, 140.1, 36.1]; };
 OlStub.prototype.forEachFeatureAtPixel = function (_px, fn) { fn(this); };
 OlStub.prototype.readFeature = function () { return this; };
 OlStub.prototype.writeGeometryObject = function () { return {type: "Polygon", coordinates: []}; };

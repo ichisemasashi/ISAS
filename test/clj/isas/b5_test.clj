@@ -42,7 +42,9 @@
         (testing "B5-2-01 / B5-2-03 / B5-5.3-01 / B5-10-01 指示と日誌"
           (is (re-find #"指示" wide))
           (is (re-find #"日誌を書く|日誌" detail))
-          (is (re-find #"ol-map|data-order-mode" detail)))
+          (is (re-find #"id=\"ol-map\"" detail))
+          (is (re-find #"data-order-mode=\"1\"" detail))
+          (is (re-find #"北（未）" detail)))
         (testing "B5-2-02 / B5-3-01 / B5-5.2-01 管理者は切断だけ"
           (is (re-find #"関係を切" (html {:page :home :kind "admin"})))
           (is (not (re-find #"href=\"/orders\"|href=\"/gantt\"|href=\"/map\""
@@ -58,7 +60,20 @@
                               :order {:id 1 :role "recipient" :status "open"
                                       :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
                                       :work_name "田植え" :body "" :recipient_emails []
-                                      :fields [{:id 1 :name "北" :visible true}] :journals []}})))
+                                      :fields [{:id 1 :name "北" :visible true}] :journals []}
+                              :order-map {:work_name "田植え"
+                                          :fields [{:id 1 :name "北" :status "partial"
+                                                    :geojson tu/square}]}})))
+          (is (re-find #"id=\"ol-map\"|北（一部）"
+                       (html {:page :order :narrow? true
+                              :session {:email "b5b@example.com"}
+                              :order {:id 1 :role "recipient" :status "open"
+                                      :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
+                                      :work_name "田植え" :body "" :recipient_emails []
+                                      :fields [{:id 1 :name "北" :visible true}] :journals []}
+                              :order-map {:work_name "田植え"
+                                          :fields [{:id 1 :name "北" :status "partial"
+                                                    :geojson tu/square}]}})))
           (is (re-find #"パソコンで開いてください"
                        (html {:page :orders-new :narrow? true :fields [{:id 1}]})))
           (is (not (re-find #"言語切替|English" (html {:page :orders :narrow? true}))))

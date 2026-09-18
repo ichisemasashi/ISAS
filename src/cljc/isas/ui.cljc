@@ -571,14 +571,19 @@
   (let [m (:order-map state)
         fields (or (:fields m) [])
         ids (mapv :id fields)
-        statuses (into {} (map (fn [f] [(:id f) (:status f)]) fields))
         wn (or (:work_name m) (get-in state [:order :work_name]))]
     (when (seq fields)
-      (str "<div class=\"ol-map\" data-order-mode=\"1\""
+      (str "<div id=\"ol-map\" class=\"ol-map\" data-order-mode=\"1\""
            " data-target-ids=\"" (esc (str/join "," ids)) "\""
            (when wn (str " data-work-name=\"" (esc wn) "\""))
-           " data-statuses=\"" (esc (pr-str statuses)) "\""
            "></div>"))))
+
+(defn- paint-status-label [st]
+  (get {"none" (:status-none messages)
+        "partial" (:status-partial messages)
+        "done" (:status-done messages)}
+       (str st)
+       (str st)))
 
 (defn order-view [state]
   (let [o (:order state)
@@ -589,7 +594,12 @@
         can-edit? (and issuer? open? (not narrow?))
         can-journal? (and recipient? open?
                           (not (some #(= (get-in state [:session :email]) (:author_email %))
-                                     (or (:journals o) []))))]
+                                     (or (:journals o) []))))
+        map-by (into {} (map (fn [f] [(:id f) f]) (or (:fields (:order-map state)) [])))
+        field-labels (for [f (or (:fields o) [])]
+                       (let [st (:status (get map-by (:id f)))]
+                         (str (:name f)
+                              (when st (str "（" (paint-status-label st) "）")))))]
     (if-not o
       (layout (:orders-title messages)
               (str (nav-user) (flash-html state)
@@ -605,7 +615,7 @@
                    "<p>" (esc (:order-recipients messages)) ": "
                    (esc (str/join ", " (or (:recipient_emails o) []))) "</p>"
                    "<p>" (esc (:order-fields messages)) ": "
-                   (esc (str/join ", " (keep :name (:fields o)))) "</p>"
+                   (esc (str/join ", " field-labels)) "</p>"
                    (or (order-map-html state) "")
                    (when narrow?
                      (str "<p>" (esc (:phone-orders-edit messages)) "</p>"))
@@ -652,7 +662,7 @@
                               (str "<option value=\"" (esc n) "\">")))
                  "</datalist></label>"
                  "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>"
-                 "<div class=\"ol-map\" data-others-mode=\"1\""
+                 "<div id=\"ol-map\" class=\"ol-map\" data-others-mode=\"1\""
                  (when (seq (:others-fields state))
                    (str " data-target-ids=\""
                         (esc (str/join "," (map :id (:others-fields state)))) "\""))
@@ -1170,7 +1180,8 @@
       (and (= :users (:page s)) (:session s))
       {:state s :fx [[:api "GET" "/api/admin/users" nil :users-loaded]]}
 
-      (and (#{:map :map-place :gantt} (:page s)) (:session s) (not (:narrow? s)))
+      (and (#{:map :map-place :gantt :order :others} (:page s)) (:session s)
+           (or (not (:narrow? s)) (#{:order} (:page s))))
       {:state s :fx [[:api "GET" "/api/user/place" nil :place-loaded]]}
 
       (and (= :fields (:page s)) (:session s) (not (:narrow? s)))
@@ -1183,11 +1194,8 @@
       (and (= :orders-new (:page s)) (:session s) (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
 
-      (and (= :order (:page s)) (:session s))
-      {:state s :fx [[:api "GET" (str "/api/user/orders/" (:order-id s)) nil :order-loaded]]}
-
-      (and (= :others (:page s)) (:session s) (not (:narrow? s)))
-      {:state s :fx [[:api "GET" "/api/user/others/fields" nil :others-fields-loaded]]}
+      (and (= :others (:page s)) (:session s) (:narrow? s))
+      (guarded s)
 
       (= :home (:page s))
       (if (and (= "user" (:kind s)) (some? (:session s)))
@@ -1218,7 +1226,15 @@
                                    :image_west :image_south
                                    :image_east :image_north]))
         s (assoc state :place place :form (seed-place-form state place))]
-    {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}))
+    (cond
+      (= :order (:page s))
+      {:state s :fx [[:api "GET" (str "/api/user/orders/" (:order-id s)) nil :order-loaded]]}
+
+      (= :others (:page s))
+      {:state s :fx [[:api "GET" "/api/user/others/fields" nil :others-fields-loaded]]}
+
+      :else
+      {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]})))
 
 (defn fields-loaded [state body]
   (let [s (assoc state :fields (or (:fields body) []))]
@@ -1336,7 +1352,8 @@
 
 (defn order-map-loaded [state body]
   (if (:ok body)
-    (guarded (assoc state :order-map (dissoc body :ok)))
+    (let [s (assoc state :order-map (dissoc body :ok))]
+      {:state s :fx [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]]})
     (guarded (assoc state :order-map nil))))
 
 (defn order-save-result [state body]
@@ -1369,7 +1386,8 @@
       {:state s :fx [[:html (render s)]]})))
 
 (defn others-work-names-loaded [state body]
-  (guarded (assoc state :others-work-names (or (:work_names body) []))))
+  (let [s (assoc state :others-work-names (or (:work_names body) []))]
+    {:state s :fx [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]]}))
 
 (defn others-paints-loaded [state body]
   (if (:ok body)
