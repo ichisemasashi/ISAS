@@ -165,7 +165,7 @@
       (is (not (re-find #"指示|日誌|関係を切|言語切替" h)))
       (is (nil? (http/match-api :delete "/api/user/gantt/1")))
       (is (nil? (http/match-api :put "/api/user/work-names")))
-      (is (nil? (http/match-api :post "/api/user/orders")))
+      (is (some? (http/match-api :post "/api/user/orders")))
       (doseq [id ["P4-6-01" "P4-6-02" "P4-6-03" "P4-6-04" "P4-6-05"
                   "P4-6-06" "P4-6-07" "P4-6-08" "P4-6-09" "P4-6-10"]]
         (is (re-find (re-pattern id) doc)))))

@@ -339,7 +339,7 @@
             (is (contains? names "reset_tokens"))
             (is (contains? names "sessions"))
             (is (contains? names "gantt_rows"))
-            (is (not (contains? names "orders")))))
+            (is (contains? names "orders"))))
         (testing "P1-4-07 圃場ゼロでも入れる"
           (let [pw (tu/invite-pw app asid "zero-field@example.com")]
             (is (true? (:ok (accounts/login sys "user" "zero-field@example.com" pw))))))

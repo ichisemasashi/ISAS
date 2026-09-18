@@ -7,6 +7,7 @@
             [isas.fields :as fields]
             [isas.gantt :as gantt]
             [isas.log :as log]
+            [isas.orders :as orders]
             [isas.paints :as paints]
             [ring.middleware.cookies :as cookies]
             [ring.middleware.multipart-params :as mp]
@@ -429,6 +430,89 @@
     (fn [uid]
       (ok (select-keys (gantt/work-name-candidates sys uid) [:work_names])))))
 
+(defn orders-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (orders/list-orders sys uid)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn orders-post [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (orders/create-order sys uid (read-body req))]
+          (if (:ok r) (ok (dissoc r :ok)) (fail (:code r))))
+        (catch Exception e
+          (log/warn "指示の作成を読めませんでした" :error (.getMessage e))
+          (fail "time_invalid"))))))
+
+(defn order-get [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (orders/get-order sys uid id)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn order-put [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (orders/update-order sys uid id (read-body req))]
+          (if (:ok r) (ok (dissoc r :ok)) (fail (:code r))))
+        (catch Exception e
+          (log/warn "指示の更新を読めませんでした" :error (.getMessage e))
+          (fail "time_invalid"))))))
+
+(defn order-close [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (orders/close-order sys uid id)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn order-journal [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (orders/post-journal sys uid id (read-body req))]
+          (if (:ok r) (ok (dissoc r :ok)) (fail (:code r))))
+        (catch Exception e
+          (log/warn "日誌を読めませんでした" :error (.getMessage e))
+          (fail "journal_required"))))))
+
+(defn order-map-get [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (orders/order-map sys uid id)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn others-fields-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (orders/others-fields sys uid)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn others-work-names-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (orders/others-work-names sys uid)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn others-paints-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (orders/others-paints sys uid (:work_name (query-params req)))]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn relations-cut [sys req]
+  (if (require-session sys req "admin")
+    (try
+      (let [body (read-body req)
+            r (orders/cut-relation sys (:email_a body) (:email_b body))]
+        (if (:ok r) (ok {}) (fail (:code r))))
+      (catch Exception e
+        (log/warn "関係切断を読めませんでした" :error (.getMessage e))
+        (fail "relation_not_found")))
+    (fail "unauthorized")))
+
 (def api-routes
   {[:get "/api/user/session"] [:session "user"]
    [:post "/api/user/login"] [:login "user"]
@@ -446,6 +530,7 @@
    [:post "/api/admin/invite"] [:invite "admin"]
    [:get "/api/admin/users"] [:users]
    [:post "/api/admin/users/revoke"] [:revoke]
+   [:post "/api/admin/relations/cut"] [:relations-cut]
    [:get "/api/user/place"] [:place-get]
    [:put "/api/user/place"] [:place-put]
    [:put "/api/user/place/image"] [:place-image-put]
@@ -461,7 +546,12 @@
    [:get "/api/user/paints"] [:paints-get]
    [:post "/api/user/paints"] [:paints-post]
    [:get "/api/user/gantt"] [:gantt-get]
-   [:post "/api/user/gantt"] [:gantt-post]})
+   [:post "/api/user/gantt"] [:gantt-post]
+   [:get "/api/user/orders"] [:orders-get]
+   [:post "/api/user/orders"] [:orders-post]
+   [:get "/api/user/others/fields"] [:others-fields-get]
+   [:get "/api/user/others/work-names"] [:others-work-names-get]
+   [:get "/api/user/others/paints"] [:others-paints-get]})
 
 (defn match-api [method uri]
   (or (get api-routes [method uri])
@@ -482,6 +572,17 @@
         (when (= method :get) [:gantt-progress id]))
       (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)" (str uri))]
         (when (= method :put) [:gantt-put id]))
+      (when-let [[_ id] (re-matches #"/api/user/orders/(\d+)/close" (str uri))]
+        (when (= method :post) [:order-close id]))
+      (when-let [[_ id] (re-matches #"/api/user/orders/(\d+)/journal" (str uri))]
+        (when (= method :post) [:order-journal id]))
+      (when-let [[_ id] (re-matches #"/api/user/orders/(\d+)/map" (str uri))]
+        (when (= method :get) [:order-map id]))
+      (when-let [[_ id] (re-matches #"/api/user/orders/(\d+)" (str uri))]
+        (cond
+          (= method :get) [:order-get id]
+          (= method :put) [:order-put id]
+          :else nil))
       (when-let [[_ id] (re-matches #"/api/user/fields/(\d+)" (str uri))]
         (cond
           (= method :put) [:field-put id]
@@ -506,6 +607,7 @@
         :invite (invite-post sys req (second spec))
         :users (users-get sys req)
         :revoke (revoke-post sys req)
+        :relations-cut (relations-cut sys req)
         :place-get (place-get sys req)
         :place-put (place-put sys req)
         :place-image-put (place-image-put sys req)
@@ -532,6 +634,16 @@
         :gantt-post (gantt-post sys req)
         :gantt-put (gantt-put sys req (second spec))
         :gantt-progress (gantt-progress sys req (second spec))
+        :orders-get (orders-get sys req)
+        :orders-post (orders-post sys req)
+        :order-get (order-get sys req (second spec))
+        :order-put (order-put sys req (second spec))
+        :order-close (order-close sys req (second spec))
+        :order-journal (order-journal sys req (second spec))
+        :order-map (order-map-get sys req (second spec))
+        :others-fields-get (others-fields-get sys req)
+        :others-work-names-get (others-work-names-get sys req)
+        :others-paints-get (others-paints-get sys req)
         (fail "unauthorized")))))
 
 (defn index-html []

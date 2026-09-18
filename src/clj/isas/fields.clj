@@ -5,6 +5,7 @@
             [isas.gantt :as gantt]
             [isas.geo :as geo]
             [isas.log :as log]
+            [isas.orders :as orders]
             [isas.paints :as paints]))
 
 (def kinds #{"standard" "aerial" "satellite"})
@@ -307,11 +308,20 @@
 (defn delete-field [sys user-id id]
   (let [fid (geo/as-int id)
         row (when fid (db/find-field (:ds sys) user-id fid))]
-    (if-not row
+    (cond
+      (nil? row)
       {:ok false :code "field_not_found"}
+
+      (orders/field-in-open-order? sys fid)
+      (do
+        (log/warn "進行中の指示の対象なので消しません" :user-id user-id :id fid)
+        {:ok false :code "field_in_open_order"})
+
+      :else
       (do
         (paints/delete-paints-for-field! sys fid)
         (gantt/remove-field-targets! sys fid)
+        (orders/remove-field-targets! sys fid)
         (db/delete-field! (:ds sys) fid)
         (log/info "圃場を消しました" :user-id user-id :id fid)
         {:ok true}))))
@@ -334,6 +344,11 @@
       (nil? row)
       {:ok false :code "field_not_found"}
 
+      (orders/field-in-open-order? sys fid)
+      (do
+        (log/warn "進行中の指示の対象なので分割しません" :user-id user-id :id fid)
+        {:ok false :code "field_in_open_order"})
+
       (paints/field-has-paint? (:ds sys) fid)
       (do
         (log/warn "塗りが残っているので分割しません" :user-id user-id :id fid)
@@ -347,6 +362,7 @@
             temps (next-temp-names (db/field-names (:ds sys) user-id) (count polys))
             names (mapv #(with-temp-and-base % stem) temps)]
         (gantt/remove-field-targets! sys fid)
+        (orders/remove-field-targets! sys fid)
         (db/delete-field! (:ds sys) fid)
         (let [created (mapv (fn [nm gj]
                               (db/insert-field! (:ds sys) {:user-id user-id :name nm :geojson (geo/to-json gj)}))
@@ -368,25 +384,30 @@
       (let [rows (keep (fn [id] (db/find-field (:ds sys) user-id id)) ids)]
         (if (not= (count rows) (count (set ids)))
           {:ok false :code "field_not_found"}
-          (if (paints/any-field-has-paint? (:ds sys) ids)
+          (if (orders/any-field-in-open-order? sys ids)
             (do
-              (log/warn "塗りが残っているので合筆しません" :user-id user-id :ids ids)
-              {:ok false :code "field_has_paint"})
-          (let [gjs (map geo/parse-json (map :geojson rows))
-                union (geo/union-shapes gjs)
-                keep-row (first (filter #(= keep-id (:id %)) rows))
-                merge-name (preferred-merge-name keep-row rows)]
-            (if-not (geo/valid-shape? union)
-              {:ok false :code "shape_not_area"}
+              (log/warn "進行中の指示の対象があるので合筆しません" :user-id user-id :ids ids)
+              {:ok false :code "field_in_open_order"})
+            (if (paints/any-field-has-paint? (:ds sys) ids)
               (do
-                (db/update-field! (:ds sys) keep-id {:name merge-name :geojson (geo/to-json union)})
-                (run! (fn [id]
-                        (when (not= id keep-id)
-                          (gantt/remove-field-targets! sys id)
-                          (db/delete-field! (:ds sys) id)))
-                      ids)
-                (log/info "圃場を合筆しました" :user-id user-id :keep keep-id :ids ids)
-                {:ok true :field (present-field (db/find-field (:ds sys) user-id keep-id))})))))))))
+                (log/warn "塗りが残っているので合筆しません" :user-id user-id :ids ids)
+                {:ok false :code "field_has_paint"})
+              (let [gjs (map geo/parse-json (map :geojson rows))
+                    union (geo/union-shapes gjs)
+                    keep-row (first (filter #(= keep-id (:id %)) rows))
+                    merge-name (preferred-merge-name keep-row rows)]
+                (if-not (geo/valid-shape? union)
+                  {:ok false :code "shape_not_area"}
+                  (do
+                    (db/update-field! (:ds sys) keep-id {:name merge-name :geojson (geo/to-json union)})
+                    (run! (fn [id]
+                            (when (not= id keep-id)
+                              (gantt/remove-field-targets! sys id)
+                              (orders/remove-field-targets! sys id)
+                              (db/delete-field! (:ds sys) id)))
+                          ids)
+                    (log/info "圃場を合筆しました" :user-id user-id :keep keep-id :ids ids)
+                    {:ok true :field (present-field (db/find-field (:ds sys) user-id keep-id))}))))))))))
 
 (defn import-geojson [sys user-id upload]
   (let [u (upload->map upload)

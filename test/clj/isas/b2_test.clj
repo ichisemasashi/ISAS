@@ -115,4 +115,4 @@
             (is (= 2 (count (:fields r))))))
         (testing "B2-9 / B2-10"
           (is (nil? (http/match-api :post "/api/user/offline")))
-          (is (nil? (http/match-api :post "/api/user/orders"))))))))
+          (is (some? (http/match-api :post "/api/user/orders"))))))))

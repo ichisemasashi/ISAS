@@ -93,6 +93,51 @@
       PRIMARY KEY (gantt_id, field_id),
       FOREIGN KEY (gantt_id) REFERENCES gantt_rows(id),
       FOREIGN KEY (field_id) REFERENCES fields(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY,
+      issuer_id INTEGER NOT NULL,
+      work_date TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      work_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      closed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (issuer_id) REFERENCES users(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS order_recipients (
+      order_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      PRIMARY KEY (order_id, user_id),
+      FOREIGN KEY (order_id) REFERENCES orders(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS order_targets (
+      order_id INTEGER NOT NULL,
+      field_id INTEGER NOT NULL,
+      PRIMARY KEY (order_id, field_id),
+      FOREIGN KEY (order_id) REFERENCES orders(id),
+      FOREIGN KEY (field_id) REFERENCES fields(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS journals (
+      id INTEGER PRIMARY KEY,
+      order_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (order_id, user_id),
+      FOREIGN KEY (order_id) REFERENCES orders(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS relation_cuts (
+      user_lo INTEGER NOT NULL,
+      user_hi INTEGER NOT NULL,
+      cut_at TEXT NOT NULL,
+      PRIMARY KEY (user_lo, user_hi),
+      FOREIGN KEY (user_lo) REFERENCES users(id),
+      FOREIGN KEY (user_hi) REFERENCES users(id)
     )"])
 
 (defn datasource [jdbc-url]
@@ -240,7 +285,29 @@
 (defn delete-place! [ds user-id]
   (jdbc/execute-one! ds ["DELETE FROM work_places WHERE user_id = ?" user-id]))
 
+(defn delete-order-targets-for-field! [ds field-id]
+  (jdbc/execute-one! ds ["DELETE FROM order_targets WHERE field_id = ?" field-id]))
+
+(defn delete-orders-for-user!
+  "出した指示・受けた指示・日誌・対象・受け手を消す。"
+  [ds user-id]
+  (jdbc/execute-one! ds ["DELETE FROM journals WHERE user_id = ?" user-id])
+  (jdbc/execute-one! ds ["DELETE FROM journals WHERE order_id IN (SELECT id FROM orders WHERE issuer_id = ?)"
+                         user-id])
+  (jdbc/execute-one! ds ["DELETE FROM order_recipients WHERE user_id = ?" user-id])
+  (jdbc/execute-one! ds ["DELETE FROM order_recipients WHERE order_id IN (SELECT id FROM orders WHERE issuer_id = ?)"
+                         user-id])
+  (jdbc/execute-one! ds ["DELETE FROM order_targets WHERE order_id IN (SELECT id FROM orders WHERE issuer_id = ?)"
+                         user-id])
+  (jdbc/execute-one! ds ["DELETE FROM order_targets WHERE field_id IN (SELECT id FROM fields WHERE user_id = ?)"
+                         user-id])
+  (jdbc/execute-one! ds ["DELETE FROM orders WHERE issuer_id = ?" user-id]))
+
+(defn delete-relation-cuts-for-user! [ds user-id]
+  (jdbc/execute-one! ds ["DELETE FROM relation_cuts WHERE user_lo = ? OR user_hi = ?" user-id user-id]))
+
 (defn delete-fields-for-user! [ds user-id]
+  (delete-orders-for-user! ds user-id)
   (jdbc/execute-one! ds ["DELETE FROM gantt_targets WHERE field_id IN (SELECT id FROM fields WHERE user_id = ?)"
                          user-id])
   (jdbc/execute-one! ds ["DELETE FROM gantt_rows WHERE user_id = ?" user-id])
@@ -253,9 +320,10 @@
                          kind account-id]))
 
 (defn delete-user-owned-data!
-  "作業場所・下地行・圃場・塗り・再設定トークンを消す（下地ファイルは呼び出し側）。"
+  "作業場所・下地行・圃場・塗り・指示・日誌・関係切断・再設定トークンを消す（下地ファイルは呼び出し側）。"
   [ds user-id]
   (delete-fields-for-user! ds user-id)
+  (delete-relation-cuts-for-user! ds user-id)
   (delete-basemaps! ds user-id)
   (delete-place! ds user-id)
   (delete-reset-tokens-for-account! ds "user" user-id))
@@ -367,10 +435,191 @@
                          ORDER BY work_name"
                         user-id])))
 
+(defn list-issued-order-work-names [ds user-id]
+  (mapv :work_name
+        (jdbc/execute! ds
+                       ["SELECT DISTINCT work_name AS work_name FROM orders
+                         WHERE issuer_id = ? AND work_name IS NOT NULL AND work_name <> ''
+                         ORDER BY work_name"
+                        user-id])))
+
 (defn list-work-name-candidates [ds user-id]
   (->> (concat (list-work-names ds user-id)
-               (list-gantt-work-names ds user-id))
+               (list-gantt-work-names ds user-id)
+               (list-issued-order-work-names ds user-id))
        (remove str/blank?)
        distinct
        sort
        vec))
+
+(defn insert-order! [ds {:keys [issuer-id work-date start-time end-time work-name body]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO orders (issuer_id, work_date, start_time, end_time, work_name, body,
+                                           closed_at, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?) RETURNING *"
+                      issuer-id work-date start-time end-time work-name body
+                      (time/now-utc) (time/now-utc)]))
+
+(defn update-order-times-body! [ds id {:keys [work-date start-time end-time body]}]
+  (jdbc/execute-one! ds
+                     ["UPDATE orders SET work_date = ?, start_time = ?, end_time = ?, body = ?, updated_at = ?
+                       WHERE id = ? RETURNING *"
+                      work-date start-time end-time body (time/now-utc) id]))
+
+(defn close-order! [ds id]
+  (jdbc/execute-one! ds
+                     ["UPDATE orders SET closed_at = ?, updated_at = ? WHERE id = ? AND closed_at IS NULL RETURNING *"
+                      (time/now-utc) (time/now-utc) id]))
+
+(defn find-order [ds id]
+  (jdbc/execute-one! ds ["SELECT * FROM orders WHERE id = ?" id]))
+
+(defn list-orders-issued [ds user-id]
+  (jdbc/execute! ds ["SELECT * FROM orders WHERE issuer_id = ? ORDER BY work_date DESC, id DESC" user-id]))
+
+(defn list-orders-received [ds user-id]
+  (jdbc/execute! ds
+                 ["SELECT o.* FROM orders o
+                   JOIN order_recipients r ON r.order_id = o.id
+                   WHERE r.user_id = ?
+                   ORDER BY o.work_date DESC, o.id DESC"
+                  user-id]))
+
+(defn set-order-recipients! [ds order-id user-ids]
+  (jdbc/execute-one! ds ["DELETE FROM order_recipients WHERE order_id = ?" order-id])
+  (run! (fn [uid]
+          (jdbc/execute-one! ds ["INSERT INTO order_recipients (order_id, user_id) VALUES (?, ?)"
+                                 order-id uid]))
+        user-ids))
+
+(defn set-order-targets! [ds order-id field-ids]
+  (jdbc/execute-one! ds ["DELETE FROM order_targets WHERE order_id = ?" order-id])
+  (run! (fn [fid]
+          (jdbc/execute-one! ds ["INSERT INTO order_targets (order_id, field_id) VALUES (?, ?)"
+                                 order-id fid]))
+        field-ids))
+
+(defn list-order-recipient-ids [ds order-id]
+  (mapv :user_id
+        (jdbc/execute! ds ["SELECT user_id FROM order_recipients WHERE order_id = ? ORDER BY user_id"
+                           order-id])))
+
+(defn list-order-target-ids [ds order-id]
+  (mapv :field_id
+        (jdbc/execute! ds ["SELECT field_id FROM order_targets WHERE order_id = ? ORDER BY field_id"
+                           order-id])))
+
+(defn order-recipient? [ds order-id user-id]
+  (some? (jdbc/execute-one! ds ["SELECT 1 AS x FROM order_recipients WHERE order_id = ? AND user_id = ?"
+                                order-id user-id])))
+
+(defn insert-journal! [ds {:keys [order-id user-id body]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO journals (order_id, user_id, body, created_at)
+                       VALUES (?, ?, ?, ?) RETURNING *"
+                      order-id user-id body (time/now-utc)]))
+
+(defn find-journal [ds order-id user-id]
+  (jdbc/execute-one! ds ["SELECT * FROM journals WHERE order_id = ? AND user_id = ?"
+                         order-id user-id]))
+
+(defn list-journals-for-order [ds order-id]
+  (jdbc/execute! ds ["SELECT * FROM journals WHERE order_id = ? ORDER BY id" order-id]))
+
+(defn relation-pair [a b]
+  (let [lo (min (long a) (long b))
+        hi (max (long a) (long b))]
+    [lo hi]))
+
+(defn upsert-relation-cut! [ds user-a user-b]
+  (let [[lo hi] (relation-pair user-a user-b)
+        cut-at (time/now-utc)]
+    (jdbc/execute-one! ds
+                       ["INSERT INTO relation_cuts (user_lo, user_hi, cut_at)
+                         VALUES (?, ?, ?)
+                         ON CONFLICT(user_lo, user_hi) DO UPDATE SET cut_at = excluded.cut_at
+                         RETURNING *"
+                        lo hi cut-at])))
+
+(defn find-relation-cut [ds user-a user-b]
+  (let [[lo hi] (relation-pair user-a user-b)]
+    (jdbc/execute-one! ds ["SELECT * FROM relation_cuts WHERE user_lo = ? AND user_hi = ?" lo hi])))
+
+(defn field-in-open-order? [ds field-id]
+  (some? (jdbc/execute-one! ds
+                            ["SELECT 1 AS x FROM order_targets t
+                              JOIN orders o ON o.id = t.order_id
+                              WHERE t.field_id = ? AND o.closed_at IS NULL"
+                             field-id])))
+
+(defn any-field-in-open-order? [ds field-ids]
+  (boolean (some #(field-in-open-order? ds %) field-ids)))
+
+(defn open-order-between? [ds user-a user-b]
+  "どちらの向きでも進行中の指示があるか。"
+  (some? (jdbc/execute-one! ds
+                            ["SELECT 1 AS x FROM orders o
+                              JOIN order_recipients r ON r.order_id = o.id
+                              WHERE o.closed_at IS NULL
+                                AND ((o.issuer_id = ? AND r.user_id = ?)
+                                  OR (o.issuer_id = ? AND r.user_id = ?))"
+                             user-a user-b user-b user-a])))
+
+(defn field-visible-to-viewer?
+  "§3.4: 所有者でない受け手が、切断より後の指示で対象になった圃場か。"
+  [ds viewer-id field-id]
+  (let [field (jdbc/execute-one! ds ["SELECT * FROM fields WHERE id = ?" field-id])]
+    (boolean
+     (when (and field (not= (long (:user_id field)) (long viewer-id)))
+       (let [owner-id (:user_id field)
+             cut (find-relation-cut ds owner-id viewer-id)
+             cut-at (:cut_at cut)]
+         (some? (jdbc/execute-one! ds
+                                   (if cut-at
+                                     ["SELECT 1 AS x FROM order_targets t
+                                       JOIN orders o ON o.id = t.order_id
+                                       JOIN order_recipients r ON r.order_id = o.id
+                                       WHERE t.field_id = ? AND o.issuer_id = ? AND r.user_id = ?
+                                         AND o.created_at > ?"
+                                      field-id owner-id viewer-id cut-at]
+                                     ["SELECT 1 AS x FROM order_targets t
+                                       JOIN orders o ON o.id = t.order_id
+                                       JOIN order_recipients r ON r.order_id = o.id
+                                       WHERE t.field_id = ? AND o.issuer_id = ? AND r.user_id = ?"
+                                      field-id owner-id viewer-id]))))))))
+
+(defn list-visible-other-fields [ds viewer-id]
+  (jdbc/execute! ds
+                 ["SELECT DISTINCT f.*, u.email AS owner_email
+                   FROM fields f
+                   JOIN users u ON u.id = f.user_id
+                   JOIN order_targets t ON t.field_id = f.id
+                   JOIN orders o ON o.id = t.order_id AND o.issuer_id = f.user_id
+                   JOIN order_recipients r ON r.order_id = o.id AND r.user_id = ?
+                   LEFT JOIN relation_cuts c
+                     ON c.user_lo = CASE WHEN f.user_id < ? THEN f.user_id ELSE ? END
+                    AND c.user_hi = CASE WHEN f.user_id < ? THEN ? ELSE f.user_id END
+                   WHERE f.user_id <> ?
+                     AND (c.cut_at IS NULL OR o.created_at > c.cut_at)
+                   ORDER BY f.id"
+                  viewer-id viewer-id viewer-id viewer-id viewer-id viewer-id]))
+
+(defn list-related-other-work-names [ds viewer-id]
+  (mapv :work_name
+        (jdbc/execute! ds
+                       ["SELECT DISTINCT o.work_name AS work_name
+                         FROM fields f
+                         JOIN order_targets t ON t.field_id = f.id
+                         JOIN orders o ON o.id = t.order_id AND o.issuer_id = f.user_id
+                         JOIN order_recipients r ON r.order_id = o.id AND r.user_id = ?
+                         LEFT JOIN relation_cuts c
+                           ON c.user_lo = CASE WHEN f.user_id < ? THEN f.user_id ELSE ? END
+                          AND c.user_hi = CASE WHEN f.user_id < ? THEN ? ELSE f.user_id END
+                         WHERE f.user_id <> ?
+                           AND (c.cut_at IS NULL OR o.created_at > c.cut_at)
+                           AND o.work_name IS NOT NULL AND o.work_name <> ''
+                         ORDER BY o.work_name"
+                        viewer-id viewer-id viewer-id viewer-id viewer-id viewer-id])))
+
+(defn find-field-any [ds field-id]
+  (jdbc/execute-one! ds ["SELECT * FROM fields WHERE id = ?" field-id]))

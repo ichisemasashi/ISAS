@@ -35,8 +35,8 @@
           (let [sid (tu/user-sid app "b1@example.com" pw)]
             (is (seq (:initial_password (tu/parse (tu/post-json app "/api/user/invite"
                                                                {:email "from-user@example.com"} "user" sid)))))))
-        (testing "B1-2-05 後工程のうち未着手は出さない（指示・言語切替）"
-          (is (nil? (http/match-api :post "/api/user/orders")))
+        (testing "B1-2-05 後工程のうち未着手は出さない（言語切替）"
+          (is (some? (http/match-api :post "/api/user/orders")))
           (is (nil? (http/match-api :put "/api/user/locale")))
           (is (not (re-find #"言語切替|English" (html {:page :home :kind "user"})))))
         (testing "B1-2-06 端末で入口を分けない"
@@ -121,7 +121,7 @@
             (is (:email user))
             (is (contains? user :revoked_at))
             (is (contains? names "gantt_rows"))
-            (is (not (contains? names "orders")))))
+            (is (contains? names "orders"))))
         (testing "B1-7.1 招待して入る／取り消す"
           (let [inv (accounts/invite sys "admin" 1 "flow@example.com")]
             (is (true? (:ok (accounts/login sys "user" "flow@example.com" (:initial_password inv)))))

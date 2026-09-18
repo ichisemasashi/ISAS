@@ -107,7 +107,49 @@
    :title-required "題名を入れてください"
    :title-too-long "題名は200文字以内にしてください"
    :time-invalid "開始と終了は分までの日時にしてください"
-   :gantt-not-found "その予定はありません"})
+   :gantt-not-found "その予定はありません"
+   :orders-title "指示"
+   :orders-create "指示を出す"
+   :orders-close "この指示を閉じる"
+   :orders-journal "日誌を書く"
+   :others-title "他人の対象圃場"
+   :relations-title "関係を切る"
+   :order-no-fields "圃場が1枚以上あるときだけ、指示を出せます"
+   :recipient-not-user "このメールアドレスの利用者には出せません"
+   :recipient-self "自分は受け手に含められません"
+   :relation-busy "進行中の指示がある二人は関係を切れません"
+   :phone-orders-edit "指示の作成・修正・閉じはパソコンで開いてください"
+   :phone-others "他人の対象圃場のまとめはパソコンで開いてください"
+   :order-not-found "その指示はありません"
+   :order-closed "この指示はすでに閉じています"
+   :order-not-issuer "出した人だけができます"
+   :order-not-recipient "受け手だけが日誌を書けます"
+   :journal-exists "すでに日誌を書いています"
+   :journal-required "日誌の本文を入れてください"
+   :journal-too-long "日誌は2000文字以内にしてください"
+   :body-too-long "依頼文は2000文字以内にしてください"
+   :recipients-required "受け手を1人以上入れてください"
+   :fields-required "対象圃場を1枚以上選んでください"
+   :field-in-open-order "進行中の指示の対象なので、この操作はできません"
+   :work-name-unrelated "関係した指示に無い作業名です"
+   :relation-not-found "その二人の利用者は切れません"
+   :relation-idle "いま見えている相手の圃場が無いので切りません"
+   :order-open "進行中"
+   :order-closed-label "閉じた"
+   :order-work-date "日付"
+   :order-start "開始"
+   :order-end "終了"
+   :order-body "依頼文"
+   :order-recipients "受け手"
+   :order-fields "対象圃場"
+   :order-journals "日誌"
+   :order-sent "出した指示"
+   :order-received "受けた指示"
+   :order-save "指示を保存"
+   :order-update "依頼文と時刻を直す"
+   :relations-cut-ok "関係を切りました"
+   :order-time-invalid "日付は YYYY-MM-DD、時刻は HH:MM にしてください"
+   :order-time-order "終了は開始より後にしてください"})
 
 (def paint-colors
   {:none "#c8c8c8"
@@ -152,6 +194,23 @@
     "title_too_long" (:title-too-long messages)
     "time_invalid" (:time-invalid messages)
     "time_order" (:gantt-time-order messages)
+    "order_not_found" (:order-not-found messages)
+    "order_closed" (:order-closed messages)
+    "order_not_issuer" (:order-not-issuer messages)
+    "order_not_recipient" (:order-not-recipient messages)
+    "journal_exists" (:journal-exists messages)
+    "journal_required" (:journal-required messages)
+    "journal_too_long" (:journal-too-long messages)
+    "body_too_long" (:body-too-long messages)
+    "recipients_required" (:recipients-required messages)
+    "recipient_self" (:recipient-self messages)
+    "recipient_not_user" (:recipient-not-user messages)
+    "fields_required" (:fields-required messages)
+    "field_in_open_order" (:field-in-open-order messages)
+    "work_name_unrelated" (:work-name-unrelated messages)
+    "relation_busy" (:relation-busy messages)
+    "relation_not_found" (:relation-not-found messages)
+    "relation_idle" (:relation-idle messages)
     (:api-error messages)))
 
 (defn encode-q [s]
@@ -233,28 +292,36 @@
       :else p)))
 
 (defn route-for [path]
-  (case (normalize-path path)
-    "/" {:page :login :kind "user"}
-    "/reset/request" {:page :reset-request :kind "user"}
-    "/reset" {:page :reset :kind "user"}
-    "/home" {:page :home :kind "user"}
-    "/invite" {:page :invite :kind "user"}
-    "/password" {:page :password :kind "user"}
-    "/fields" {:page :fields :kind "user"}
-    "/map" {:page :map :kind "user"}
-    "/map/place" {:page :map-place :kind "user"}
-    "/gantt" {:page :gantt :kind "user"}
-    "/admin" {:page :login :kind "admin"}
-    "/admin/reset/request" {:page :reset-request :kind "admin"}
-    "/admin/reset" {:page :reset :kind "admin"}
-    "/admin/home" {:page :home :kind "admin"}
-    "/admin/invite" {:page :invite :kind "admin"}
-    "/admin/users" {:page :users :kind "admin"}
-    "/admin/password" {:page :password :kind "admin"}
-    "/admin/fields" {:page :fields :kind "user"}
-    "/admin/map" {:page :map :kind "user"}
-    "/admin/map/place" {:page :map-place :kind "user"}
-    {:page :unknown :kind "user"}))
+  (let [p (normalize-path path)]
+    (or (case p
+          "/" {:page :login :kind "user"}
+          "/reset/request" {:page :reset-request :kind "user"}
+          "/reset" {:page :reset :kind "user"}
+          "/home" {:page :home :kind "user"}
+          "/invite" {:page :invite :kind "user"}
+          "/password" {:page :password :kind "user"}
+          "/fields" {:page :fields :kind "user"}
+          "/map" {:page :map :kind "user"}
+          "/map/place" {:page :map-place :kind "user"}
+          "/gantt" {:page :gantt :kind "user"}
+          "/orders" {:page :orders :kind "user"}
+          "/orders/new" {:page :orders-new :kind "user"}
+          "/others" {:page :others :kind "user"}
+          "/admin" {:page :login :kind "admin"}
+          "/admin/reset/request" {:page :reset-request :kind "admin"}
+          "/admin/reset" {:page :reset :kind "admin"}
+          "/admin/home" {:page :home :kind "admin"}
+          "/admin/invite" {:page :invite :kind "admin"}
+          "/admin/users" {:page :users :kind "admin"}
+          "/admin/password" {:page :password :kind "admin"}
+          "/admin/relations" {:page :relations :kind "admin"}
+          "/admin/fields" {:page :fields :kind "user"}
+          "/admin/map" {:page :map :kind "user"}
+          "/admin/map/place" {:page :map-place :kind "user"}
+          nil)
+        (when-let [[_ id] (re-matches #"/orders/(\d+)" p)]
+          {:page :order :kind "user" :order-id id})
+        {:page :unknown :kind "user"})))
 
 (defn login-path [kind]
   (if (= kind "admin") "/admin" "/"))
@@ -263,7 +330,8 @@
   (if (= kind "admin") "/admin/home" "/home"))
 
 (defn needs-auth? [page]
-  (contains? #{:home :invite :password :users :fields :map :map-place :gantt} page))
+  (contains? #{:home :invite :password :users :fields :map :map-place :gantt
+               :orders :orders-new :order :others :relations} page))
 
 (defn init-state []
   {:path "/"
@@ -288,7 +356,15 @@
    :gantt-rows []
    :gantt-selected nil
    :gantt-progress nil
-   :gantt-axis "day"})
+   :gantt-axis "day"
+   :orders-sent []
+   :orders-received []
+   :order nil
+   :order-map nil
+   :order-id nil
+   :others-fields []
+   :others-work-names []
+   :others-paint-data nil})
 
 (defn map-mode [state]
   (let [m (:map-mode state)
@@ -329,7 +405,7 @@
   "<nav><a data-nav href=\"/home\">ホーム</a><a data-nav href=\"/fields\">圃場台帳</a><a data-nav href=\"/map\">地図</a><a data-nav href=\"/invite\">招待</a><a data-nav href=\"/password\">パスワード</a><form data-act=\"logout\" method=\"post\"><button type=\"submit\">ログアウト</button></form></nav>")
 
 (defn nav-admin []
-  "<nav><a data-nav href=\"/admin/home\">ホーム</a><a data-nav href=\"/admin/invite\">招待</a><a data-nav href=\"/admin/users\">取消し</a><a data-nav href=\"/admin/password\">パスワード</a><form data-act=\"logout\" method=\"post\"><button type=\"submit\">ログアウト</button></form></nav>")
+  "<nav><a data-nav href=\"/admin/home\">ホーム</a><a data-nav href=\"/admin/invite\">招待</a><a data-nav href=\"/admin/users\">取消し</a><a data-nav href=\"/admin/relations\">関係を切る</a><a data-nav href=\"/admin/password\">パスワード</a><form data-act=\"logout\" method=\"post\"><button type=\"submit\">ログアウト</button></form></nav>")
 
 (defn login-view [state]
   (let [admin? (= "admin" (:kind state))
@@ -369,7 +445,13 @@
                  (flash-html state)
                  "<p>" (esc (get-in state [:session :email])) "</p>"
                  (when (and (not admin?) (seq (:fields state)))
-                   (str "<p><a data-nav href=\"/gantt\">" (esc (:gantt-title messages)) "</a></p>"))))))
+                   (str "<p><a data-nav href=\"/gantt\">" (esc (:gantt-title messages)) "</a></p>"
+                        "<p><a data-nav href=\"/orders/new\">" (esc (:orders-create messages)) "</a></p>"))
+                 (when (not admin?)
+                   (str "<p><a data-nav href=\"/orders\">" (esc (:orders-title messages)) "</a></p>"
+                        "<p><a data-nav href=\"/others\">" (esc (:others-title messages)) "</a></p>"))
+                 (when admin?
+                   (str "<p><a data-nav href=\"/admin/relations\">" (esc (:relations-title messages)) "</a></p>"))))))
 
 (defn invite-view [state]
   (layout "利用者を招待"
@@ -408,11 +490,197 @@
   (layout "ISAS" "<p>このページはありません。</p><p><a data-nav href=\"/\">利用者入口</a></p>"))
 
 (defn phone-view [state]
-  (if (= :gantt (:page state))
+  (cond
+    (= :orders-new (:page state))
+    (layout (:orders-title messages)
+            (str (nav-user) (flash-html state) "<p>" (esc (:phone-orders-edit messages)) "</p>"))
+
+    (= :others (:page state))
+    (layout (:others-title messages)
+            (str (nav-user) (flash-html state) "<p>" (esc (:phone-others messages)) "</p>"))
+
+    (= :gantt (:page state))
     (layout (:gantt-title messages)
             (str (nav-user) (flash-html state) "<p>" (esc (:phone-gantt messages)) "</p>"))
+
+    :else
     (layout (:map-title messages)
             (str (nav-user) (flash-html state) "<p>" (esc (:phone-map messages)) "</p>"))))
+
+(defn- order-status-label [status]
+  (if (= "closed" status)
+    (:order-closed-label messages)
+    (:order-open messages)))
+
+(defn- order-list-items [rows]
+  (apply str
+         (for [o rows]
+           (str "<li><a data-nav href=\"/orders/" (esc (:id o)) "\">"
+                (esc (:work_date o)) " "
+                (esc (:work_name o)) "（" (esc (order-status-label (:status o))) "）"
+                "</a></li>"))))
+
+(defn orders-view [state]
+  (layout (:orders-title messages)
+          (str (nav-user)
+               (flash-html state)
+               (when (and (not (:narrow? state)) (seq (:fields state)))
+                 (str "<p><a data-nav href=\"/orders/new\">" (esc (:orders-create messages)) "</a></p>"))
+               "<h2>" (esc (:order-sent messages)) "</h2>"
+               "<ul>" (order-list-items (:orders-sent state)) "</ul>"
+               "<h2>" (esc (:order-received messages)) "</h2>"
+               "<ul>" (order-list-items (:orders-received state)) "</ul>")))
+
+(defn orders-new-view [state]
+  (if (empty? (:fields state))
+    (layout (:orders-title messages)
+            (str (nav-user) (flash-html state)
+                 "<p>" (esc (:order-no-fields messages)) "</p>"))
+    (let [form (or (:form state) {})]
+      (layout (:orders-create messages)
+              (str (nav-user)
+                   (flash-html state)
+                   "<form data-act=\"create-order\" method=\"post\">"
+                   "<label>" (esc (:order-work-date messages))
+                   "<input name=\"work_date\" value=\"" (esc (:work_date form)) "\"></label>"
+                   "<label>" (esc (:order-start messages))
+                   "<input name=\"start_time\" value=\"" (esc (:start_time form)) "\"></label>"
+                   "<label>" (esc (:order-end messages))
+                   "<input name=\"end_time\" value=\"" (esc (:end_time form)) "\"></label>"
+                   "<label>" (esc (:work-name messages))
+                   "<input name=\"work_name\" list=\"work-name-list\" value=\"" (esc (:work_name form)) "\">"
+                   "<datalist id=\"work-name-list\">"
+                   (apply str (for [n (:work-names state)]
+                                (str "<option value=\"" (esc n) "\">")))
+                   "</datalist></label>"
+                   "<label>" (esc (:order-body messages))
+                   "<textarea name=\"body\">" (esc (:body form)) "</textarea></label>"
+                   "<label>" (esc (:order-recipients messages))
+                   "<input name=\"recipient_emails\" value=\"" (esc (:recipient_emails form)) "\"></label>"
+                   "<fieldset><legend>" (esc (:order-fields messages)) "</legend>"
+                   (apply str
+                          (for [f (:fields state)]
+                            (str "<label><input type=\"checkbox\" name=\"field_ids\" value=\"" (esc (:id f)) "\""
+                                 (when (some #{(:id f) (str (:id f))} (or (:field_ids form) []))
+                                   " checked")
+                                 ">" (esc (:name f)) "</label>")))
+                   "</fieldset>"
+                   "<button type=\"submit\">" (esc (:order-save messages)) "</button></form>")))))
+
+(defn- order-map-html [state]
+  (let [m (:order-map state)
+        fields (or (:fields m) [])
+        ids (mapv :id fields)
+        statuses (into {} (map (fn [f] [(:id f) (:status f)]) fields))
+        wn (or (:work_name m) (get-in state [:order :work_name]))]
+    (when (seq fields)
+      (str "<div class=\"ol-map\" data-order-mode=\"1\""
+           " data-target-ids=\"" (esc (str/join "," ids)) "\""
+           (when wn (str " data-work-name=\"" (esc wn) "\""))
+           " data-statuses=\"" (esc (pr-str statuses)) "\""
+           "></div>"))))
+
+(defn order-view [state]
+  (let [o (:order state)
+        narrow? (:narrow? state)
+        issuer? (= "issuer" (:role o))
+        recipient? (= "recipient" (:role o))
+        open? (= "open" (:status o))
+        can-edit? (and issuer? open? (not narrow?))
+        can-journal? (and recipient? open?
+                          (not (some #(= (get-in state [:session :email]) (:author_email %))
+                                     (or (:journals o) []))))]
+    (if-not o
+      (layout (:orders-title messages)
+              (str (nav-user) (flash-html state)
+                   "<p>" (esc (:order-not-found messages)) "</p>"))
+      (layout (:orders-title messages)
+              (str (nav-user)
+                   (flash-html state)
+                   "<p>" (esc (:work_date o)) " "
+                   (esc (:start_time o)) "〜" (esc (:end_time o))
+                   " / " (esc (order-status-label (:status o))) "</p>"
+                   "<p>" (esc (:work-name messages)) ": " (esc (:work_name o)) "</p>"
+                   "<p>" (esc (:order-body messages)) ": " (esc (:body o)) "</p>"
+                   "<p>" (esc (:order-recipients messages)) ": "
+                   (esc (str/join ", " (or (:recipient_emails o) []))) "</p>"
+                   "<p>" (esc (:order-fields messages)) ": "
+                   (esc (str/join ", " (keep :name (:fields o)))) "</p>"
+                   (or (order-map-html state) "")
+                   (when narrow?
+                     (str "<p>" (esc (:phone-orders-edit messages)) "</p>"))
+                   (when can-edit?
+                     (str "<form data-act=\"update-order\" method=\"post\">"
+                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id o)) "\">"
+                          "<label>" (esc (:order-work-date messages))
+                          "<input name=\"work_date\" value=\"" (esc (:work_date o)) "\"></label>"
+                          "<label>" (esc (:order-start messages))
+                          "<input name=\"start_time\" value=\"" (esc (:start_time o)) "\"></label>"
+                          "<label>" (esc (:order-end messages))
+                          "<input name=\"end_time\" value=\"" (esc (:end_time o)) "\"></label>"
+                          "<label>" (esc (:order-body messages))
+                          "<textarea name=\"body\">" (esc (:body o)) "</textarea></label>"
+                          "<button type=\"submit\">" (esc (:order-update messages)) "</button></form>"
+                          "<form data-act=\"close-order\" method=\"post\">"
+                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id o)) "\">"
+                          "<button type=\"submit\">" (esc (:orders-close messages)) "</button></form>"))
+                   "<h2>" (esc (:order-journals messages)) "</h2>"
+                   "<ul>"
+                   (apply str
+                          (for [j (:journals o)]
+                            (str "<li>" (esc (:author_email j)) ": " (esc (:body j)) "</li>")))
+                   "</ul>"
+                   (when can-journal?
+                     (str "<form data-act=\"post-journal\" method=\"post\">"
+                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id o)) "\">"
+                          "<label>" (esc (:orders-journal messages))
+                          "<textarea name=\"body\"></textarea></label>"
+                          "<button type=\"submit\">" (esc (:orders-journal messages)) "</button></form>")))))))
+
+(defn others-view [state]
+  (let [form (or (:form state) {})
+        wn (str/trim (str (or (:work_name form) "")))
+        paint (:others-paint-data state)]
+    (layout (:others-title messages)
+            (str (nav-user)
+                 (flash-html state)
+                 "<form data-act=\"select-others-work-name\" method=\"post\">"
+                 "<label>" (esc (:work-name messages))
+                 "<input name=\"work_name\" list=\"others-work-list\" value=\"" (esc wn) "\">"
+                 "<datalist id=\"others-work-list\">"
+                 (apply str (for [n (:others-work-names state)]
+                              (str "<option value=\"" (esc n) "\">")))
+                 "</datalist></label>"
+                 "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>"
+                 "<div class=\"ol-map\" data-others-mode=\"1\""
+                 (when (seq (:others-fields state))
+                   (str " data-target-ids=\""
+                        (esc (str/join "," (map :id (:others-fields state)))) "\""))
+                 (when (and paint wn)
+                   (str " data-work-name=\"" (esc wn) "\""))
+                 "></div>"
+                 "<ul>"
+                 (apply str
+                        (for [f (:others-fields state)]
+                          (let [st (when paint
+                                     (some #(when (= (:id %) (:id f)) (:status %))
+                                           (:fields paint)))]
+                            (str "<li>" (esc (:name f)) " / " (esc (:owner_email f))
+                                 (when st (str "（" (esc (get {:none (:status-none messages)
+                                                                :partial (:status-partial messages)
+                                                                :done (:status-done messages)}
+                                                              (keyword st) st)) "）"))
+                                 "</li>"))))
+                 "</ul>"))))
+
+(defn relations-view [state]
+  (layout (:relations-title messages)
+          (str (nav-admin)
+               (flash-html state)
+               "<form data-act=\"cut-relation\" method=\"post\">"
+               "<label>メールアドレス A<input name=\"email_a\" type=\"email\" required></label>"
+               "<label>メールアドレス B<input name=\"email_b\" type=\"email\" required></label>"
+               "<button type=\"submit\">" (esc (:relations-title messages)) "</button></form>")))
 
 (defn fields-view [state]
   (layout (:fields-title messages)
@@ -843,7 +1111,7 @@
                       "></div>")))))))
 
 (defn render [state]
-  (if (and (:narrow? state) (contains? #{:fields :map :map-place :gantt} (:page state)))
+  (if (and (:narrow? state) (contains? #{:fields :map :map-place :gantt :orders-new :others} (:page state)))
     (phone-view state)
     (case (:page state)
       :login (login-view state)
@@ -857,6 +1125,11 @@
       :map (if (:place state) (map-view state) (map-place-view state))
       :map-place (map-place-view state)
       :gantt (gantt-view state)
+      :orders (orders-view state)
+      :orders-new (orders-new-view state)
+      :order (order-view state)
+      :others (others-view state)
+      :relations (relations-view state)
       (unknown-view))))
 
 (defn apply-route [state path search]
@@ -866,6 +1139,7 @@
            :search (or search "")
            :page (:page r)
            :kind (:kind r)
+           :order-id (:order-id r)
            :initial-password nil)))
 
 (defn guarded [state]
@@ -901,6 +1175,19 @@
 
       (and (= :fields (:page s)) (:session s) (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+
+      (and (= :orders (:page s)) (:session s))
+      {:state s :fx [[:api "GET" "/api/user/orders" nil :orders-loaded]
+                     [:api "GET" "/api/user/fields" nil :home-fields-loaded]]}
+
+      (and (= :orders-new (:page s)) (:session s) (not (:narrow? s)))
+      {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+
+      (and (= :order (:page s)) (:session s))
+      {:state s :fx [[:api "GET" (str "/api/user/orders/" (:order-id s)) nil :order-loaded]]}
+
+      (and (= :others (:page s)) (:session s) (not (:narrow? s)))
+      {:state s :fx [[:api "GET" "/api/user/others/fields" nil :others-fields-loaded]]}
 
       (= :home (:page s))
       (if (and (= "user" (:kind s)) (some? (:session s)))
@@ -938,6 +1225,24 @@
     (cond
       (and (= :gantt (:page s)) (empty? (:fields s)))
       (guarded s)
+
+      (= :orders-new (:page s))
+      (let [defaults #?(:clj {:work_date (time/today-work-date)
+                              :start_time (time/order-default-start)
+                              :end_time (time/order-default-end)
+                              :work_name ""
+                              :body ""
+                              :recipient_emails ""
+                              :field_ids []}
+                        :cljs {:work_date ""
+                               :start_time "08:00"
+                               :end_time "17:00"
+                               :work_name ""
+                               :body ""
+                               :recipient_emails ""
+                               :field_ids []})
+            s2 (assoc s :form (merge defaults (or (:form s) {})))]
+        {:state s2 :fx [[:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]})
 
       (#{:map :map-place :gantt} (:page s))
       {:state s :fx [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]]}
@@ -1010,6 +1315,89 @@
     (let [s (assoc state :gantt-progress nil
                    :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
+
+(defn orders-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state
+                    :orders-sent (or (:sent body) [])
+                    :orders-received (or (:received body) [])))
+    (let [s (assoc state :orders-sent [] :orders-received []
+                   :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn order-loaded [state body]
+  (if (:ok body)
+    (let [s (assoc state :order (dissoc body :ok) :flash nil)]
+      {:state s
+       :fx [[:api "GET" (str "/api/user/orders/" (:id body) "/map") nil :order-map-loaded]]})
+    (let [s (assoc state :order nil :order-map nil
+                   :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn order-map-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :order-map (dissoc body :ok)))
+    (guarded (assoc state :order-map nil))))
+
+(defn order-save-result [state body]
+  (if (:ok body)
+    (let [id (:id body)]
+      {:state (assoc state :order (dissoc body :ok) :flash nil)
+       :fx [[:nav (str "/orders/" id)]]})
+    (let [code (:code body)
+          text (cond
+                 (= "no_fields" code) (:order-no-fields messages)
+                 (= "time_invalid" code) (:order-time-invalid messages)
+                 (= "time_order" code) (:order-time-order messages)
+                 :else (code-message code))
+          s (assoc state :flash {:error? true :text text})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn journal-save-result [state body]
+  (if (:ok body)
+    {:state (assoc state :order (dissoc body :ok) :flash nil)
+     :fx [[:api "GET" (str "/api/user/orders/" (:id body)) nil :order-loaded]]}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn others-fields-loaded [state body]
+  (if (:ok body)
+    (let [s (assoc state :others-fields (or (:fields body) []))]
+      {:state s :fx [[:api "GET" "/api/user/others/work-names" nil :others-work-names-loaded]]})
+    (let [s (assoc state :others-fields []
+                   :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn others-work-names-loaded [state body]
+  (guarded (assoc state :others-work-names (or (:work_names body) []))))
+
+(defn others-paints-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :others-paint-data (dissoc body :ok) :flash nil))
+    (let [s (assoc state :others-paint-data nil
+                   :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn relation-cut-result [state body]
+  (if (:ok body)
+    (let [s (assoc state :flash {:error? false :text (:relations-cut-ok messages)})]
+      {:state s :fx [[:html (render s)]]})
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn- parse-recipient-emails [s]
+  (->> (str/split (str (or s "")) #"[,\s]+")
+       (map str/trim)
+       (remove str/blank?)
+       vec))
+
+(defn- parse-field-ids-form [form]
+  (let [v (:field_ids form)]
+    (cond
+      (sequential? v) (mapv str v)
+      (nil? v) []
+      (str/blank? (str v)) []
+      :else [(str v)])))
 
 (defn after-place-preview [state body]
   (if (:ok body)
@@ -1195,6 +1583,15 @@
       :gantt-loaded (gantt-loaded state arg)
       :gantt-save-result (gantt-save-result state arg)
       :gantt-progress-loaded (gantt-progress-loaded state arg)
+      :orders-loaded (orders-loaded state arg)
+      :order-loaded (order-loaded state arg)
+      :order-map-loaded (order-map-loaded state arg)
+      :order-save-result (order-save-result state arg)
+      :journal-save-result (journal-save-result state arg)
+      :others-fields-loaded (others-fields-loaded state arg)
+      :others-work-names-loaded (others-work-names-loaded state arg)
+      :others-paints-loaded (others-paints-loaded state arg)
+      :relation-cut-result (relation-cut-result state arg)
       :place-preview-result (after-place-preview state arg)
       :place-save-result (after-place-save state arg)
       :emaff-import-result (after-emaff-import state arg)
@@ -1226,6 +1623,10 @@
                 (= :gantt (:page s))
                 (assoc s :gantt-selected nil :gantt-progress nil :gantt-axis "day"
                        :form {} :paint-data nil)
+
+                (#{:orders :orders-new :order :others} (:page s))
+                (assoc s :order nil :order-map nil :others-paint-data nil
+                       :form {} :orders-sent [] :orders-received [] :others-fields [])
 
                 :else s)]
         (if (and (:session s) (= (:kind s) (:kind state)))
@@ -1443,5 +1844,56 @@
               :else
               {:state state
                :fx [[:api "PUT" (str "/api/user/gantt/" id) body :gantt-save-result]]}))
+          "create-order"
+          (let [emails (parse-recipient-emails (:recipient_emails form))
+                fids (parse-field-ids-form form)
+                body {:work_date (str/trim (as-text (:work_date form)))
+                      :start_time (str/trim (as-text (:start_time form)))
+                      :end_time (str/trim (as-text (:end_time form)))
+                      :work_name (str/trim (as-text (:work_name form)))
+                      :body (as-text (:body form))
+                      :recipient_emails emails
+                      :field_ids fids}
+                s (assoc state :form (merge (or (:form state) {}) form
+                                            {:recipient_emails (:recipient_emails form)
+                                             :field_ids fids}))]
+            {:state s
+             :fx [[:api "POST" "/api/user/orders" body :order-save-result]]})
+          "update-order"
+          (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))
+                body {:work_date (str/trim (as-text (:work_date form)))
+                      :start_time (str/trim (as-text (:start_time form)))
+                      :end_time (str/trim (as-text (:end_time form)))
+                      :body (as-text (:body form))}]
+            (if (str/blank? id)
+              (flash-html-state state (:order-not-found messages))
+              {:state state
+               :fx [[:api "PUT" (str "/api/user/orders/" id) body :order-save-result]]}))
+          "close-order"
+          (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))]
+            (if (str/blank? id)
+              (flash-html-state state (:order-not-found messages))
+              {:state state
+               :fx [[:api "POST" (str "/api/user/orders/" id "/close") {} :order-save-result]]}))
+          "post-journal"
+          (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))]
+            (if (str/blank? id)
+              (flash-html-state state (:order-not-found messages))
+              {:state state
+               :fx [[:api "POST" (str "/api/user/orders/" id "/journal")
+                     {:body (:body form)}
+                     :journal-save-result]]}))
+          "select-others-work-name"
+          (let [wn (str/trim (as-text (:work_name form)))]
+            (if (str/blank? wn)
+              (flash-html-state (assoc state :form (assoc (:form state) :work_name "")
+                                       :others-paint-data nil)
+                                (:work-name-needed messages))
+              {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil)
+               :fx [[:api "GET" (str "/api/user/others/paints?work_name=" (encode-q wn))
+                     nil :others-paints-loaded]]}))
+          "cut-relation"
+          {:state state
+           :fx [[:api "POST" "/api/admin/relations/cut" form :relation-cut-result]]}
           {:state state :fx [[:html (render state)]]}))
       {:state state :fx [[:html (render state)]]})))

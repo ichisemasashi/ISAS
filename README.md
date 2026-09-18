@@ -6,7 +6,7 @@
 
 第1版の要求は [docs/要求仕様書.md](docs/要求仕様書.md) を正とする。工程ごとの振る舞いは [docs/基本仕様書.md](docs/基本仕様書.md) を正とする。論理構成は [docs/基本設計書.md](docs/基本設計書.md) を正とする。作り方と順番は [docs/工程表.md](docs/工程表.md) を正とする。
 
-## 工程1〜工程4 の動かし方
+## 工程1〜工程5 の動かし方
 
 JDK 21 と Clojure CLI と Node.js が要る。置くマシンの `data/isas.conf` を直す（サンプルのパスワードはコミットしない）。
 
@@ -15,7 +15,7 @@ npm install
 ./scripts/run.sh
 ```
 
-ブラウザで `http://localhost:8080/`（利用者）と `http://localhost:8080/admin`（管理者）を開く。利用者はログイン後、`/fields`（圃場台帳）と `/map`（地図）と `/gantt`（ガントと進捗％）を使う。下地画像は `data/basemaps/` に残り、Git には入れない。
+ブラウザで `http://localhost:8080/`（利用者）と `http://localhost:8080/admin`（管理者）を開く。利用者はログイン後、`/fields`（圃場台帳）と `/map`（地図）と `/gantt`（ガントと進捗％）と `/orders`（指示・日誌）と `/others`（他人の対象圃場）を使う。管理者は `/admin/relations` で関係を切る。下地画像は `data/basemaps/` に残り、Git には入れない。
 
 操作ログは端末と `data/isas.log` に残る。古いファイルは `data/isas.日付.番号.log` に回り、Git には入れない。
 
