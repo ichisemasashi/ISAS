@@ -37,6 +37,18 @@
 (deftest temp-names-and-upload-map-test
   (is (= ["仮-1" "仮-2"] (fields/next-temp-names [] 2)))
   (is (= ["仮-2" "仮-4"] (fields/next-temp-names ["仮-1" "n" "仮-3"] 2)))
+  (is (= ["仮-2" "仮-3"] (fields/next-temp-names ["仮-1（北）"] 2)))
+  (is (= "仮-1（北）" (#'fields/with-temp-and-base "仮-1" "北")))
+  (is (= "仮-1" (#'fields/with-temp-and-base "仮-1" "")))
+  (is (= "北" (#'fields/name-stem-for-split "北")))
+  (is (= "北" (#'fields/name-stem-for-split "仮-1（北）")))
+  (is (nil? (#'fields/name-stem-for-split "仮-1")))
+  (is (= "北" (#'fields/preferred-merge-name {:name "仮-2（北）"}
+                                             [{:name "仮-1（北）"} {:name "仮-2（北）"}])))
+  (is (= "東" (#'fields/preferred-merge-name {:name "仮-1"}
+                                             [{:name "仮-1"} {:name "東"}])))
+  (is (= "東" (#'fields/preferred-merge-name {:name "東"}
+                                             [{:name "東"} {:name "仮-1（北）"}])))
   (is (true? (fields/kind-ok? "aerial")))
   (is (false? (fields/kind-ok? "other")))
   (is (nil? (#'fields/upload->map nil)))
@@ -166,22 +178,26 @@
                                                                        :coordinates [[140.0005 35.999] [140.0005 36.002]]}})]
                 (is (true? (:ok line-sp)))
                 (is (<= 2 (count (:fields line-sp))))
-                (is (re-find #"仮-" (get-in line-sp [:fields 0 :name])))))
+                (is (re-find #"仮-\d+（割線）" (get-in line-sp [:fields 0 :name])))))
             (let [sp (fields/split-field sys uid id {:polygons [(geo/to-json square) square-east]})]
               (is (true? (:ok sp)))
               (is (= 2 (count (:fields sp))))
-              (is (re-find #"仮-" (get-in sp [:fields 0 :name]))))
+              (is (re-find #"仮-\d+（北2）" (get-in sp [:fields 0 :name])))
+              (is (re-find #"仮-\d+（北2）" (get-in sp [:fields 1 :name]))))
             (is (= "merge_too_few" (:code (fields/merge-fields sys uid {:keep_id id2 :ids [id2]}))))
             (is (= "merge_keep_missing" (:code (fields/merge-fields sys uid {:keep_id 999999 :ids [id2 888888]}))))
             (let [listed (:fields (fields/list-fields sys uid))
-                  a (:id (first listed))
-                  b (:id (second listed))]
+                  temps (vec (filter #(re-find #"^仮-.*（北2）" (:name %)) listed))
+                  a (:id (first temps))
+                  b (:id (second temps))]
+              (is (= 2 (count temps)))
               (is (= "field_not_found" (:code (fields/merge-fields sys uid {:keep_id a :ids [a 99999]}))))
               (with-redefs [geo/union-shapes (fn [_] {:type "Point" :coordinates [0 0]})]
                 (is (= "shape_not_area" (:code (fields/merge-fields sys uid {:keep_id a :ids [a b]})))))
               (let [mg (fields/merge-fields sys uid {:keep_id a :ids [a b]})]
                 (is (true? (:ok mg)))
-                (is (= a (get-in mg [:field :id]))))
+                (is (= a (get-in mg [:field :id])))
+                (is (= "北2" (get-in mg [:field :name]))))
               (is (true? (:ok (fields/delete-field sys uid a)))))
             (is (= "import_invalid" (:code (fields/import-geojson sys uid nil))))
             (is (= "import_invalid" (:code (fields/import-geojson sys uid {:body "{"}))))

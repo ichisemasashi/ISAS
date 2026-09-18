@@ -72,15 +72,17 @@
             (let [id (get-in c1 [:field :id])
                   sp (fields/split-field sys uid id {:polygons [tu/square tu/square-east]})]
               (is (true? (:ok sp)))
-              (is (re-find #"仮-" (get-in sp [:fields 0 :name]))))
+              (is (re-find #"仮-\d+（北）" (get-in sp [:fields 0 :name])))
+              (is (re-find #"仮-\d+（北）" (get-in sp [:fields 1 :name]))))
             (let [listed (:fields (fields/list-fields sys uid))
-                  a (:id (first listed))
-                  b (:id (second listed))
-                  keep-name (:name (first listed))
+                  temps (vec (filter #(re-find #"^仮-.*（北）" (:name %)) listed))
+                  a (:id (first temps))
+                  b (:id (second temps))
                   mg (fields/merge-fields sys uid {:keep_id a :ids [a b]})]
               (is (true? (:ok mg)))
-              (is (= keep-name (get-in mg [:field :name])))
+              (is (= "北" (get-in mg [:field :name])))
               (is (true? (:ok (fields/delete-field sys uid a))))))
+          (is (re-find #"名前を保存" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 0.1 :area_m2 1000}]})))
           (is (not (re-find #"作物|地番" (html {:page :fields :fields []})))))
         (testing "B2-4.3-06 工程2は塗りの有無を見ない"
           (let [c (fields/create-field sys uid {:name "割" :geojson tu/square})

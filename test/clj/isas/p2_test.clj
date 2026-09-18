@@ -114,12 +114,14 @@
                                             {:polygons [tu/square tu/square-east]} "user" usid))]
               (is (true? (:ok sp)))
               (is (= 2 (count (:fields sp))))
-              (is (re-find #"仮-" (get-in sp [:fields 0 :name]))))
+              (is (re-find #"仮-\d+（A2）" (get-in sp [:fields 0 :name]))))
             (let [listed2 (:fields (tu/parse (tu/get-path app "/api/user/fields" "user" usid)))
-                  a (:id (first listed2))
-                  b (:id (second listed2))
+                  temps (vec (filter #(re-find #"^仮-.*（A2）" (:name %)) listed2))
+                  a (:id (first temps))
+                  b (:id (second temps))
                   mg (tu/parse (tu/post-json app "/api/user/fields/merge" {:keep_id a :ids [a b]} "user" usid))]
               (is (true? (:ok mg)))
+              (is (= "A2" (get-in mg [:field :name])))
               (is (true? (:ok (tu/parse (tu/delete-path app (str "/api/user/fields/" a) "user" usid))))))
             (is (= "import_invalid" (:code (tu/parse (tu/post-json app "/api/user/fields/import" {} "user" usid)))))
             (let [tmp (io/file (tu/temp-file "imp" ".geojson" (geo/to-json tu/square)))

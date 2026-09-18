@@ -190,8 +190,20 @@
         (let [draw (last-ol "drawend")]
           (call-ol draw "drawend" #js {:feature draw}))
         (enter "split")
+        ;; 分割モード直後は圃場クリックで選べるよう Draw を付けない
+        (is (= :split (:tool @m/current)))
+        (is (nil? (:draw @m/current)))
+        (is (false? (:drawing? @m/current)))
+        (let [click (last-ol "click")]
+          (when click
+            (set! (.-props click) (js-obj "id" 1 "name" "北"))
+            (call-ol click "click" #js {:pixel #js [1 1]})
+            (is (= "1" (str (:active-field @m/current))))
+            (is (true? (:drawing? @m/current)))
+            (is (some? (:draw @m/current)))))
         (let [draw (last-ol "drawend")]
-          (call-ol draw "drawend" #js {:feature draw}))
+          (call-ol draw "drawend" #js {:feature draw})
+          (is (false? (:drawing? @m/current))))
         (enter "edit")
         (let [mod (last-ol "modifyend")]
           (when mod

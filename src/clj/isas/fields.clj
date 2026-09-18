@@ -18,9 +18,44 @@
 (defn- user-dir [sys user-id]
   (io/file (basemap-root sys) (str user-id)))
 
-(defn next-temp-names [existing n]
+(defn- pure-temp-name?
+  "仮-数字だけの仮名か。"
+  [nm]
+  (boolean (re-matches #"仮-\d+" (str nm))))
+
+(defn- temp-prefixed-name?
+  "仮-数字で始まる名前か（分割後の「仮-1（北）」含む）。"
+  [nm]
+  (boolean (re-find #"^仮-\d+" (str nm))))
+
+(defn- temp-embedded-base
+  "仮-N（元の名称）から元の名称を取り出す。"
+  [nm]
+  (when-let [[_ base] (re-matches #"仮-\d+[（(](.+)[）)]" (str/trim (str nm)))]
+    (let [b (str/trim base)]
+      (when-not (str/blank? b) b))))
+
+(defn- name-stem-for-split
+  "分割先に残す元の名称。純仮名や空は無し。"
+  [nm]
+  (let [s (str/trim (str (or nm "")))]
+    (cond
+      (str/blank? s) nil
+      (pure-temp-name? s) nil
+      :else (or (temp-embedded-base s) s))))
+
+(defn- with-temp-and-base
+  "仮-N のあとに元の名称を括弧で追記する。"
+  [temp-prefix base]
+  (if (str/blank? base)
+    temp-prefix
+    (str temp-prefix "（" base "）")))
+
+(defn next-temp-names
+  "未使用の仮-通し番号を n 個返す。既存の「仮-1（北）」も番号使用済みとみなす。"
+  [existing n]
   (let [used (set (keep (fn [nm]
-                          (when-let [[_ d] (re-matches #"仮-(\d+)" (str nm))]
+                          (when-let [[_ d] (re-find #"^仮-(\d+)" (str nm))]
                             (Long/parseLong d)))
                         existing))]
     (loop [i 1 acc []]
@@ -28,6 +63,17 @@
         (>= (count acc) n) acc
         (contains? used (long i)) (recur (inc i) acc)
         :else (recur (inc i) (conj acc (str "仮-" i)))))))
+
+(defn- preferred-merge-name
+  "合筆後の名前。仮-だけが残らないよう、本名前や埋め込み元名を優先する。"
+  [keep-row rows]
+  (let [keep-nm (:name keep-row)
+        names (mapv :name rows)
+        keep-real (when-not (temp-prefixed-name? keep-nm) keep-nm)
+        any-real (first (remove temp-prefixed-name? names))
+        from-keep (temp-embedded-base keep-nm)
+        from-any (some temp-embedded-base names)]
+    (or keep-real any-real from-keep from-any keep-nm)))
 
 (defn- present-field [row]
   (let [gj (geo/parse-json (:geojson row))
@@ -297,7 +343,9 @@
       {:ok false :code "split_too_few"}
 
       :else
-      (let [names (next-temp-names (db/field-names (:ds sys) user-id) (count polys))]
+      (let [stem (name-stem-for-split (:name row))
+            temps (next-temp-names (db/field-names (:ds sys) user-id) (count polys))
+            names (mapv #(with-temp-and-base % stem) temps)]
         (gantt/remove-field-targets! sys fid)
         (db/delete-field! (:ds sys) fid)
         (let [created (mapv (fn [nm gj]
@@ -326,11 +374,12 @@
               {:ok false :code "field_has_paint"})
           (let [gjs (map geo/parse-json (map :geojson rows))
                 union (geo/union-shapes gjs)
-                keep-row (first (filter #(= keep-id (:id %)) rows))]
+                keep-row (first (filter #(= keep-id (:id %)) rows))
+                merge-name (preferred-merge-name keep-row rows)]
             (if-not (geo/valid-shape? union)
               {:ok false :code "shape_not_area"}
               (do
-                (db/update-field! (:ds sys) keep-id {:name (:name keep-row) :geojson (geo/to-json union)})
+                (db/update-field! (:ds sys) keep-id {:name merge-name :geojson (geo/to-json union)})
                 (run! (fn [id]
                         (when (not= id keep-id)
                           (gantt/remove-field-targets! sys id)

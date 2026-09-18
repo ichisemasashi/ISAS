@@ -146,6 +146,8 @@
     (is (re-find #"今のパスワード" (ui/render (assoc base :page :password :kind "admin" :session {:email "a"}))))
     (is (re-find #"ホーム" (ui/render (assoc base :page :invite :kind "user" :session {:email "a"} :initial-password nil))))
     (is (re-find #"圃場台帳" (ui/render (assoc base :page :fields :kind "user" :fields []))))
+    (is (re-find #"名前を保存" (ui/render (assoc base :page :fields :kind "user"
+                                                :fields [{:id 1 :name "北" :area_ha 0.1 :area_m2 1000}]))))
     (is (re-find #"<th>㎡</th>" (ui/render (assoc base :page :fields :kind "user"
                                                  :fields [{:id 1 :name "北" :area_ha 0 :area_m2 42}]))))
     (is (re-find #"42" (ui/render (assoc base :page :fields :kind "user"

@@ -53,7 +53,7 @@
    :map-hint-paint "作業名を入れ、圃場をクリックしてからブラシで塗ります。塗り終わったら地図をドラッグして動かせます。圃場の形を直すときは「圃場を直す」"
    :map-hint-draw "閉じた形を描き、名前を付けて「圃場を保存」してください"
    :map-hint-edit "頂点を動かして「形と名前を保存」してください"
-   :map-hint-split "分割する圃場をクリックし、圃場を横切る線を引いて「分割を保存」してください"
+   :map-hint-split "分割する圃場をクリックして選び、そのあと圃場を横切る線を引いて「分割を保存」してください"
    :map-hint-merge "残す圃場をクリックし、続けて合筆する圃場をクリックして「合筆する」を押してください"
    :map-hint-import "区画ファイルを選んで取り込んでください"
    :map-hint-image "下地を圃場の形に合わせ、「下地の位置を保存」してください。3種とも同じ位置です"
@@ -421,7 +421,10 @@
                "<table><thead><tr><th>名前</th><th>ha</th><th>㎡</th><th></th></tr></thead><tbody>"
                (apply str
                       (for [f (:fields state)]
-                        (str "<tr><td>" (esc (:name f)) "</td>"
+                        (str "<tr><td><form data-act=\"update-field\" method=\"post\">"
+                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
+                             "<input name=\"name\" value=\"" (esc (:name f)) "\">"
+                             "<button type=\"submit\">名前を保存</button></form></td>"
                              "<td>" (esc (:area_ha f)) "</td>"
                              "<td>" (esc (:area_m2 f)) "</td>"
                              "<td><form data-act=\"delete-field\" method=\"post\">"
@@ -429,7 +432,6 @@
                              "<button type=\"submit\">削除</button></form></td></tr>")))
                "</tbody></table>"
                "<p><a data-nav href=\"/map\">地図へ</a></p>")))
-
 (defn- basemap-ready? [state kind]
   (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state))))
 

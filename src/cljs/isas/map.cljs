@@ -367,8 +367,11 @@
     (case mode
       "draw" (start-draw :create)
       "edit" (start-edit)
-      "split" (start-draw :split)
-      "merge" (do (swap! current assoc :tool :merge :drawing? false)
+      ;; 分割は先に圃場をクリックで選ぶ。Draw を先に付けるとクリックが線になる。
+      "split" (do (reset! suppress-select-until 0)
+                  (swap! current assoc :tool :split :drawing? false))
+      "merge" (do (reset! suppress-select-until 0)
+                  (swap! current assoc :tool :merge :drawing? false)
                   (set-selection ""))
       ;; 塗りモードではブラシボタンを押すまで Draw を付けない（地図ドラッグを残す）
       "paint" (swap! current assoc :tool nil :drawing? false)
@@ -432,7 +435,10 @@
                                            (when-not paint-id
                                              (set-selection (str "選んでいる圃場: " (or nm id)
                                                                  (when (and merge? (> (count ids) 1))
-                                                                   (str "（合筆の対象 " (count ids) "枚）")))))))
+                                                                   (str "（合筆の対象 " (count ids) "枚）")))))
+                                           ;; 圃場を選んだあとで線引きを付ける（このクリックでは線を始めない）
+                                           (when (= :split (:tool @current))
+                                             (start-draw :split))))
                                        true)))))))
 
 (defn- sync! [state _dispatch]
