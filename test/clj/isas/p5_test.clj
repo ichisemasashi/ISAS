@@ -430,11 +430,66 @@
     (let [r (ui/handle (ui/init-state) [:relation-cut-result {:ok true}])]
       (is (false? (get-in r [:state :flash :error?]))))))
 
+(deftest p5-order-enter-flow
+  "P5-2.2-02 / P5-7-02 / P5-7-08: 指示詳細の画面遷移（session→place→order→map→basemaps→html）。
+   静的 HTML に order-map を注入する試験だけでは、灰色地図の回帰を止められない。"
+  (let [s0 (assoc (ui/init-state) :session {:email "a@example.com"} :kind "user"
+                  :page :order :order-id "9")
+        place-body {:ok true :west 139.0 :south 35.0 :east 141.0 :north 37.0}
+        order-body {:ok true :id 9 :role "recipient" :status "open"
+                    :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
+                    :work_name "田植え" :body "頼む"
+                    :recipient_emails ["a@example.com"]
+                    :fields [{:id 1 :name "北" :visible true}]
+                    :journals []}
+        map-body {:ok true :work_name "田植え"
+                  :fields [{:id 1 :name "北" :status "partial"
+                            :geojson {:type "Polygon"
+                                      :coordinates [[[140 36] [140.1 36]
+                                                     [140.1 36.1] [140 36.1] [140 36]]]}}]}
+        fx-path (fn [st msg]
+                  (let [fx (:fx (ui/handle st msg))
+                        api (first (filter #(= :api (first %)) fx))]
+                    (when api (nth api 2))))]
+    (testing "広い画面: session は place から始める"
+      (let [r (ui/handle s0 [:session-loaded {:ok true :email "a@example.com"}])]
+        (is (= "/api/user/place" (fx-path s0 [:session-loaded {:ok true :email "a@example.com"}])))
+        (is (= :api (ffirst (:fx r))))))
+    (testing "狭い画面でも place を読む（スマホで色を見る経路）"
+      (is (= "/api/user/place"
+             (fx-path (assoc s0 :narrow? true)
+                      [:session-loaded {:ok true :email "a@example.com"}]))))
+    (testing "place → order → map → basemaps → html（#ol-map と進捗色ラベル）"
+      (let [after-place (ui/handle s0 [:place-loaded place-body])
+            after-order (ui/handle (:state after-place) [:order-loaded order-body])
+            after-map (ui/handle (:state after-order) [:order-map-loaded map-body])
+            after-bm (ui/handle (:state after-map) [:basemaps-loaded {:ok true :basemaps [{:kind "aerial" :ready true}]}])
+            html (apply str (keep (fn [fx]
+                                    (when (= :html (first fx)) (second fx)))
+                                  (:fx after-bm)))]
+        (is (= "/api/user/orders/9" (nth (first (:fx after-place)) 2)))
+        (is (re-find #"/api/user/orders/9/map" (pr-str (:fx after-order))))
+        (is (= "/api/user/basemaps" (nth (first (:fx after-map)) 2)))
+        (is (= :html (ffirst (:fx after-bm))))
+        (is (re-find #"id=\"ol-map\"" html))
+        (is (re-find #"data-order-mode=\"1\"" html))
+        (is (re-find #"data-target-ids=\"1\"" html))
+        (is (re-find #"北（一部）" html))
+        (is (some? (get-in after-bm [:state :place :west])))
+        (is (= "partial" (get-in after-bm [:state :order-map :fields 0 :status])))))
+    (testing "他人地図も place から始める"
+      (is (= "/api/user/place"
+             (fx-path (assoc s0 :page :others :order-id nil :narrow? false)
+                      [:session-loaded {:ok true :email "a@example.com"}])))
+      (let [after-place (ui/handle (assoc s0 :page :others :order-id nil)
+                                   [:place-loaded place-body])]
+        (is (re-find #"/api/user/others/fields" (pr-str (:fx after-place))))))))
+
 (deftest p5-spec-ids-present
   (let [doc (slurp (io/file "docs/詳細試験仕様書_工程5.md"))
         ids ["P5-2.1-01" "P5-2.1-02" "P5-2.1-03" "P5-2.1-04" "P5-2.1-05" "P5-2.1-06"
              "P5-2.1-07" "P5-2.1-08" "P5-2.1-09" "P5-2.1-10" "P5-2.1-11"
-             "P5-2.2-01" "P5-2.2-02" "P5-2.2-03" "P5-2.2-04" "P5-2.2-05"
+             "P5-2.2-01" "P5-2.2-02" "P5-2.2-02b" "P5-2.2-03" "P5-2.2-04" "P5-2.2-05"
              "P5-2.3-01" "P5-2.3-02" "P5-2.3-03" "P5-2.3-04" "P5-2.3-05" "P5-2.3-06"
              "P5-2.3-07" "P5-2.3-08" "P5-2.3-09" "P5-2.3-10" "P5-2.3-11" "P5-2.3-12"
              "P5-2.3-13" "P5-2.3-14" "P5-2.3-15" "P5-2.3-16" "P5-2.3-17" "P5-2.3-18" "P5-2.3-19"

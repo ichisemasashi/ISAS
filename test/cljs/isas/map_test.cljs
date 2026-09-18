@@ -309,4 +309,41 @@
     (m/install!)
     (b/apply-fx! [:html "<div id=\"ol-map\" data-order-mode=\"1\" data-target-ids=\"1\"></div>"])
     (is (some? (:map @m/current)))
-    (is (false? (:drawing? @m/current)))))
+    (is (false? (:drawing? @m/current)))
+    (when-let [sf (:style-fn @m/current)]
+      (let [feat (js-obj "get" (fn [k]
+                                 (cond
+                                   (= k "kind") nil
+                                   (= k "status") "partial"
+                                   (= k "painted") true
+                                   :else nil)))]
+        (is (some? (sf feat nil)))))
+    ;; 他人地図（形のみ → 色付き）
+    (let [ol-el (js-obj "id" "ol-map"
+                        "getAttribute" (fn [a]
+                                         (case a
+                                           "data-others-mode" "1"
+                                           "data-target-ids" "1"
+                                           nil)))
+          app-el (js-obj "innerHTML" "")]
+      (set! js/document (js-obj "getElementById" (fn [id]
+                                                   (case id
+                                                     "ol-map" ol-el
+                                                     "app" app-el
+                                                     "map-extent" (js-obj "textContent" "")
+                                                     nil))
+                                "querySelector" (fn [_] nil)
+                                "addEventListener" (fn [_ _])))
+      (reset! m/current nil)
+      (reset! b/app-state (assoc (ui/init-state)
+                                 :page :others
+                                 :place {:west 139 :south 35 :east 141 :north 37}
+                                 :basemaps [{:kind "aerial" :ready true}]
+                                 :others-fields [{:id 1 :name "北"
+                                                  :geojson {:type "Polygon"
+                                                            :coordinates [[[140 36] [140.1 36]
+                                                                           [140.1 36.1] [140 36.1] [140 36]]]}}]
+                                 :others-paint-data {:work_name "田植え"
+                                                     :fields [{:id 1 :status "done"}]}))
+      (b/apply-fx! [:html "<div id=\"ol-map\" data-others-mode=\"1\" data-target-ids=\"1\"></div>"])
+      (is (some? (:map @m/current))))))

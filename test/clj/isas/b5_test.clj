@@ -54,26 +54,30 @@
           (is (nil? (http/match-api :post "/api/user/relations/cut"))))
         (testing "B5-2-04 / B5-5.4-01〜04 スマホ"
           (is (re-find #"出した指示|受けた指示" (html {:page :orders :narrow? true})))
-          (is (re-find #"日誌を書く"
-                       (html {:page :order :narrow? true
-                              :session {:email "b5b@example.com"}
-                              :order {:id 1 :role "recipient" :status "open"
-                                      :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
-                                      :work_name "田植え" :body "" :recipient_emails []
-                                      :fields [{:id 1 :name "北" :visible true}] :journals []}
-                              :order-map {:work_name "田植え"
-                                          :fields [{:id 1 :name "北" :status "partial"
-                                                    :geojson tu/square}]}})))
-          (is (re-find #"id=\"ol-map\"|北（一部）"
-                       (html {:page :order :narrow? true
-                              :session {:email "b5b@example.com"}
-                              :order {:id 1 :role "recipient" :status "open"
-                                      :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
-                                      :work_name "田植え" :body "" :recipient_emails []
-                                      :fields [{:id 1 :name "北" :visible true}] :journals []}
-                              :order-map {:work_name "田植え"
-                                          :fields [{:id 1 :name "北" :status "partial"
-                                                    :geojson tu/square}]}})))
+          (let [phone (html {:page :order :narrow? true
+                             :session {:email "b5b@example.com"}
+                             :order {:id 1 :role "recipient" :status "open"
+                                     :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
+                                     :work_name "田植え" :body "" :recipient_emails []
+                                     :fields [{:id 1 :name "北" :visible true}] :journals []}
+                             :order-map {:work_name "田植え"
+                                         :fields [{:id 1 :name "北" :status "partial"
+                                                   :geojson tu/square}]}})]
+            (is (re-find #"日誌を書く" phone))
+            (is (re-find #"id=\"ol-map\"" phone))
+            (is (re-find #"data-order-mode=\"1\"" phone))
+            (is (re-find #"北（一部）" phone)))
+          (let [issuer-phone (html {:page :order :narrow? true
+                                    :order {:id 1 :role "issuer" :status "open"
+                                            :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
+                                            :work_name "田植え" :body "" :recipient_emails []
+                                            :fields [{:id 1 :name "北" :visible true}] :journals []}
+                                    :order-map {:work_name "田植え"
+                                                :fields [{:id 1 :name "北" :status "none"
+                                                          :geojson tu/square}]}})]
+            (is (re-find #"id=\"ol-map\"" issuer-phone))
+            (is (re-find #"北（未）" issuer-phone))
+            (is (not (re-find #"この指示を閉じる" issuer-phone))))
           (is (re-find #"パソコンで開いてください"
                        (html {:page :orders-new :narrow? true :fields [{:id 1}]})))
           (is (not (re-find #"言語切替|English" (html {:page :orders :narrow? true}))))
