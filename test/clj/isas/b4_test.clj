@@ -49,9 +49,9 @@
                        (html {:page :gantt :narrow? true :fields [{:id 1}]})))
           (is (not (re-find #"予定を足す|data-percent"
                             (html {:page :gantt :narrow? true :fields [{:id 1}]})))))
-        (testing "B4-2-04 / B4-4.6-05 / B4-6-03 / B4-10-02 指示・日誌・切断・言語は出さない"
+        (testing "B4-2-04 / B4-4.6-05 / B4-6-03 / B4-10-02 ガント画面に指示・日誌・切断・言語は出さない"
           (is (not (re-find #"指示|日誌|関係を切|言語切替" wide)))
-          (is (nil? (http/match-api :post "/api/user/orders")))
+          (is (some? (http/match-api :post "/api/user/orders")))
           (is (nil? (http/match-api :put "/api/user/locale"))))
         (testing "B4-3-01 / B4-5.2-01 / B4-5.3-02 権限"
           (is (= 403 (:status (tu/get-path app "/api/user/gantt" "admin" asid))))
@@ -136,7 +136,7 @@
             (is (contains? names "gantt_rows"))
             (is (contains? names "gantt_targets"))
             (is (not (contains? names "work_names")))
-            (is (not (contains? names "orders")))
+            (is (contains? names "orders"))
             (is (contains? cols "work_name"))
             (is (not (contains? cols "deleted")))
             (is (not (contains? cols "order_id")))))

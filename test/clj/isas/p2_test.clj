@@ -263,8 +263,8 @@
           (is (= "台帳と地図の編集はパソコンで開いてください" (:phone-map ui/messages)))
           (is (re-find #"パソコンで開いてください" (html {:page :map :narrow? true})))
           (is (re-find #"標準地図" (html {:page :map :place place :basemaps [{:kind "standard" :ready true}]}))))
-        (testing "P2-6 工程2で作らないもの"
-          (is (nil? (http/match-api :post "/api/user/orders")))
+        (testing "P2-6 工程2で作らないもの（指示 API は工程5）"
+          (is (some? (http/match-api :post "/api/user/orders")))
           (is (not (re-find #"cyberjapandata|openstreetmap|tile.openstreetmap" (html {:page :map :place place}))))
           (is (not (re-find #"地名検索" (html {:page :map-place}))))
           (is (not (re-find #"面積<input" (html {:page :fields :fields []})))))

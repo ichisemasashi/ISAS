@@ -1,5 +1,5 @@
 (ns isas.time
-  (:import [java.time Instant Duration LocalDate LocalDateTime ZoneId]
+  (:import [java.time Instant Duration LocalDate LocalDateTime LocalTime ZoneId]
            [java.time.format DateTimeFormatter]))
 
 (def ^:dynamic *now-fn* nil)
@@ -70,3 +70,52 @@
   (let [d (today-tokyo)
         end (.plusMonths (.withDayOfMonth d 1) 1)]
     (format-local-minute (.atStartOfDay end))))
+
+(def work-date-fmt (DateTimeFormatter/ofPattern "yyyy-MM-dd"))
+
+(def clock-time-fmt (DateTimeFormatter/ofPattern "HH:mm"))
+
+(defn parse-work-date [s]
+  (try
+    (LocalDate/parse (str s) work-date-fmt)
+    (catch Exception _
+      nil)))
+
+(defn work-date-ok? [s]
+  (boolean (parse-work-date s)))
+
+(defn parse-clock-time [s]
+  (try
+    (LocalTime/parse (str s) clock-time-fmt)
+    (catch Exception _
+      nil)))
+
+(defn clock-time-ok? [s]
+  (boolean (parse-clock-time s)))
+
+(defn today-work-date
+  "日本時間の今日の YYYY-MM-DD。"
+  []
+  (.format (today-tokyo) work-date-fmt))
+
+(defn order-default-start []
+  "08:00")
+
+(defn order-default-end []
+  "17:00")
+
+(defn normalize-order-times
+  "指示の日付・開始・終了を検証する。終了は同じ日で開始より後。"
+  [work-date start-time end-time]
+  (let [wd (str (or work-date ""))
+        st (str (or start-time ""))
+        et (str (or end-time ""))]
+    (cond
+      (not (and (work-date-ok? wd) (clock-time-ok? st) (clock-time-ok? et)))
+      {:ok false :code "time_invalid"}
+
+      (not (.isBefore (parse-clock-time st) (parse-clock-time et)))
+      {:ok false :code "time_order"}
+
+      :else
+      {:ok true :work-date wd :start-time st :end-time et})))
