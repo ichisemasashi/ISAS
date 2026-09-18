@@ -4,6 +4,7 @@
             [isas.ui :as ui]))
 
 (defonce installed? (atom false))
+(defonce validation-wired? (atom false))
 
 (defn- pad2 [n]
   (let [s (str n)]
@@ -32,6 +33,32 @@
   (when (re-matches #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}" (str s))
     (.getTime (js/Date. (str s ":00+09:00")))))
 
+(defn- minute-label [ms]
+  (let [d (js/Date. ms)
+        parts (.formatToParts
+               (js/Intl.DateTimeFormat. "en-US"
+                                        #js {:timeZone "Asia/Tokyo"
+                                             :month "2-digit"
+                                             :day "2-digit"
+                                             :hour "2-digit"
+                                             :minute "2-digit"
+                                             :hour12 false})
+               d)
+        get (fn [t]
+              (some (fn [p]
+                      (when (= t (.-type p)) (.-value p)))
+                    (array-seq parts)))]
+    (str (get "month") "/" (get "day") " " (get "hour") ":" (get "minute"))))
+
+(defn- tick-step-ms [range-key span]
+  (case (str range-key)
+    "week" (* 24 60 60 1000)
+    "month" (* 2 24 60 60 1000)
+    (cond
+      (> span (* 48 60 60 1000)) (* 12 60 60 1000)
+      (> span (* 12 60 60 1000)) (* 6 60 60 1000)
+      :else (* 3 60 60 1000))))
+
 (defn- fill-new-defaults! []
   (let [[y m d] (tokyo-ymd)
         title (.getElementById js/document "gantt-new-title")
@@ -43,6 +70,26 @@
       (set! (.-value start) (ymd-minute y m d 8 0)))
     (when (and end (str/blank? (.-value end)))
       (set! (.-value end) (ymd-minute y m d 17 0)))))
+
+(defn- render-ticks! []
+  (when-let [^js axis (.getElementById js/document "gantt-axis")]
+    (when-let [^js ticks (.getElementById js/document "gantt-ticks")]
+      (let [t0 (local-ms (.getAttribute axis "data-start"))
+            t1 (local-ms (.getAttribute axis "data-end"))
+            span (when (and t0 t1 (> t1 t0)) (- t1 t0))
+            range-key (.getAttribute axis "data-range")]
+        (set! (.-innerHTML ticks) "")
+        (when span
+          (let [step (tick-step-ms range-key span)]
+            (loop [t t0]
+              (when (<= t t1)
+                (let [pct (* 100 (/ (- t t0) span))
+                      el (.createElement js/document "span")]
+                  (set! (.-className el) "gantt-tick")
+                  (set! (.-textContent el) (minute-label t))
+                  (set! (.-left (.-style el)) (str pct "%"))
+                  (.appendChild ticks el)
+                  (recur (+ t step)))))))))))
 
 (defn- render-bars! []
   (when-let [^js axis (.getElementById js/document "gantt-axis")]
@@ -85,11 +132,73 @@
                      "<text x=\"50\" y=\"54\" text-anchor=\"middle\" font-size=\"18\">"
                      (str pct) (ui/esc unit) "</text></svg>")))))))
 
+(defn- form-value [^js form name]
+  (when-let [^js el (.querySelector form (str "[name='" name "']"))]
+    (str/trim (str (.-value el)))))
+
+(defn- checked-field-ids [^js form]
+  (->> (.querySelectorAll form "input[name='field_ids']:checked")
+       array-seq
+       (map #(.-value %))
+       (remove str/blank?)
+       vec))
+
+(defn times-ok? [start end]
+  (let [a (local-ms start)
+        b (local-ms end)]
+    (boolean (and a b (< a b)))))
+
+(defn save-form-ok? [^js form]
+  (let [title (form-value form "title")
+        start (form-value form "start_at")
+        end (form-value form "end_at")
+        wn (form-value form "work_name")
+        fids (checked-field-ids form)]
+    (and (not (str/blank? title))
+         (times-ok? start end)
+         (or (empty? fids) (not (str/blank? wn))))))
+
+(defn add-form-ok? [^js form]
+  (let [start (form-value form "start_at")
+        end (form-value form "end_at")]
+    (times-ok? start end)))
+
+(defn- set-disabled! [^js btn disabled?]
+  (when btn
+    (set! (.-disabled btn) (boolean disabled?))))
+
+(defn- refresh-save-btn! []
+  (when-let [^js form (.getElementById js/document "gantt-save-form")]
+    (set-disabled! (.getElementById js/document "gantt-save-btn")
+                   (not (save-form-ok? form)))))
+
+(defn- refresh-add-btn! []
+  (when-let [^js form (.getElementById js/document "gantt-add-form")]
+    (set-disabled! (.getElementById js/document "gantt-add-btn")
+                   (not (add-form-ok? form)))))
+
+(defn- wire-validation! []
+  (refresh-save-btn!)
+  (refresh-add-btn!)
+  (when-not @validation-wired?
+    (reset! validation-wired? true)
+    (let [on-edit (fn [ev]
+                    (when-let [^js t (.-target ev)]
+                      (when-let [^js form (.-form t)]
+                        (case (.-id form)
+                          "gantt-save-form" (refresh-save-btn!)
+                          "gantt-add-form" (refresh-add-btn!)
+                          nil))))]
+      (.addEventListener js/document "input" on-edit true)
+      (.addEventListener js/document "change" on-edit true))))
+
 (defn sync! [state _dispatch]
   (when (= :gantt (:page state))
     (fill-new-defaults!)
+    (render-ticks!)
     (render-bars!)
-    (render-circle! state)))
+    (render-circle! state)
+    (wire-validation!)))
 
 (defn install! []
   (browser/register-gantt-sync! sync!)

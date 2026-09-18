@@ -785,6 +785,7 @@
                       "<div id=\"gantt-axis\" class=\"gantt-axis\" data-start=\"" (esc (:start bounds))
                       "\" data-end=\"" (esc (:end bounds))
                       "\" data-range=\"" (esc (:range bounds)) "\">"
+                      "<div id=\"gantt-ticks\" class=\"gantt-ticks\"></div>"
                       (apply str
                              (for [r (:gantt-rows state)]
                                (let [selected? (same-gantt-id? (:id r) (:gantt-selected state))]
@@ -796,17 +797,17 @@
                                       " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")</button>"
                                       "<div class=\"gantt-bar\"></div></form>"))))
                       "</div>"
-                      "<form data-act=\"add-gantt-row\" method=\"post\">"
+                      "<form data-act=\"add-gantt-row\" method=\"post\" id=\"gantt-add-form\">"
                       "<label>" (esc (:gantt-title-label messages))
                       "<input id=\"gantt-new-title\" name=\"title\" placeholder=\"新しい予定\"></label>"
                       "<label>" (esc (:gantt-start messages))
                       "<input id=\"gantt-new-start\" name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                       "<label>" (esc (:gantt-end messages))
                       "<input id=\"gantt-new-end\" name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
-                      "<button type=\"submit\">" (esc (:gantt-add messages)) "</button></form>"
+                      "<button type=\"submit\" id=\"gantt-add-btn\">" (esc (:gantt-add messages)) "</button></form>"
                       (when sel
                         (str
-                         "<form data-act=\"save-gantt-row\" method=\"post\">"
+                         "<form data-act=\"save-gantt-row\" method=\"post\" id=\"gantt-save-form\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                          "<label>" (esc (:gantt-title-label messages))
                          "<input name=\"title\" value=\"" (esc (:title sel)) "\" required></label>"
@@ -828,7 +829,7 @@
                                          (when checked? " checked") "> "
                                          (esc (:name f)) "</label>"))))
                          "</fieldset>"
-                         "<button type=\"submit\">保存</button></form>"))
+                         "<button type=\"submit\" id=\"gantt-save-btn\">保存</button></form>"))
                       "<div id=\"gantt-circle\" class=\"gantt-circle\""
                       (when applicable?
                         (str " data-percent=\"" (esc (:percent progress)) "\""))

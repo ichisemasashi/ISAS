@@ -123,7 +123,13 @@
                                                      :start_at "2026-09-21T12:00"
                                                      :end_at "2026-09-21T13:00"}))))
           (is (re-find #"data-range=\"day\"" (html {:page :gantt :fields [{:id 1}]})))
-          (is (re-find #"週|月" (html {:page :gantt :fields [{:id 1}]}))))
+          (is (re-find #"gantt-ticks" (html {:page :gantt :fields [{:id 1}]})))
+          (is (re-find #"週|月" (html {:page :gantt :fields [{:id 1}]})))
+          (is (re-find #"id=\"gantt-save-btn\""
+                       (html {:page :gantt :fields [{:id fid}]
+                              :gantt-rows [{:id 1 :title "行" :start_at "2026-09-18T08:00"
+                                            :end_at "2026-09-18T09:00" :field_ids []}]
+                              :gantt-selected 1}))))
         (testing "B4-6-01 / B4-6-02 データ"
           (let [names (tu/table-names (:ds sys))
                 cols (db/table-columns (:ds sys) "gantt_rows")]
@@ -142,7 +148,7 @@
   (let [doc (slurp (io/file "docs/基本試験仕様書_工程4.md"))
         ids ["B4-2-01" "B4-2-02" "B4-2-03" "B4-2-04" "B4-3-01" "B4-4.3-01" "B4-4.4-01"
              "B4-4.5-01" "B4-4.5-02" "B4-4.5-03" "B4-4.5-04"
-             "B4-4.6-01" "B4-4.6-02" "B4-4.6-03" "B4-4.6-04" "B4-4.6-05"
+             "B4-4.6-01" "B4-4.6-02" "B4-4.6-03" "B4-4.6-03a" "B4-4.6-04" "B4-4.6-05"
              "B4-5.2-01" "B4-5.3-01" "B4-5.3-02" "B4-5.4-01"
              "B4-6-01" "B4-6-02" "B4-6-03" "B4-7.3-01" "B4-7.3-02" "B4-10-01" "B4-10-02"]]
     (doseq [id ids]

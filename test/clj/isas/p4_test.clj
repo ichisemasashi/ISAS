@@ -52,6 +52,8 @@
       (is (re-find #">ガント<" h))
       (is (re-find #"gantt-circle" h))
       (is (re-find #"data-percent=\"40\"" h))
+      (is (re-find #"gantt-ticks" h))
+      (is (re-find #"gantt-save-btn|gantt-add-btn" h))
       (is (= "％" (:gantt-percent-unit ui/messages)))
       (is (re-find #"ol-map" h))
       (is (re-find #"data-gantt-mode=\"1\"" h))
@@ -104,7 +106,7 @@
                        [:gantt-save-result {:ok true :row {:id 7 :title "新"}}])]
       (is (= 7 (get-in r [:state :gantt-selected])))
       (is (= :api (ffirst (:fx r))))))
-  (testing "P4-2.3-01 / P4-2.3-02 横軸"
+  (testing "P4-2.3-01 / P4-2.3-02 / P4-2.3-04 横軸と目盛枠"
     (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-18T00:00:00Z"))]
       (is (= {:start "2026-09-18T00:00" :end "2026-09-21T00:00" :range "day"}
              (ui/gantt-axis-bounds "day")))
@@ -119,7 +121,8 @@
     (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}])
                        [:submit {:act "set-gantt-axis" :form {:axis "week"}}])]
       (is (= "week" (get-in r [:state :gantt-axis])))
-      (is (re-find #"data-range=\"week\"" (ui/render (:state r)))))
+      (is (re-find #"data-range=\"week\"" (ui/render (:state r))))
+      (is (re-find #"gantt-ticks" (ui/render (:state r)))))
     (is (= "day" (get-in (ui/handle (assoc (ui/init-state) :page :gantt)
                                     [:submit {:act "set-gantt-axis" :form {:axis "nope"}}])
                          [:state :gantt-axis]))))
@@ -140,8 +143,17 @@
       (is (re-find #"data-work-name=\"田植え\"" sel))
       (is (re-find #"#e8e8e8" (pr-str ui/paint-colors)))
       (is (not (re-find #"data-work-name" none)))))
-  (testing "P4-3.3-05 / P4-6-07 手入力％は無い"
-    (is (not (re-find #"name=\"percent\"|日誌" (html {:page :gantt :fields [{:id 1}]})))))
+  (testing "P4-3.3-05 / P4-3.3-06 / P4-6-07 手入力％は無い。全面完了は地図側"
+    (let [h (html {:page :gantt :fields [{:id 1}]})]
+      (is (not (re-find #"name=\"percent\"|日誌" h)))
+      (is (not (re-find #"全面完了|ブラシ" h)))))
+  (testing "P4-3.3-07 保存ボタン id"
+    (is (re-find #"id=\"gantt-save-btn\""
+                 (html {:page :gantt :fields [{:id 1}]
+                        :gantt-rows [{:id 1 :title "行" :start_at "2026-09-18T08:00"
+                                      :end_at "2026-09-18T09:00" :field_ids []}]
+                        :gantt-selected 1})))
+    (is (re-find #"id=\"gantt-add-btn\"" (html {:page :gantt :fields [{:id 1}]}))))
   (testing "P4-5-04〜06 文言"
     (is (re-find #"圃場が1枚以上あるときだけ、ガントを使えます"
                  (html {:page :gantt :fields []})))
@@ -529,7 +541,7 @@
   (let [doc (slurp (io/file "docs/詳細試験仕様書_工程4.md"))
         ids ["P4-2.1-01" "P4-2.1-02" "P4-2.1-03" "P4-2.1-04" "P4-2.1-05" "P4-2.1-06" "P4-2.1-07"
              "P4-2.2-01" "P4-2.2-02" "P4-2.2-03" "P4-2.2-04" "P4-2.2-05"
-             "P4-2.3-01" "P4-2.3-02" "P4-2.3-03"
+             "P4-2.3-01" "P4-2.3-02" "P4-2.3-03" "P4-2.3-04"
              "P4-2.4-01" "P4-2.4-02" "P4-2.4-03" "P4-2.4-04" "P4-2.4-05" "P4-2.4-06"
              "P4-2.4-07" "P4-2.4-08" "P4-2.4-09" "P4-2.4-10" "P4-2.4-11" "P4-2.4-12"
              "P4-2.4-13" "P4-2.4-14" "P4-2.4-15"
@@ -537,7 +549,7 @@
              "P4-2.4-c06" "P4-2.4-c07" "P4-2.4-c08" "P4-2.4-c09"
              "P4-3.1-01" "P4-3.1-02" "P4-3.2-01" "P4-3.2-02" "P4-3.2-03" "P4-3.2-04"
              "P4-3.2-05" "P4-3.2-06" "P4-3.2-07" "P4-3.3-01" "P4-3.3-02" "P4-3.3-03"
-             "P4-3.3-04" "P4-3.3-05" "P4-3.4-01" "P4-3.4-02" "P4-3.5-01"
+             "P4-3.3-04" "P4-3.3-05" "P4-3.3-06" "P4-3.3-07" "P4-3.4-01" "P4-3.4-02" "P4-3.5-01"
              "P4-4-01" "P4-4-02" "P4-4-03" "P4-4-04"
              "P4-5-01" "P4-5-02" "P4-5-03" "P4-5-04" "P4-5-05" "P4-5-06" "P4-5-07" "P4-5-08" "P4-5-09"
              "P4-6-01" "P4-6-02" "P4-6-03" "P4-6-04" "P4-6-05" "P4-6-06" "P4-6-07" "P4-6-08" "P4-6-09" "P4-6-10"
