@@ -47,7 +47,7 @@
         (testing "B4-2-03 / B4-5.4-01 狭い画面にガント編集は無い"
           (is (re-find #"パソコンで開いてください"
                        (html {:page :gantt :narrow? true :fields [{:id 1}]})))
-          (is (not (re-find #"予定を足す|data-percent"
+          (is (not (re-find #"予定を足す|data-percent=\""
                             (html {:page :gantt :narrow? true :fields [{:id 1}]})))))
         (testing "B4-2-04 / B4-4.6-05 / B4-6-03 / B4-10-02 ガント画面に指示・日誌・切断・言語は出さない"
           (is (not (re-find #"指示|日誌|関係を切|言語切替" wide)))
@@ -96,12 +96,12 @@
             (is (re-find #"data-target-ids" wide))
             (is (= "#e8e8e8" (:dim ui/paint-colors)))))
         (testing "B4-4.5-03 メモ・未選択はサークル無し"
-          (is (not (re-find #"data-percent"
+          (is (not (re-find #"data-percent=\""
                             (html {:page :gantt :fields [{:id 1}]
                                    :gantt-rows [{:id 2 :title "メモ" :start_at "2026-09-18T08:00"
                                                  :end_at "2026-09-18T09:00" :field_ids []}]
                                    :gantt-selected 2}))))
-          (is (not (re-find #"data-percent" (html {:page :gantt :fields [{:id 1}]})))))
+          (is (not (re-find #"data-percent=\"" (html {:page :gantt :fields [{:id 1}]})))))
         (testing "B4-4.5-04 日誌％は無い"
           (is (nil? (http/match-api :post "/api/user/journals")))
           (is (not (re-find #"日誌" wide))))

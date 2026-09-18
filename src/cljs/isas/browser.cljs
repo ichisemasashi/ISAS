@@ -34,6 +34,31 @@
 (defn push-path! [path]
   (.pushState js/history nil "" path))
 
+(defn guest-lang-key [kind]
+  (if (= "admin" (str kind))
+    "isas_guest_lang_admin"
+    "isas_guest_lang_user"))
+
+(defn read-guest-lang [kind]
+  (try
+    (let [v (.getItem js/localStorage (guest-lang-key kind))]
+      (ui/normalize-lang v))
+    (catch :default _
+      "ja")))
+
+(defn write-guest-lang! [kind lang]
+  (try
+    (.setItem js/localStorage (guest-lang-key kind) (ui/normalize-lang lang))
+    (catch :default _
+      nil)))
+
+(defn kind-from-path [path]
+  (:kind (ui/route-for path)))
+
+(defn set-document-lang! [lang]
+  (when-let [el (.-documentElement js/document)]
+    (set! (.-lang el) (ui/normalize-lang lang))))
+
 (defn form->map [form]
   (let [fd (js/FormData. form)
         out (atom {})]
@@ -85,6 +110,7 @@
   (let [[op a b c d] fx]
     (case op
       :html (do (set-html! a)
+                (set-document-lang! (:ui-lang @app-state))
                 (when-let [f @map-sync-fn]
                   (f @app-state dispatch!))
                 (when-let [f @gantt-sync-fn]
@@ -103,6 +129,9 @@
                                     (if (:error body)
                                       (dispatch! [:api-error])
                                       (dispatch! [d body]))))
+      :guest-lang (write-guest-lang! a b)
+      :restore-guest-lang
+      (swap! app-state assoc :ui-lang (read-guest-lang a))
       nil)))
 
 (defn dispatch! [msg]
@@ -120,12 +149,18 @@
 
 (defn on-click [ev]
   (let [t (.-target ev)
+        lang-btn (.closest t "button[data-lang]")
         a (.closest t "a[data-nav]")]
-    (when a
-      (.preventDefault ev)
-      (let [href (.getAttribute a "href")]
-        (push-path! href)
-        (dispatch! [:path {:path href :search ""}])))))
+    (cond
+      lang-btn
+      (do (.preventDefault ev)
+          (dispatch! [:set-lang (.getAttribute lang-btn "data-lang")]))
+
+      a
+      (do (.preventDefault ev)
+          (let [href (.getAttribute a "href")]
+            (push-path! href)
+            (dispatch! [:path {:path href :search ""}]))))))
 
 (defn on-popstate [_ev]
   (dispatch! [:path {:path (current-path) :search (current-search)}]))
@@ -140,5 +175,10 @@
   (.addEventListener js/window "resize" on-resize))
 
 (defn main! []
-  (dispatch! [:boot {:path (current-path) :search (current-search) :narrow? (narrow-screen?)}])
+  (let [path (current-path)
+        kind (kind-from-path path)]
+    (dispatch! [:boot {:path path
+                       :search (current-search)
+                       :narrow? (narrow-screen?)
+                       :ui-lang (read-guest-lang kind)}]))
   (bind-events!))

@@ -137,7 +137,8 @@
       (is (nil? (http/match-api :delete "/api/user/orders/1")))
       (is (nil? (http/match-api :post "/api/user/orders/1/reopen")))
       (is (nil? (http/match-api :put "/api/user/locale")))
-      (is (not (re-find #"言語切替|English" h)))
+      (is (some? (http/match-api :put "/api/user/language")))
+      (is (re-find #"data-lang" h))
       (doseq [id ["P5-6-01" "P5-6-02" "P5-6-03" "P5-6-04" "P5-6-05"
                   "P5-6-06" "P5-6-07" "P5-6-08" "P5-6-09" "P5-6-10" "P5-6-11"]]
         (is (re-find (re-pattern id) doc))))))

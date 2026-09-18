@@ -45,6 +45,10 @@
 (defn current-session [sys kind cookie-id]
   (session-valid? (:ds sys) kind cookie-id))
 
+(defn account-ui-lang [account]
+  (let [v (some-> account :ui_lang str)]
+    (if (#{"ja" "en"} v) v "ja")))
+
 (defn login [sys kind email password]
   (let [ds (:ds sys)
         e (crypto/normalize-email email)
@@ -58,13 +62,14 @@
       (do
         (log/warn "ログインできませんでした" :kind kind :email e)
         {:ok false :code "login_failed"})
-      (let [sid (crypto/session-id)]
+      (let [sid (crypto/session-id)
+            lang (account-ui-lang account)]
         (db/insert-session! ds {:id sid
                                 :kind kind
                                 :account-id (:id account)
                                 :expires-at (time/plus-days 14)})
-        (log/info "ログインしました" :kind kind :email e :account-id (:id account))
-        {:ok true :session-id sid :email (:email account)}))))
+        (log/info "ログインしました" :kind kind :email e :account-id (:id account) :ui-lang lang)
+        {:ok true :session-id sid :email (:email account) :ui_lang lang}))))
 
 (defn logout [sys kind cookie-id]
   (if-let [ctx (session-valid? (:ds sys) kind cookie-id)]
@@ -146,23 +151,40 @@
       (log/info "パスワードを変更しました" :kind kind :account-id (:id account))
       {:ok true})))
 
-(defn request-reset [sys kind email]
-  (let [e (crypto/normalize-email email)
-        ds (:ds sys)
-        account (if (= kind "user")
-                  (db/find-user-by-email ds e)
-                  (db/find-admin-by-email ds e))
-        eligible? (and account (or (= kind "admin") (nil? (:revoked_at account))))]
-    (if-not eligible?
-      (log/info "再設定案内は送りません" :kind kind :email e)
-      (let [token (crypto/reset-token)]
-        (db/invalidate-reset-tokens! ds kind (:id account))
-        (db/insert-reset-token! ds {:kind kind
-                                    :account-id (:id account)
-                                    :token-hash (crypto/hash-secret token)
-                                    :expires-at (time/plus-hours 24)})
-        (mail/send-reset! (:conf sys) {:kind kind :to (:email account) :token token})))
-    {:ok true}))
+(defn request-reset
+  ([sys kind email] (request-reset sys kind email nil))
+  ([sys kind email ui-lang]
+   (let [e (crypto/normalize-email email)
+         ds (:ds sys)
+         account (if (= kind "user")
+                   (db/find-user-by-email ds e)
+                   (db/find-admin-by-email ds e))
+         eligible? (and account (or (= kind "admin") (nil? (:revoked_at account))))
+         lang (mail/normalize-lang ui-lang)]
+     (if-not eligible?
+       (log/info "再設定案内は送りません" :kind kind :email e :ui-lang lang)
+       (let [token (crypto/reset-token)]
+         (db/invalidate-reset-tokens! ds kind (:id account))
+         (db/insert-reset-token! ds {:kind kind
+                                     :account-id (:id account)
+                                     :token-hash (crypto/hash-secret token)
+                                     :expires-at (time/plus-hours 24)})
+         (mail/send-reset! (:conf sys) {:kind kind :to (:email account) :token token :ui-lang lang})
+         (log/info "再設定案内を送りました" :kind kind :email e :ui-lang lang)))
+     {:ok true})))
+
+(defn set-language [sys kind account ui-lang]
+  (let [raw (str ui-lang)]
+    (if-not (#{"ja" "en"} raw)
+      (do
+        (log/warn "UI言語が不正です" :kind kind :account-id (:id account) :ui-lang raw)
+        {:ok false :code "lang_invalid"})
+      (do
+        (if (= kind "user")
+          (db/update-user-ui-lang! (:ds sys) (:id account) raw)
+          (db/update-admin-ui-lang! (:ds sys) (:id account) raw))
+        (log/info "UI言語を変えました" :kind kind :account-id (:id account) :ui-lang raw)
+        {:ok true :ui_lang raw}))))
 
 (defn- match-token [ds kind token]
   (when (seq token)

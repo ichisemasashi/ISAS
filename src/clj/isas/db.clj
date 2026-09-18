@@ -158,6 +158,8 @@
   (ensure-column! ds "work_places" "image_south" "REAL")
   (ensure-column! ds "work_places" "image_east" "REAL")
   (ensure-column! ds "work_places" "image_north" "REAL")
+  (ensure-column! ds "users" "ui_lang" "TEXT")
+  (ensure-column! ds "admins" "ui_lang" "TEXT")
   (log/info "データベースの表を用意しました")
   ds)
 
@@ -181,6 +183,9 @@
 (defn update-admin-password! [ds id password-hash]
   (jdbc/execute-one! ds ["UPDATE admins SET password_hash = ? WHERE id = ?" password-hash id]))
 
+(defn update-admin-ui-lang! [ds id ui-lang]
+  (jdbc/execute-one! ds ["UPDATE admins SET ui_lang = ? WHERE id = ?" ui-lang id]))
+
 (defn find-user-by-email [ds email]
   (jdbc/execute-one! ds ["SELECT * FROM users WHERE email = ?" email]))
 
@@ -201,6 +206,9 @@
 
 (defn update-user-password! [ds id password-hash]
   (jdbc/execute-one! ds ["UPDATE users SET password_hash = ? WHERE id = ?" password-hash id]))
+
+(defn update-user-ui-lang! [ds id ui-lang]
+  (jdbc/execute-one! ds ["UPDATE users SET ui_lang = ? WHERE id = ?" ui-lang id]))
 
 (defn list-active-users [ds]
   (jdbc/execute! ds ["SELECT id, email FROM users WHERE revoked_at IS NULL ORDER BY email"]))

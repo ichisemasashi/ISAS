@@ -1,5 +1,5 @@
 (ns isas.later-absent-test
-  "工程6は未着手。基本・詳細試験のうち「まだ無い／出さない」項だけを自動試験する。"
+  "第1版以降の対象外・誤経路が混入していないことを自動試験する。"
   (:require [clojure.test :refer [deftest is testing]]
             [isas.http :as http]
             [isas.test-util :as tu]
@@ -9,7 +9,7 @@
   (tu/page-html (merge {:kind "user" :session {:email "a@example.com"}} opts)))
 
 (def later-apis
-  [["P6" ["/api/user/locale" "/api/admin/locale"]]])
+  [["wrong-lang-path" ["/api/user/locale" "/api/admin/locale"]]])
 
 (deftest later-phase-features-are-absent
   (tu/with-sys
@@ -38,9 +38,12 @@
           (is (contains? names "orders"))
           (is (contains? names "journals"))
           (is (re-find #"関係を切" admin-home)))
-        (testing "B6-2-01 / P6 言語切替の本機能は無い"
+        (testing "言語は /api/*/language。旧 locale と専用 URL は無い"
+          (is (some? (http/match-api :put "/api/user/language")))
+          (is (some? (http/match-api :put "/api/admin/language")))
           (is (nil? (http/match-api :put "/api/user/locale")))
-          (is (not (re-find #"English|言語切替" (html {:page :login :kind "user" :session nil})))))
+          (is (= :unknown (:page (ui/route-for "/en"))))
+          (is (re-find #"data-lang" (html {:page :login :kind "user" :session nil}))))
         (doseq [[phase paths] later-apis]
           (testing (str phase " の本機能 API はまだ無い")
             (doseq [p paths]

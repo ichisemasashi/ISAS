@@ -70,7 +70,9 @@
       (is (= "一部" (:status-partial ui/messages)))
       (is (= "済" (:status-done ui/messages)))))
   (testing "P4-2.1-02 未ログインは / へ"
-    (is (= :session (tu/fx-op (ui/init-state) [:path {:path "/gantt" :search ""}]))))
+    (let [fx (:fx (ui/handle (ui/init-state) [:path {:path "/gantt" :search ""}]))]
+      (is (= :restore-guest-lang (ffirst fx)))
+      (is (= :session (ffirst (rest fx))))))
   (testing "P4-2.1-03 / P4-2.1-04 ホームの出口"
     (is (re-find #"href=\"/gantt\"" (html {:page :home :fields [{:id 1}]})))
     (is (not (re-find #"href=\"/gantt\"" (html {:page :home :fields []})))))
@@ -92,9 +94,9 @@
                                     :end_at "2026-09-18T09:00" :work_name nil :field_ids []}]
                       :gantt-selected 2})]
       (is (re-find #"gantt-circle" open))
-      (is (not (re-find #"data-percent" open)))
+      (is (not (re-find #"data-percent=\"" open)))
       (is (not (re-find #"data-target-ids" open)))
-      (is (not (re-find #"data-percent" memo))))
+      (is (not (re-find #"data-percent=\"" memo))))
     (let [r (ui/handle (assoc (ui/init-state) :session {:email "a"} :kind "user" :page :home
                               :gantt-selected 9 :gantt-progress {:percent 1})
                        [:path {:path "/gantt" :search ""}])]
@@ -476,7 +478,7 @@
       (is (re-find #"gantt-circle"
                    (ui/render (assoc s :gantt-selected 3
                                      :gantt-progress {:ok true :applicable false}))))
-      (is (re-find #"data-percent"
+      (is (re-find #"data-percent=\""
                    (ui/render (assoc s :gantt-selected 3
                                      :gantt-progress {:ok true :applicable true :percent 0}))))
       (is (= :html (tu/fx-op s [:gantt-loaded {:ok true}])))

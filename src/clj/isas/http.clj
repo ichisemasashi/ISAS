@@ -78,7 +78,22 @@
 
 (defn session-get [sys req kind]
   (if-let [ctx (require-session sys req kind)]
-    (ok {:email (get-in ctx [:account :email])})
+    (let [lang (accounts/account-ui-lang (:account ctx))]
+      (log/info "セッションを返しました" :kind kind :email (get-in ctx [:account :email]) :ui-lang lang)
+      (ok {:email (get-in ctx [:account :email]) :ui_lang lang}))
+    (fail "unauthorized")))
+
+(defn language-put [sys req kind]
+  (if-let [ctx (require-session sys req kind)]
+    (try
+      (let [body (read-body req)
+            result (accounts/set-language sys kind (:account ctx) (:ui_lang body))]
+        (if (:ok result)
+          (ok {:ui_lang (:ui_lang result)})
+          (fail (:code result))))
+      (catch Exception e
+        (log/warn "言語変更を読めませんでした" :error (.getMessage e))
+        (fail "lang_invalid")))
     (fail "unauthorized")))
 
 (defn login-post [sys req kind]
@@ -86,7 +101,7 @@
     (let [body (read-body req)
           result (accounts/login sys kind (:email body) (:password body))]
       (if (:ok result)
-        (-> (ok {:email (:email result)})
+        (-> (ok {:email (:email result) :ui_lang (:ui_lang result)})
             (with-session-cookie req kind (:session-id result)))
         (fail (:code result))))
     (catch Exception e
@@ -102,7 +117,7 @@
 (defn reset-request-post [sys req kind]
   (try
     (let [body (read-body req)]
-      (accounts/request-reset sys kind (:email body))
+      (accounts/request-reset sys kind (:email body) (:ui_lang body))
       (ok {}))
     (catch Exception e
       (log/warn "再設定依頼を読めませんでした" :error (.getMessage e))
@@ -521,6 +536,7 @@
    [:post "/api/user/password/reset"] [:reset-complete "user"]
    [:post "/api/user/password"] [:password "user"]
    [:post "/api/user/invite"] [:invite "user"]
+   [:put "/api/user/language"] [:language "user"]
    [:get "/api/admin/session"] [:session "admin"]
    [:post "/api/admin/login"] [:login "admin"]
    [:post "/api/admin/logout"] [:logout "admin"]
@@ -528,6 +544,7 @@
    [:post "/api/admin/password/reset"] [:reset-complete "admin"]
    [:post "/api/admin/password"] [:password "admin"]
    [:post "/api/admin/invite"] [:invite "admin"]
+   [:put "/api/admin/language"] [:language "admin"]
    [:get "/api/admin/users"] [:users]
    [:post "/api/admin/users/revoke"] [:revoke]
    [:post "/api/admin/relations/cut"] [:relations-cut]
@@ -605,6 +622,7 @@
         :reset-complete (reset-complete-post sys req (second spec))
         :password (password-post sys req (second spec))
         :invite (invite-post sys req (second spec))
+        :language (language-put sys req (second spec))
         :users (users-get sys req)
         :revoke (revoke-post sys req)
         :relations-cut (relations-cut sys req)

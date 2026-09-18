@@ -149,7 +149,345 @@
    :order-update "依頼文と時刻を直す"
    :relations-cut-ok "関係を切りました"
    :order-time-invalid "日付は YYYY-MM-DD、時刻は HH:MM にしてください"
-   :order-time-order "終了は開始より後にしてください"})
+   :order-time-order "終了は開始より後にしてください"
+   :nav-home "ホーム"
+   :nav-fields "圃場台帳"
+   :nav-map "地図"
+   :nav-invite "招待"
+   :nav-password "パスワード"
+   :nav-logout "ログアウト"
+   :nav-users "取消し"
+   :nav-relations "関係を切る"
+   :label-email "メールアドレス"
+   :label-password "パスワード"
+   :label-current-password "今のパスワード"
+   :label-new-password "新しいパスワード"
+   :label-password-confirm "新しいパスワード（確認）"
+   :btn-enter "入る"
+   :btn-send-reset "案内を送る"
+   :btn-set-password "決める"
+   :btn-change-password "変える"
+   :btn-invite "招待する"
+   :btn-revoke "取り消す"
+   :forgot-password "パスワードを忘れた"
+   :user-gate "利用者入口"
+   :admin-gate "管理者入口"
+   :back-to-login "ログインへ"
+   :reset-request-title "パスワード再設定の依頼"
+   :reset-title "新しいパスワード"
+   :invite-title "利用者を招待"
+   :password-title "パスワード変更"
+   :users-title "招待の取消し"
+   :initial-password-label "初期パスワード"
+   :brush "ブラシ"
+   :name-label "名前"
+   :unit-ha "ha"
+   :unit-m2 "㎡"
+   :lang-ja "日本語"
+   :lang-en "English"
+   :email-a "メールアドレス A"
+   :email-b "メールアドレス B"
+   :btn-save-name "名前を保存"
+   :btn-delete "削除"
+   :to-map "地図へ"
+   :basemap-aerial "空中写真"
+   :basemap-standard "標準地図"
+   :basemap-satellite "衛星"
+   :map-draw "手描き"
+   :map-edit "修正"
+   :map-split "分割"
+   :map-merge "合筆"
+   :btn-save-field "圃場を保存"
+   :btn-save-shape-name "形と名前を保存"
+   :btn-save-split "分割を保存"
+   :btn-do-merge "合筆する"
+   :label-parcel-file "区画ファイル"
+   :btn-import "取り込む"
+   :btn-import-basemap "下地を取り込む"
+   :label-basemap "下地"
+   :change-place "作業場所を変える"
+   :gantt-new-placeholder "新しい予定"
+   :btn-save "保存"
+   :saved-ok "保存しました"
+   :basemap-uploaded "下地を取り込みました"
+   :page-not-found "このページはありません。"
+   :label-counterpart-email "相手のメールアドレス"
+   :lang-invalid "言語の指定が正しくありません"})
+
+(def messages-en
+  {:user-login-title "User login"
+   :admin-login-title "Admin login"
+   :login-failed "Email or password is incorrect"
+   :reset-requested "We sent instructions. If they do not arrive, you may not be invited, or you may be using the wrong entrance"
+   :reset-invalid "This link cannot be used. Please try again"
+   :invite-ok "Tell the other person the initial password. You cannot see the same string again after leaving this screen"
+   :invite-duplicate-user "This email address is already invited as a user"
+   :invite-duplicate-admin "This email address belongs to an admin and cannot be invited as a user"
+   :invite-invalid "That is not a valid email address format"
+   :user-home "You are signed in as a user"
+   :admin-home "You are signed in as an admin. Admins do not own fields"
+   :password-mismatch "The confirmation password does not match"
+   :password-too-short "Password must be at least 8 characters"
+   :password-wrong "The current password is incorrect"
+   :password-ok "Password changed"
+   :unauthorized "You are not signed in"
+   :api-error "Could not communicate"
+   :fields-title "Field ledger"
+   :map-title "Map"
+   :place-needed "Set the work area first"
+   :place-change "You can change the current work area. Adjust the range on the GSI map, confirm with the aerial photo, then finalize"
+   :place-move "Move the GSI map to set the range, confirm with the aerial photo, then finalize"
+   :place-set "Use this range as the work area"
+   :place-preview "Final check with aerial photo"
+   :place-preview-note "This is a confirmation aerial photo. Finalize if the range is fine, or return to the GSI map to adjust"
+   :place-gsi-attr "Map: Geospatial Information Authority of Japan"
+   :place-back-gsi "Return to the GSI map to adjust the range"
+   :place-saving "Saving the work area and importing basemaps. Please wait until it finishes"
+   :emaff-import "Auto-import basemaps for this range"
+   :emaff-import-ok "Auto-import of basemaps finished. Import parcels manually"
+   :emaff-unavailable "Auto-import of basemaps failed. Use manual import"
+   :emaff-partial "Only some basemaps were auto-imported. Import parcels manually"
+   :emaff-busy "Basemaps are being imported now. Wait until it finishes before operating"
+   :phone-map "Edit the ledger and map on a computer"
+   :shape-not-area "Use a closed shape that has an area"
+   :import-invalid "This file cannot be read as parcels"
+   :forbidden "Not available at this entrance"
+   :place-invalid "The work area range is not valid"
+   :basemap-kind "Basemap kind is wrong"
+   :basemap-missing "That basemap is not available yet"
+   :field-not-found "That field does not exist"
+   :split-too-few "Split into at least 2 pieces"
+   :merge-too-few "Select at least 2 fields to merge"
+   :merge-keep-missing "Include the field to keep among the targets"
+   :map-hint "Only the buttons you need now are shown. Cancel returns to the menu"
+   :map-hint-browse "Enter a work name, or choose paint, field shapes, or basemap"
+   :map-hint-paint "Enter a work name, click a field, then paint with the brush. After painting you can drag the map. To edit field shapes, choose Edit fields"
+   :map-hint-draw "Draw a closed shape, name it, and save the field"
+   :map-hint-edit "Move vertices and save the shape and name"
+   :map-hint-split "Click the field to split, then draw a line across it and save the split"
+   :map-hint-merge "Click the field to keep, then click fields to merge, and press Merge"
+   :map-hint-import "Choose a parcel file to import"
+   :map-hint-image "Align the basemap to the field shapes and save the basemap position. All three kinds share the same position"
+   :map-do-paint "Paint"
+   :map-do-fields "Edit fields"
+   :map-do-basemap "Basemap"
+   :map-do-import "Import parcels"
+   :map-cancel "Cancel"
+   :image-shift-west "Shift basemap west"
+   :image-shift-east "Shift basemap east"
+   :image-shift-south "Shift basemap south"
+   :image-shift-north "Shift basemap north"
+   :image-scale-in "Shrink basemap"
+   :image-scale-out "Enlarge basemap"
+   :image-reset "Reset basemap to the work area range"
+   :image-save "Save basemap position"
+   :image-ok "Basemap position saved"
+   :work-name "Work name"
+   :work-name-needed "Enter a work name before painting"
+   :work-name-too-long "Work name must be 100 characters or fewer"
+   :work-name-see "View with this work name"
+   :paint-confirm "Confirm paint"
+   :paint-discard "Discard draft"
+   :paint-complete "Mark this field fully done for this work name"
+   :paint-delete "Delete this paint"
+   :paint-delete-all "Delete all paint for this field and work name"
+   :split-has-paint "A field with paint cannot be split. Delete the paint first"
+   :merge-has-paint "A field with paint cannot be merged. Delete the paint first"
+   :status-none "None"
+   :status-partial "Partial"
+   :status-done "Done"
+   :paint-empty "There is nowhere to paint inside the field"
+   :paint-not-found "That paint does not exist"
+   :map-hint-brush "Press the brush, then stroke. Each stroke finishes, then you can drag the map"
+   :paint-ok "Paint saved"
+   :gantt-title "Gantt"
+   :phone-gantt "Edit the Gantt on a computer"
+   :gantt-no-fields "Gantt is available only when you have at least one field"
+   :gantt-work-needed "Rows with target fields need a work name"
+   :gantt-time-order "End must be after start"
+   :gantt-add "Add schedule"
+   :gantt-title-label "Title"
+   :gantt-start "Start"
+   :gantt-end "End"
+   :gantt-targets "Target fields"
+   :gantt-axis-day "Day"
+   :gantt-axis-week "Week"
+   :gantt-axis-month "Month"
+   :gantt-percent-unit "%"
+   :gantt-dim-color "#e8e8e8"
+   :title-required "Enter a title"
+   :title-too-long "Title must be 200 characters or fewer"
+   :time-invalid "Start and end must be date-times to the minute"
+   :gantt-not-found "That schedule does not exist"
+   :orders-title "Orders"
+   :orders-create "Create order"
+   :orders-close "Close this order"
+   :orders-journal "Write journal"
+   :others-title "Others' target fields"
+   :relations-title "Cut relation"
+   :order-no-fields "Orders can be created only when you have at least one field"
+   :recipient-not-user "Cannot send to a user with this email address"
+   :recipient-self "You cannot include yourself as a recipient"
+   :relation-busy "Cannot cut a relation while the two have an open order"
+   :phone-orders-edit "Create, edit, and close orders on a computer"
+   :phone-others "View others' target fields summary on a computer"
+   :order-not-found "That order does not exist"
+   :order-closed "This order is already closed"
+   :order-not-issuer "Only the issuer can do this"
+   :order-not-recipient "Only a recipient can write a journal"
+   :journal-exists "You have already written a journal"
+   :journal-required "Enter the journal body"
+   :journal-too-long "Journal must be 2000 characters or fewer"
+   :body-too-long "Order body must be 2000 characters or fewer"
+   :recipients-required "Enter at least one recipient"
+   :fields-required "Select at least one target field"
+   :field-in-open-order "This operation is not allowed because the field is a target of an open order"
+   :work-name-unrelated "That work name is not in a related order"
+   :relation-not-found "Cannot cut those two users"
+   :relation-idle "Not cutting because no counterpart fields are visible now"
+   :order-open "Open"
+   :order-closed-label "Closed"
+   :order-work-date "Date"
+   :order-start "Start"
+   :order-end "End"
+   :order-body "Request text"
+   :order-recipients "Recipients"
+   :order-fields "Target fields"
+   :order-journals "Journals"
+   :order-sent "Orders sent"
+   :order-received "Orders received"
+   :order-save "Save order"
+   :order-update "Update request text and times"
+   :relations-cut-ok "Relation cut"
+   :order-time-invalid "Date must be YYYY-MM-DD and time HH:MM"
+   :order-time-order "End must be after start"
+   :nav-home "Home"
+   :nav-fields "Field ledger"
+   :nav-map "Map"
+   :nav-invite "Invite"
+   :nav-password "Password"
+   :nav-logout "Log out"
+   :nav-users "Revoke"
+   :nav-relations "Cut relation"
+   :label-email "Email"
+   :label-password "Password"
+   :label-current-password "Current password"
+   :label-new-password "New password"
+   :label-password-confirm "New password (confirm)"
+   :btn-enter "Sign in"
+   :btn-send-reset "Send instructions"
+   :btn-set-password "Set"
+   :btn-change-password "Change"
+   :btn-invite "Invite"
+   :btn-revoke "Revoke"
+   :forgot-password "Forgot password"
+   :user-gate "User entrance"
+   :admin-gate "Admin entrance"
+   :back-to-login "Back to login"
+   :reset-request-title "Request password reset"
+   :reset-title "New password"
+   :invite-title "Invite a user"
+   :password-title "Change password"
+   :users-title "Revoke invite"
+   :initial-password-label "Initial password"
+   :brush "Brush"
+   :name-label "Name"
+   :unit-ha "ha"
+   :unit-m2 "m²"
+   :lang-ja "日本語"
+   :lang-en "English"
+   :email-a "Email A"
+   :email-b "Email B"
+   :btn-save-name "Save name"
+   :btn-delete "Delete"
+   :to-map "To map"
+   :basemap-aerial "Aerial photo"
+   :basemap-standard "Standard map"
+   :basemap-satellite "Satellite"
+   :map-draw "Draw"
+   :map-edit "Edit"
+   :map-split "Split"
+   :map-merge "Merge"
+   :btn-save-field "Save field"
+   :btn-save-shape-name "Save shape and name"
+   :btn-save-split "Save split"
+   :btn-do-merge "Merge"
+   :label-parcel-file "Parcel file"
+   :btn-import "Import"
+   :btn-import-basemap "Import basemap"
+   :label-basemap "Basemap"
+   :change-place "Change work area"
+   :gantt-new-placeholder "New schedule"
+   :btn-save "Save"
+   :saved-ok "Saved"
+   :basemap-uploaded "Basemap imported"
+   :page-not-found "This page does not exist."
+   :label-counterpart-email "Counterpart email"
+   :lang-invalid "Invalid language"})
+
+
+(defn normalize-lang [lang]
+  (if (= "en" (str lang)) "en" "ja"))
+
+(defn ui-lang [state]
+  (normalize-lang (:ui-lang state)))
+
+(def ^:dynamic *msg* messages)
+
+(defn- m [k]
+  (get *msg* k))
+
+(defn messages-for [lang]
+  (if (= "en" (normalize-lang lang)) messages-en messages))
+
+(defn with-ui-lang [state f]
+  (binding [*msg* (messages-for (ui-lang state))]
+    (f)))
+
+(defn- pad2 [n]
+  (let [s (str n)]
+    (if (= 1 (count s)) (str "0" s) s)))
+
+(defn- parse-int* [s]
+  #?(:clj (Integer/parseInt (str s))
+     :cljs (js/parseInt (str s) 10)))
+
+(def ^:private month-names-en
+  ["Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"])
+
+(defn- parse-ymd [s]
+  (when-let [mm (re-matches #"(\d{4})-(\d{2})-(\d{2})" (str s))]
+    [(parse-int* (nth mm 1)) (parse-int* (nth mm 2)) (parse-int* (nth mm 3))]))
+
+(defn- parse-hm [s]
+  (when-let [mm (re-matches #"(\d{1,2}):(\d{2})" (str s))]
+    [(parse-int* (nth mm 1)) (parse-int* (nth mm 2))]))
+
+(defn- en-ui? []
+  (identical? *msg* messages-en))
+
+(defn format-display-date [s]
+  (when-let [[y mo d] (parse-ymd s)]
+    (if (en-ui?)
+      (str d " " (nth month-names-en (dec mo)) " " y)
+      (str y "年" mo "月" d "日"))))
+
+(defn format-display-time [s]
+  (when-let [[h mi] (parse-hm s)]
+    (if (en-ui?)
+      (str (pad2 h) ":" (pad2 mi))
+      (str h ":" (pad2 mi)))))
+
+(defn format-display-datetime
+  ([date] (format-display-date date))
+  ([date time]
+   (let [d (format-display-date date)
+         t (when-not (or (nil? time) (str/blank? (str time)))
+             (format-display-time time))]
+     (cond
+       (and d t) (str d " " t)
+       d d
+       :else ""))))
 
 (def paint-colors
   {:none "#c8c8c8"
@@ -159,59 +497,60 @@
 
 (defn code-message [code]
   (case code
-    "login_failed" (:login-failed messages)
-    "reset_invalid" (:reset-invalid messages)
-    "invite_invalid_email" (:invite-invalid messages)
-    "invite_duplicate_user" (:invite-duplicate-user messages)
-    "invite_duplicate_admin" (:invite-duplicate-admin messages)
-    "password_mismatch" (:password-mismatch messages)
-    "password_too_short" (:password-too-short messages)
-    "password_wrong" (:password-wrong messages)
-    "unauthorized" (:unauthorized messages)
-    "forbidden" (:forbidden messages)
-    "place_unset" (:place-needed messages)
-    "place_invalid" (:place-invalid messages)
-    "emaff_unavailable" (:emaff-unavailable messages)
-    "emaff_partial" (:emaff-partial messages)
-    "emaff_busy" (:emaff-busy messages)
-    "emaff_empty" (:emaff-unavailable messages)
-    "shape_not_area" (:shape-not-area messages)
-    "basemap_kind" (:basemap-kind messages)
-    "basemap_missing" (:basemap-missing messages)
-    "field_not_found" (:field-not-found messages)
-    "split_too_few" (:split-too-few messages)
-    "merge_too_few" (:merge-too-few messages)
-    "merge_keep_missing" (:merge-keep-missing messages)
-    "import_invalid" (:import-invalid messages)
-    "work_name_required" (:work-name-needed messages)
-    "work_name_too_long" (:work-name-too-long messages)
-    "field_has_paint" (:split-has-paint messages)
-    "paint_not_found" (:paint-not-found messages)
-    "paint_empty" (:paint-empty messages)
-    "no_fields" (:gantt-no-fields messages)
-    "gantt_not_found" (:gantt-not-found messages)
-    "title_required" (:title-required messages)
-    "title_too_long" (:title-too-long messages)
-    "time_invalid" (:time-invalid messages)
-    "time_order" (:gantt-time-order messages)
-    "order_not_found" (:order-not-found messages)
-    "order_closed" (:order-closed messages)
-    "order_not_issuer" (:order-not-issuer messages)
-    "order_not_recipient" (:order-not-recipient messages)
-    "journal_exists" (:journal-exists messages)
-    "journal_required" (:journal-required messages)
-    "journal_too_long" (:journal-too-long messages)
-    "body_too_long" (:body-too-long messages)
-    "recipients_required" (:recipients-required messages)
-    "recipient_self" (:recipient-self messages)
-    "recipient_not_user" (:recipient-not-user messages)
-    "fields_required" (:fields-required messages)
-    "field_in_open_order" (:field-in-open-order messages)
-    "work_name_unrelated" (:work-name-unrelated messages)
-    "relation_busy" (:relation-busy messages)
-    "relation_not_found" (:relation-not-found messages)
-    "relation_idle" (:relation-idle messages)
-    (:api-error messages)))
+    "login_failed" (m :login-failed)
+    "reset_invalid" (m :reset-invalid)
+    "invite_invalid_email" (m :invite-invalid)
+    "invite_duplicate_user" (m :invite-duplicate-user)
+    "invite_duplicate_admin" (m :invite-duplicate-admin)
+    "password_mismatch" (m :password-mismatch)
+    "password_too_short" (m :password-too-short)
+    "password_wrong" (m :password-wrong)
+    "unauthorized" (m :unauthorized)
+    "forbidden" (m :forbidden)
+    "place_unset" (m :place-needed)
+    "place_invalid" (m :place-invalid)
+    "emaff_unavailable" (m :emaff-unavailable)
+    "emaff_partial" (m :emaff-partial)
+    "emaff_busy" (m :emaff-busy)
+    "emaff_empty" (m :emaff-unavailable)
+    "shape_not_area" (m :shape-not-area)
+    "basemap_kind" (m :basemap-kind)
+    "basemap_missing" (m :basemap-missing)
+    "field_not_found" (m :field-not-found)
+    "split_too_few" (m :split-too-few)
+    "merge_too_few" (m :merge-too-few)
+    "merge_keep_missing" (m :merge-keep-missing)
+    "import_invalid" (m :import-invalid)
+    "work_name_required" (m :work-name-needed)
+    "work_name_too_long" (m :work-name-too-long)
+    "field_has_paint" (m :split-has-paint)
+    "paint_not_found" (m :paint-not-found)
+    "paint_empty" (m :paint-empty)
+    "no_fields" (m :gantt-no-fields)
+    "gantt_not_found" (m :gantt-not-found)
+    "title_required" (m :title-required)
+    "title_too_long" (m :title-too-long)
+    "time_invalid" (m :time-invalid)
+    "time_order" (m :gantt-time-order)
+    "order_not_found" (m :order-not-found)
+    "order_closed" (m :order-closed)
+    "order_not_issuer" (m :order-not-issuer)
+    "order_not_recipient" (m :order-not-recipient)
+    "journal_exists" (m :journal-exists)
+    "journal_required" (m :journal-required)
+    "journal_too_long" (m :journal-too-long)
+    "body_too_long" (m :body-too-long)
+    "recipients_required" (m :recipients-required)
+    "recipient_self" (m :recipient-self)
+    "recipient_not_user" (m :recipient-not-user)
+    "fields_required" (m :fields-required)
+    "field_in_open_order" (m :field-in-open-order)
+    "work_name_unrelated" (m :work-name-unrelated)
+    "relation_busy" (m :relation-busy)
+    "relation_not_found" (m :relation-not-found)
+    "relation_idle" (m :relation-idle)
+    "lang_invalid" (m :lang-invalid)
+    (m :api-error)))
 
 (defn encode-q [s]
   #?(:clj (java.net.URLEncoder/encode (str s) "UTF-8")
@@ -225,8 +564,8 @@
 
 (defn paint-block-text [act]
   (if (= "merge" act)
-    (:merge-has-paint messages)
-    (:split-has-paint messages)))
+    (m :merge-has-paint)
+    (m :split-has-paint)))
 
 (defn esc [s]
   (-> (str (or s ""))
@@ -338,6 +677,7 @@
    :search ""
    :page :login
    :kind "user"
+   :ui-lang "ja"
    :session nil
    :flash nil
    :busy false
@@ -367,24 +707,24 @@
    :others-paint-data nil})
 
 (defn map-mode [state]
-  (let [m (:map-mode state)
+  (let [mm (:map-mode state)
         wn (str/trim (str (or (get-in state [:form :work_name]) "")))]
     (cond
-      (and m (not (str/blank? (str m)))) (str m)
+      (and mm (not (str/blank? (str mm)))) (str mm)
       (str/blank? wn) "browse"
       :else "paint")))
 
 (defn- map-hint-for [mode]
   (case (str mode)
-    "browse" (:map-hint-browse messages)
-    "paint" (:map-hint-paint messages)
-    "draw" (:map-hint-draw messages)
-    "edit" (:map-hint-edit messages)
-    "split" (:map-hint-split messages)
-    "merge" (:map-hint-merge messages)
-    "import" (:map-hint-import messages)
-    "basemap" (:map-hint-image messages)
-    (:map-hint messages)))
+    "browse" (m :map-hint-browse)
+    "paint" (m :map-hint-paint)
+    "draw" (m :map-hint-draw)
+    "edit" (m :map-hint-edit)
+    "split" (m :map-hint-split)
+    "merge" (m :map-hint-merge)
+    "import" (m :map-hint-import)
+    "basemap" (m :map-hint-image)
+    (m :map-hint)))
 
 (defn- mode-form [mode label]
   (str "<form data-act=\"set-map-mode\" method=\"post\" class=\"inline\">"
@@ -392,7 +732,7 @@
        "<button type=\"submit\">" (esc label) "</button></form>"))
 
 (defn- cancel-form []
-  (mode-form "cancel" (:map-cancel messages)))
+  (mode-form "cancel" (m :map-cancel)))
 
 (defn flash-html [state]
   (when-let [f (:flash state)]
@@ -401,78 +741,110 @@
 (defn layout [title body]
   (str "<main><h1>" (esc title) "</h1>" body "</main>"))
 
-(defn nav-user []
-  "<nav><a data-nav href=\"/home\">ホーム</a><a data-nav href=\"/fields\">圃場台帳</a><a data-nav href=\"/map\">地図</a><a data-nav href=\"/invite\">招待</a><a data-nav href=\"/password\">パスワード</a><form data-act=\"logout\" method=\"post\"><button type=\"submit\">ログアウト</button></form></nav>")
+(defn- lang-switcher [state]
+  (let [cur (ui-lang state)]
+    (str "<span class=\"lang-switch\">"
+         "<button type=\"button\" data-lang=\"ja\""
+         (when (= "ja" cur) " class=\"current\" aria-current=\"true\"")
+         ">" (esc (m :lang-ja)) "</button> "
+         "<button type=\"button\" data-lang=\"en\""
+         (when (= "en" cur) " class=\"current\" aria-current=\"true\"")
+         ">" (esc (m :lang-en)) "</button>"
+         "</span>")))
 
-(defn nav-admin []
-  "<nav><a data-nav href=\"/admin/home\">ホーム</a><a data-nav href=\"/admin/invite\">招待</a><a data-nav href=\"/admin/users\">取消し</a><a data-nav href=\"/admin/relations\">関係を切る</a><a data-nav href=\"/admin/password\">パスワード</a><form data-act=\"logout\" method=\"post\"><button type=\"submit\">ログアウト</button></form></nav>")
+(defn nav-user [state]
+  (str "<nav>"
+       (lang-switcher state)
+       "<a data-nav href=\"/home\">" (esc (m :nav-home)) "</a>"
+       "<a data-nav href=\"/fields\">" (esc (m :nav-fields)) "</a>"
+       "<a data-nav href=\"/map\">" (esc (m :nav-map)) "</a>"
+       "<a data-nav href=\"/invite\">" (esc (m :nav-invite)) "</a>"
+       "<a data-nav href=\"/password\">" (esc (m :nav-password)) "</a>"
+       "<form data-act=\"logout\" method=\"post\"><button type=\"submit\">"
+       (esc (m :nav-logout)) "</button></form></nav>"))
+
+(defn nav-admin [state]
+  (str "<nav>"
+       (lang-switcher state)
+       "<a data-nav href=\"/admin/home\">" (esc (m :nav-home)) "</a>"
+       "<a data-nav href=\"/admin/invite\">" (esc (m :nav-invite)) "</a>"
+       "<a data-nav href=\"/admin/users\">" (esc (m :nav-users)) "</a>"
+       "<a data-nav href=\"/admin/relations\">" (esc (m :nav-relations)) "</a>"
+       "<a data-nav href=\"/admin/password\">" (esc (m :nav-password)) "</a>"
+       "<form data-act=\"logout\" method=\"post\"><button type=\"submit\">"
+       (esc (m :nav-logout)) "</button></form></nav>"))
 
 (defn login-view [state]
   (let [admin? (= "admin" (:kind state))
-        title (if admin? (:admin-login-title messages) (:user-login-title messages))
+        title (if admin? (m :admin-login-title) (m :user-login-title))
         reset (if admin? "/admin/reset/request" "/reset/request")
-        other (if admin? ["/" "利用者入口"] ["/admin" "管理者入口"])]
+        other (if admin? ["/" (m :user-gate)] ["/admin" (m :admin-gate)])]
     (layout title
-            (str (flash-html state)
+            (str (lang-switcher state)
+                 (flash-html state)
                  "<form data-act=\"login\" method=\"post\">"
-                 "<label>メールアドレス<input name=\"email\" type=\"email\" required></label>"
-                 "<label>パスワード<input name=\"password\" type=\"password\" required></label>"
-                 "<button type=\"submit\">入る</button></form>"
-                 "<p><a data-nav href=\"" reset "\">パスワードを忘れた</a></p>"
+                 "<label>" (esc (m :label-email)) "<input name=\"email\" type=\"email\" required></label>"
+                 "<label>" (esc (m :label-password)) "<input name=\"password\" type=\"password\" required></label>"
+                 "<button type=\"submit\">" (esc (m :btn-enter)) "</button></form>"
+                 "<p><a data-nav href=\"" reset "\">" (esc (m :forgot-password)) "</a></p>"
                  "<p><a data-nav href=\"" (first other) "\">" (esc (second other)) "</a></p>"))))
 
 (defn reset-request-view [state]
-  (layout "パスワード再設定の依頼"
-          (str (flash-html state)
+  (layout (m :reset-request-title)
+          (str (lang-switcher state)
+               (flash-html state)
                "<form data-act=\"reset-request\" method=\"post\">"
-               "<label>メールアドレス<input name=\"email\" type=\"email\" required></label>"
-               "<button type=\"submit\">案内を送る</button></form>"
-               "<p><a data-nav href=\"" (login-path (:kind state)) "\">ログインへ</a></p>")))
+               "<label>" (esc (m :label-email)) "<input name=\"email\" type=\"email\" required></label>"
+               "<button type=\"submit\">" (esc (m :btn-send-reset)) "</button></form>"
+               "<p><a data-nav href=\"" (login-path (:kind state)) "\">" (esc (m :back-to-login)) "</a></p>")))
 
 (defn reset-view [state]
-  (layout "新しいパスワード"
-          (str (flash-html state)
+  (layout (m :reset-title)
+          (str (lang-switcher state)
+               (flash-html state)
                "<form data-act=\"reset-complete\" method=\"post\">"
-               "<label>新しいパスワード<input name=\"password\" type=\"password\" required></label>"
-               "<label>新しいパスワード（確認）<input name=\"password_confirm\" type=\"password\" required></label>"
-               "<button type=\"submit\">決める</button></form>")))
+               "<label>" (esc (m :label-new-password)) "<input name=\"password\" type=\"password\" required></label>"
+               "<label>" (esc (m :label-password-confirm)) "<input name=\"password_confirm\" type=\"password\" required></label>"
+               "<button type=\"submit\">" (esc (m :btn-set-password)) "</button></form>")))
 
 (defn home-view [state]
   (let [admin? (= "admin" (:kind state))
-        title (if admin? (:admin-home messages) (:user-home messages))]
+        title (if admin? (m :admin-home) (m :user-home))]
     (layout title
-            (str (if admin? (nav-admin) (nav-user))
+            (str (if admin? (nav-admin state) (nav-user state))
                  (flash-html state)
                  "<p>" (esc (get-in state [:session :email])) "</p>"
                  (when (and (not admin?) (seq (:fields state)))
-                   (str "<p><a data-nav href=\"/gantt\">" (esc (:gantt-title messages)) "</a></p>"
-                        "<p><a data-nav href=\"/orders/new\">" (esc (:orders-create messages)) "</a></p>"))
+                   (str "<p><a data-nav href=\"/gantt\">" (esc (m :gantt-title)) "</a></p>"
+                        "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
                  (when (not admin?)
-                   (str "<p><a data-nav href=\"/orders\">" (esc (:orders-title messages)) "</a></p>"
-                        "<p><a data-nav href=\"/others\">" (esc (:others-title messages)) "</a></p>"))))))
+                   (str "<p><a data-nav href=\"/orders\">" (esc (m :orders-title)) "</a></p>"
+                        "<p><a data-nav href=\"/others\">" (esc (m :others-title)) "</a></p>"))))))
+
 (defn invite-view [state]
-  (layout "利用者を招待"
-          (str (if (= "admin" (:kind state)) (nav-admin) (nav-user))
+  (layout (m :invite-title)
+          (str (if (= "admin" (:kind state)) (nav-admin state) (nav-user state))
                (flash-html state)
                (when-let [pw (:initial-password state)]
-                 (str "<p>" (esc (:invite-ok messages)) "</p><p>初期パスワード: <code>" (esc pw) "</code></p>"))
+                 (str "<p>" (esc (m :invite-ok)) "</p><p>" (esc (m :initial-password-label))
+                      ": <code>" (esc pw) "</code></p>"))
                "<form data-act=\"invite\" method=\"post\">"
-               "<label>相手のメールアドレス<input name=\"email\" type=\"email\" required></label>"
-               "<button type=\"submit\">招待する</button></form>")))
+               "<label>" (esc (m :label-counterpart-email)) "<input name=\"email\" type=\"email\" required></label>"
+               "<button type=\"submit\">" (esc (m :btn-invite)) "</button></form>")))
 
 (defn password-view [state]
-  (layout "パスワード変更"
-          (str (if (= "admin" (:kind state)) (nav-admin) (nav-user))
+  (layout (m :password-title)
+          (str (if (= "admin" (:kind state)) (nav-admin state) (nav-user state))
                (flash-html state)
                "<form data-act=\"password\" method=\"post\">"
-               "<label>今のパスワード<input name=\"current_password\" type=\"password\" required></label>"
-               "<label>新しいパスワード<input name=\"password\" type=\"password\" required></label>"
-               "<label>新しいパスワード（確認）<input name=\"password_confirm\" type=\"password\" required></label>"
-               "<button type=\"submit\">変える</button></form>")))
+               "<label>" (esc (m :label-current-password)) "<input name=\"current_password\" type=\"password\" required></label>"
+               "<label>" (esc (m :label-new-password)) "<input name=\"password\" type=\"password\" required></label>"
+               "<label>" (esc (m :label-password-confirm)) "<input name=\"password_confirm\" type=\"password\" required></label>"
+               "<button type=\"submit\">" (esc (m :btn-change-password)) "</button></form>")))
 
 (defn users-view [state]
-  (layout "招待の取消し"
-          (str (nav-admin)
+  (layout (m :users-title)
+          (str (nav-admin state)
                (flash-html state)
                "<ul>"
                (apply str
@@ -480,81 +852,84 @@
                         (str "<li>" (esc (:email u))
                              "<form data-act=\"revoke\" method=\"post\">"
                              "<input type=\"hidden\" name=\"user_id\" value=\"" (esc (:id u)) "\">"
-                             "<button type=\"submit\">取り消す</button></form></li>")))
+                             "<button type=\"submit\">" (esc (m :btn-revoke)) "</button></form></li>")))
                "</ul>")))
 
-(defn unknown-view []
-  (layout "ISAS" "<p>このページはありません。</p><p><a data-nav href=\"/\">利用者入口</a></p>"))
+(defn unknown-view [state]
+  (layout "ISAS"
+          (str (lang-switcher state)
+               "<p>" (esc (m :page-not-found)) "</p>"
+               "<p><a data-nav href=\"/\">" (esc (m :user-gate)) "</a></p>")))
 
 (defn phone-view [state]
   (cond
     (= :orders-new (:page state))
-    (layout (:orders-title messages)
-            (str (nav-user) (flash-html state) "<p>" (esc (:phone-orders-edit messages)) "</p>"))
+    (layout (m :orders-title)
+            (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-orders-edit)) "</p>"))
 
     (= :others (:page state))
-    (layout (:others-title messages)
-            (str (nav-user) (flash-html state) "<p>" (esc (:phone-others messages)) "</p>"))
+    (layout (m :others-title)
+            (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-others)) "</p>"))
 
     (= :gantt (:page state))
-    (layout (:gantt-title messages)
-            (str (nav-user) (flash-html state) "<p>" (esc (:phone-gantt messages)) "</p>"))
+    (layout (m :gantt-title)
+            (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-gantt)) "</p>"))
 
     :else
-    (layout (:map-title messages)
-            (str (nav-user) (flash-html state) "<p>" (esc (:phone-map messages)) "</p>"))))
+    (layout (m :map-title)
+            (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-map)) "</p>"))))
 
 (defn- order-status-label [status]
   (if (= "closed" status)
-    (:order-closed-label messages)
-    (:order-open messages)))
+    (m :order-closed-label)
+    (m :order-open)))
 
 (defn- order-list-items [rows]
   (apply str
          (for [o rows]
            (str "<li><a data-nav href=\"/orders/" (esc (:id o)) "\">"
-                (esc (:work_date o)) " "
+                (esc (or (format-display-date (:work_date o)) (:work_date o))) " "
                 (esc (:work_name o)) "（" (esc (order-status-label (:status o))) "）"
                 "</a></li>"))))
 
 (defn orders-view [state]
-  (layout (:orders-title messages)
-          (str (nav-user)
+  (layout (m :orders-title)
+          (str (nav-user state)
                (flash-html state)
                (when (and (not (:narrow? state)) (seq (:fields state)))
-                 (str "<p><a data-nav href=\"/orders/new\">" (esc (:orders-create messages)) "</a></p>"))
-               "<h2>" (esc (:order-sent messages)) "</h2>"
+                 (str "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
+               "<h2>" (esc (m :order-sent)) "</h2>"
                "<ul>" (order-list-items (:orders-sent state)) "</ul>"
-               "<h2>" (esc (:order-received messages)) "</h2>"
+               "<h2>" (esc (m :order-received)) "</h2>"
                "<ul>" (order-list-items (:orders-received state)) "</ul>")))
 
 (defn orders-new-view [state]
   (if (empty? (:fields state))
-    (layout (:orders-title messages)
-            (str (nav-user) (flash-html state)
-                 "<p>" (esc (:order-no-fields messages)) "</p>"))
+    (layout (m :orders-title)
+            (str (nav-user state) (flash-html state)
+                 "<p>" (esc (m :order-no-fields)) "</p>"))
     (let [form (or (:form state) {})]
-      (layout (:orders-create messages)
-              (str (nav-user)
+      (layout (m :orders-create)
+              (str (nav-user state)
                    (flash-html state)
                    "<form data-act=\"create-order\" method=\"post\">"
-                   "<label>" (esc (:order-work-date messages))
+                   "<label>" (esc (m :order-work-date))
                    "<input name=\"work_date\" value=\"" (esc (:work_date form)) "\"></label>"
-                   "<label>" (esc (:order-start messages))
+                   "<label>" (esc (m :order-start))
                    "<input name=\"start_time\" value=\"" (esc (:start_time form)) "\"></label>"
-                   "<label>" (esc (:order-end messages))
+                   "<label>" (esc (m :order-end))
                    "<input name=\"end_time\" value=\"" (esc (:end_time form)) "\"></label>"
-                   "<label>" (esc (:work-name messages))
+                   "<label>" (esc (m :work-name))
                    "<input name=\"work_name\" list=\"work-name-list\" value=\"" (esc (:work_name form)) "\">"
                    "<datalist id=\"work-name-list\">"
                    (apply str (for [n (:work-names state)]
                                 (str "<option value=\"" (esc n) "\">")))
                    "</datalist></label>"
-                   "<label>" (esc (:order-body messages))
+                   "<label>" (esc (m :order-body))
                    "<textarea name=\"body\">" (esc (:body form)) "</textarea></label>"
-                   "<label>" (esc (:order-recipients messages))
+                   "<label>" (esc (m :order-recipients))
                    "<input name=\"recipient_emails\" value=\"" (esc (:recipient_emails form)) "\"></label>"
-                   "<fieldset><legend>" (esc (:order-fields messages)) "</legend>"
+                   "<fieldset><legend>" (esc (m :order-fields)) "</legend>"
                    (apply str
                           (for [f (:fields state)]
                             (str "<label><input type=\"checkbox\" name=\"field_ids\" value=\"" (esc (:id f)) "\""
@@ -562,13 +937,13 @@
                                    " checked")
                                  ">" (esc (:name f)) "</label>")))
                    "</fieldset>"
-                   "<button type=\"submit\">" (esc (:order-save messages)) "</button></form>")))))
+                   "<button type=\"submit\">" (esc (m :order-save)) "</button></form>")))))
 
 (defn- order-map-html [state]
-  (let [m (:order-map state)
-        fields (or (:fields m) [])
+  (let [omap (:order-map state)
+        fields (or (:fields omap) [])
         ids (mapv :id fields)
-        wn (or (:work_name m) (get-in state [:order :work_name]))]
+        wn (or (:work_name omap) (get-in state [:order :work_name]))]
     (when (seq fields)
       (str "<div id=\"ol-map\" class=\"ol-map\" data-order-mode=\"1\""
            " data-target-ids=\"" (esc (str/join "," ids)) "\""
@@ -576,9 +951,9 @@
            "></div>"))))
 
 (defn- paint-status-label [st]
-  (get {"none" (:status-none messages)
-        "partial" (:status-partial messages)
-        "done" (:status-done messages)}
+  (get {"none" (m :status-none)
+        "partial" (m :status-partial)
+        "done" (m :status-done)}
        (str st)
        (str st)))
 
@@ -598,40 +973,41 @@
                          (str (:name f)
                               (when st (str "（" (paint-status-label st) "）")))))]
     (if-not o
-      (layout (:orders-title messages)
-              (str (nav-user) (flash-html state)
-                   "<p>" (esc (:order-not-found messages)) "</p>"))
-      (layout (:orders-title messages)
-              (str (nav-user)
+      (layout (m :orders-title)
+              (str (nav-user state) (flash-html state)
+                   "<p>" (esc (m :order-not-found)) "</p>"))
+      (layout (m :orders-title)
+              (str (nav-user state)
                    (flash-html state)
-                   "<p>" (esc (:work_date o)) " "
-                   (esc (:start_time o)) "〜" (esc (:end_time o))
+                   "<p>" (esc (or (format-display-date (:work_date o)) (:work_date o))) " "
+                   (esc (or (format-display-time (:start_time o)) (:start_time o)))
+                   "〜" (esc (or (format-display-time (:end_time o)) (:end_time o)))
                    " / " (esc (order-status-label (:status o))) "</p>"
-                   "<p>" (esc (:work-name messages)) ": " (esc (:work_name o)) "</p>"
-                   "<p>" (esc (:order-body messages)) ": " (esc (:body o)) "</p>"
-                   "<p>" (esc (:order-recipients messages)) ": "
+                   "<p>" (esc (m :work-name)) ": " (esc (:work_name o)) "</p>"
+                   "<p>" (esc (m :order-body)) ": " (esc (:body o)) "</p>"
+                   "<p>" (esc (m :order-recipients)) ": "
                    (esc (str/join ", " (or (:recipient_emails o) []))) "</p>"
-                   "<p>" (esc (:order-fields messages)) ": "
+                   "<p>" (esc (m :order-fields)) ": "
                    (esc (str/join ", " field-labels)) "</p>"
                    (or (order-map-html state) "")
                    (when narrow?
-                     (str "<p>" (esc (:phone-orders-edit messages)) "</p>"))
+                     (str "<p>" (esc (m :phone-orders-edit)) "</p>"))
                    (when can-edit?
                      (str "<form data-act=\"update-order\" method=\"post\">"
                           "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id o)) "\">"
-                          "<label>" (esc (:order-work-date messages))
+                          "<label>" (esc (m :order-work-date))
                           "<input name=\"work_date\" value=\"" (esc (:work_date o)) "\"></label>"
-                          "<label>" (esc (:order-start messages))
+                          "<label>" (esc (m :order-start))
                           "<input name=\"start_time\" value=\"" (esc (:start_time o)) "\"></label>"
-                          "<label>" (esc (:order-end messages))
+                          "<label>" (esc (m :order-end))
                           "<input name=\"end_time\" value=\"" (esc (:end_time o)) "\"></label>"
-                          "<label>" (esc (:order-body messages))
+                          "<label>" (esc (m :order-body))
                           "<textarea name=\"body\">" (esc (:body o)) "</textarea></label>"
-                          "<button type=\"submit\">" (esc (:order-update messages)) "</button></form>"
+                          "<button type=\"submit\">" (esc (m :order-update)) "</button></form>"
                           "<form data-act=\"close-order\" method=\"post\">"
                           "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id o)) "\">"
-                          "<button type=\"submit\">" (esc (:orders-close messages)) "</button></form>"))
-                   "<h2>" (esc (:order-journals messages)) "</h2>"
+                          "<button type=\"submit\">" (esc (m :orders-close)) "</button></form>"))
+                   "<h2>" (esc (m :order-journals)) "</h2>"
                    "<ul>"
                    (apply str
                           (for [j (:journals o)]
@@ -640,25 +1016,25 @@
                    (when can-journal?
                      (str "<form data-act=\"post-journal\" method=\"post\">"
                           "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id o)) "\">"
-                          "<label>" (esc (:orders-journal messages))
+                          "<label>" (esc (m :orders-journal))
                           "<textarea name=\"body\"></textarea></label>"
-                          "<button type=\"submit\">" (esc (:orders-journal messages)) "</button></form>")))))))
+                          "<button type=\"submit\">" (esc (m :orders-journal)) "</button></form>")))))))
 
 (defn others-view [state]
   (let [form (or (:form state) {})
         wn (str/trim (str (or (:work_name form) "")))
         paint (:others-paint-data state)]
-    (layout (:others-title messages)
-            (str (nav-user)
+    (layout (m :others-title)
+            (str (nav-user state)
                  (flash-html state)
                  "<form data-act=\"select-others-work-name\" method=\"post\">"
-                 "<label>" (esc (:work-name messages))
+                 "<label>" (esc (m :work-name))
                  "<input name=\"work_name\" list=\"others-work-list\" value=\"" (esc wn) "\">"
                  "<datalist id=\"others-work-list\">"
                  (apply str (for [n (:others-work-names state)]
                               (str "<option value=\"" (esc n) "\">")))
                  "</datalist></label>"
-                 "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>"
+                 "<button type=\"submit\">" (esc (m :work-name-see)) "</button></form>"
                  "<div id=\"ol-map\" class=\"ol-map\" data-others-mode=\"1\""
                  (when (seq (:others-fields state))
                    (str " data-target-ids=\""
@@ -673,60 +1049,63 @@
                                      (some #(when (= (:id %) (:id f)) (:status %))
                                            (:fields paint)))]
                             (str "<li>" (esc (:name f)) " / " (esc (:owner_email f))
-                                 (when st (str "（" (esc (get {:none (:status-none messages)
-                                                                :partial (:status-partial messages)
-                                                                :done (:status-done messages)}
+                                 (when st (str "（" (esc (get {:none (m :status-none)
+                                                                :partial (m :status-partial)
+                                                                :done (m :status-done)}
                                                               (keyword st) st)) "）"))
                                  "</li>"))))
                  "</ul>"))))
 
 (defn relations-view [state]
-  (layout (:relations-title messages)
-          (str (nav-admin)
+  (layout (m :relations-title)
+          (str (nav-admin state)
                (flash-html state)
                "<form data-act=\"cut-relation\" method=\"post\">"
-               "<label>メールアドレス A<input name=\"email_a\" type=\"email\" required></label>"
-               "<label>メールアドレス B<input name=\"email_b\" type=\"email\" required></label>"
-               "<button type=\"submit\">" (esc (:relations-title messages)) "</button></form>")))
+               "<label>" (esc (m :email-a)) "<input name=\"email_a\" type=\"email\" required></label>"
+               "<label>" (esc (m :email-b)) "<input name=\"email_b\" type=\"email\" required></label>"
+               "<button type=\"submit\">" (esc (m :relations-title)) "</button></form>")))
 
 (defn fields-view [state]
-  (layout (:fields-title messages)
-          (str (nav-user)
+  (layout (m :fields-title)
+          (str (nav-user state)
                (flash-html state)
-               "<table><thead><tr><th>名前</th><th>ha</th><th>㎡</th><th></th></tr></thead><tbody>"
+               "<table><thead><tr><th>" (esc (m :name-label)) "</th><th>" (esc (m :unit-ha))
+               "</th><th>" (esc (m :unit-m2)) "</th><th></th></tr></thead><tbody>"
                (apply str
                       (for [f (:fields state)]
                         (str "<tr><td><form data-act=\"update-field\" method=\"post\">"
                              "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
                              "<input name=\"name\" value=\"" (esc (:name f)) "\">"
-                             "<button type=\"submit\">名前を保存</button></form></td>"
+                             "<button type=\"submit\">" (esc (m :btn-save-name)) "</button></form></td>"
                              "<td>" (esc (:area_ha f)) "</td>"
                              "<td>" (esc (:area_m2 f)) "</td>"
                              "<td><form data-act=\"delete-field\" method=\"post\">"
                              "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
-                             "<button type=\"submit\">削除</button></form></td></tr>")))
+                             "<button type=\"submit\">" (esc (m :btn-delete)) "</button></form></td></tr>")))
                "</tbody></table>"
-               "<p><a data-nav href=\"/map\">地図へ</a></p>")))
+               "<p><a data-nav href=\"/map\">" (esc (m :to-map)) "</a></p>")))
 (defn- basemap-ready? [state kind]
   (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state))))
 
 (defn- basemap-kind-buttons [state]
   (apply str
-         (for [[k label] [["aerial" "空中写真"] ["standard" "標準地図"] ["satellite" "衛星"]]]
+         (for [[k label] [["aerial" (m :basemap-aerial)]
+                          ["standard" (m :basemap-standard)]
+                          ["satellite" (m :basemap-satellite)]]]
            (if (basemap-ready? state k)
-             (str "<button type=\"button\" data-map=\"basemap\" data-kind=\"" k "\">" label "</button>")
+             (str "<button type=\"button\" data-map=\"basemap\" data-kind=\"" k "\">" (esc label) "</button>")
              ""))))
 
 (defn- work-name-form [state]
   (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))]
     (str "<form data-act=\"select-work-name\" method=\"post\">"
-         "<label>" (esc (:work-name messages))
+         "<label>" (esc (m :work-name))
          "<input name=\"work_name\" list=\"work-name-list\" value=\"" (esc wn) "\">"
          "<datalist id=\"work-name-list\">"
          (apply str (for [nm (:work-names state)]
                       (str "<option value=\"" (esc nm) "\">")))
          "</datalist></label>"
-         "<button type=\"submit\">" (esc (:work-name-see messages)) "</button></form>")))
+         "<button type=\"submit\">" (esc (m :work-name-see)) "</button></form>")))
 
 (defn- paint-panel [state]
   (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))
@@ -741,58 +1120,58 @@
      (when-not (str/blank? wn)
        (str
         "<p id=\"paint-legend\">"
-        "<span>" (esc (:status-none messages)) "</span> "
-        "<span>" (esc (:status-partial messages)) "</span> "
-        "<span>" (esc (:status-done messages)) "</span></p>"
+        "<span>" (esc (m :status-none)) "</span> "
+        "<span>" (esc (m :status-partial)) "</span> "
+        "<span>" (esc (m :status-done)) "</span></p>"
         "<div class=\"toolbar\">"
-        "<button type=\"button\" data-map=\"brush\" data-hint=\"" (esc (:map-hint-brush messages)) "\">ブラシ</button>"
-        "<button type=\"button\" data-map=\"discard\" data-hint=\"" (esc (:map-hint-brush messages)) "\">" (esc (:paint-discard messages)) "</button>"
+        "<button type=\"button\" data-map=\"brush\" data-hint=\"" (esc (m :map-hint-brush)) "\">" (esc (m :brush)) "</button>"
+        "<button type=\"button\" data-map=\"discard\" data-hint=\"" (esc (m :map-hint-brush)) "\">" (esc (m :paint-discard)) "</button>"
         "</div>"
         "<form data-act=\"confirm-paint\" method=\"post\">"
         "<input type=\"hidden\" name=\"field_id\" value=\"" (esc fid) "\">"
         "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
         "<input type=\"hidden\" name=\"geojson\" value=\"" (esc gj) "\">"
-        "<button type=\"submit\">" (esc (:paint-confirm messages)) "</button></form>"
+        "<button type=\"submit\">" (esc (m :paint-confirm)) "</button></form>"
         "<form data-act=\"complete-field\" method=\"post\">"
         "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
         "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
-        "<button type=\"submit\">" (esc (:paint-complete messages)) "</button></form>"
+        "<button type=\"submit\">" (esc (m :paint-complete)) "</button></form>"
         "<form data-act=\"delete-field-paints\" method=\"post\">"
         "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
         "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
-        "<button type=\"submit\">" (esc (:paint-delete-all messages)) "</button></form>"
+        "<button type=\"submit\">" (esc (m :paint-delete-all)) "</button></form>"
         "<form data-act=\"delete-paint\" method=\"post\">"
         "<input type=\"hidden\" name=\"id\" value=\"" (esc pid) "\">"
-        "<button type=\"submit\">" (esc (:paint-delete messages)) "</button></form>"))
+        "<button type=\"submit\">" (esc (m :paint-delete)) "</button></form>"))
      "</div>")))
 
 (defn- browse-panel [state]
   (str (work-name-form state)
        "<div class=\"toolbar\">"
-       (mode-form "paint" (:map-do-paint messages))
-       (mode-form "draw" "手描き")
-       (mode-form "edit" "修正")
-       (mode-form "split" "分割")
-       (mode-form "merge" "合筆")
-       (mode-form "import" (:map-do-import messages))
-       (mode-form "basemap" (:map-do-basemap messages))
+       (mode-form "paint" (m :map-do-paint))
+       (mode-form "draw" (m :map-draw))
+       (mode-form "edit" (m :map-edit))
+       (mode-form "split" (m :map-split))
+       (mode-form "merge" (m :map-merge))
+       (mode-form "import" (m :map-do-import))
+       (mode-form "basemap" (m :map-do-basemap))
        (basemap-kind-buttons state)
        "</div>"))
 
 (defn- draw-panel [state]
   (str (cancel-form)
        "<form data-act=\"create-field\" method=\"post\">"
-       "<label>名前<input name=\"name\" required></label>"
+       "<label>" (esc (m :name-label)) "<input name=\"name\" required></label>"
        "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
-       "<button type=\"submit\">圃場を保存</button></form>"))
+       "<button type=\"submit\">" (esc (m :btn-save-field)) "</button></form>"))
 
 (defn- edit-panel [state]
   (str (cancel-form)
        "<form data-act=\"update-field\" method=\"post\">"
        "<input type=\"hidden\" name=\"id\" value=\"" (esc (get-in state [:form :id] "")) "\">"
-       "<label>名前<input name=\"name\" value=\"" (esc (get-in state [:form :name] "")) "\"></label>"
+       "<label>" (esc (m :name-label)) "<input name=\"name\" value=\"" (esc (get-in state [:form :name] "")) "\"></label>"
        "<input type=\"hidden\" name=\"geojson\" value=\"" (esc (get-in state [:form :geojson] "")) "\">"
-       "<button type=\"submit\">形と名前を保存</button></form>"))
+       "<button type=\"submit\">" (esc (m :btn-save-shape-name)) "</button></form>"))
 
 (defn- split-panel [state]
   (str (cancel-form)
@@ -803,60 +1182,60 @@
                                                               "")) "\">"
        "<input type=\"hidden\" name=\"polygons\" value=\"" (esc (get-in state [:form :polygons] "[]")) "\">"
        "<input type=\"hidden\" name=\"line\" value=\"" (esc (get-in state [:form :line] "")) "\">"
-       "<button type=\"submit\">分割を保存</button></form>"))
+       "<button type=\"submit\">" (esc (m :btn-save-split)) "</button></form>"))
 
 (defn- merge-panel [state]
   (str (cancel-form)
        "<form data-act=\"merge-fields\" method=\"post\">"
        "<input type=\"hidden\" name=\"keep_id\" value=\"" (esc (get-in state [:form :keep_id] "")) "\">"
        "<input type=\"hidden\" name=\"ids\" value=\"" (esc (get-in state [:form :ids] "[]")) "\">"
-       "<button type=\"submit\">合筆する</button></form>"))
+       "<button type=\"submit\">" (esc (m :btn-do-merge)) "</button></form>"))
 
 (defn- import-panel []
   (str (cancel-form)
        "<form data-act=\"import-fields\" method=\"post\" enctype=\"multipart/form-data\">"
-       "<label>区画ファイル<input name=\"file\" type=\"file\" accept=\".json,.geojson,application/geo+json\"></label>"
-       "<button type=\"submit\">取り込む</button></form>"))
+       "<label>" (esc (m :label-parcel-file)) "<input name=\"file\" type=\"file\" accept=\".json,.geojson,application/geo+json\"></label>"
+       "<button type=\"submit\">" (esc (m :btn-import)) "</button></form>"))
 
 (defn- basemap-panel [state]
   (str (cancel-form)
        "<div class=\"toolbar\">" (basemap-kind-buttons state) "</div>"
        "<form data-act=\"emaff-import\" method=\"post\">"
-       "<button type=\"submit\">" (esc (:emaff-import messages)) "</button></form>"
+       "<button type=\"submit\">" (esc (m :emaff-import)) "</button></form>"
        "<form data-act=\"upload-basemap\" method=\"post\" enctype=\"multipart/form-data\">"
-       "<label>下地"
+       "<label>" (esc (m :label-basemap))
        "<select name=\"kind\">"
-       "<option value=\"aerial\">空中写真</option>"
-       "<option value=\"standard\">標準地図</option>"
-       "<option value=\"satellite\">衛星</option>"
+       "<option value=\"aerial\">" (esc (m :basemap-aerial)) "</option>"
+       "<option value=\"standard\">" (esc (m :basemap-standard)) "</option>"
+       "<option value=\"satellite\">" (esc (m :basemap-satellite)) "</option>"
        "</select></label>"
        "<input name=\"file\" type=\"file\" accept=\"image/jpeg,image/png,.jpg,.jpeg,.png\">"
-       "<button type=\"submit\">下地を取り込む</button></form>"
+       "<button type=\"submit\">" (esc (m :btn-import-basemap)) "</button></form>"
        (when (some :ready (:basemaps state))
-         (str "<p>" (esc (:map-hint-image messages)) "</p>"
+         (str "<p>" (esc (m :map-hint-image)) "</p>"
               "<div class=\"toolbar\">"
-              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"west\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-west messages)) "</button>"
-              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"east\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-east messages)) "</button>"
-              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"south\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-south messages)) "</button>"
-              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"north\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-shift-north messages)) "</button>"
-              "<button type=\"button\" data-map=\"image-scale\" data-factor=\"0.94\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-scale-in messages)) "</button>"
-              "<button type=\"button\" data-map=\"image-scale\" data-factor=\"1.06\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-scale-out messages)) "</button>"
-              "<button type=\"button\" data-map=\"image-reset\" data-hint=\"" (esc (:map-hint-image messages)) "\">" (esc (:image-reset messages)) "</button>"
+              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"west\" data-hint=\"" (esc (m :map-hint-image)) "\">" (esc (m :image-shift-west)) "</button>"
+              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"east\" data-hint=\"" (esc (m :map-hint-image)) "\">" (esc (m :image-shift-east)) "</button>"
+              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"south\" data-hint=\"" (esc (m :map-hint-image)) "\">" (esc (m :image-shift-south)) "</button>"
+              "<button type=\"button\" data-map=\"image-shift\" data-dir=\"north\" data-hint=\"" (esc (m :map-hint-image)) "\">" (esc (m :image-shift-north)) "</button>"
+              "<button type=\"button\" data-map=\"image-scale\" data-factor=\"0.94\" data-hint=\"" (esc (m :map-hint-image)) "\">" (esc (m :image-scale-in)) "</button>"
+              "<button type=\"button\" data-map=\"image-scale\" data-factor=\"1.06\" data-hint=\"" (esc (m :map-hint-image)) "\">" (esc (m :image-scale-out)) "</button>"
+              "<button type=\"button\" data-map=\"image-reset\" data-hint=\"" (esc (m :map-hint-image)) "\">" (esc (m :image-reset)) "</button>"
               "</div>"
               "<form data-act=\"save-image-extent\" method=\"post\">"
               "<input type=\"hidden\" name=\"west\" value=\"" (esc (str (or (:west (image-bbox (:place state))) ""))) "\">"
               "<input type=\"hidden\" name=\"south\" value=\"" (esc (str (or (:south (image-bbox (:place state))) ""))) "\">"
               "<input type=\"hidden\" name=\"east\" value=\"" (esc (str (or (:east (image-bbox (:place state))) ""))) "\">"
               "<input type=\"hidden\" name=\"north\" value=\"" (esc (str (or (:north (image-bbox (:place state))) ""))) "\">"
-              "<button type=\"submit\">" (esc (:image-save messages)) "</button></form>"))))
+              "<button type=\"submit\">" (esc (m :image-save)) "</button></form>"))))
 
 (defn- paint-mode-panel [state]
   (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))]
     (str (paint-panel state)
          (when-not (str/blank? wn)
            (str "<div class=\"toolbar\">"
-                (mode-form "browse" (:map-do-fields messages))
-                (mode-form "basemap" (:map-do-basemap messages))
+                (mode-form "browse" (m :map-do-fields))
+                (mode-form "basemap" (m :map-do-basemap))
                 "</div>"))
          (when (str/blank? wn)
            (cancel-form)))))
@@ -869,13 +1248,13 @@
         east (esc (get-in state [:form :east] "146"))
         north (esc (get-in state [:form :north] "46"))
         lead (cond
-               busy? (:place-saving messages)
-               (:place state) (:place-change messages)
-               :else (:place-needed messages))
+               busy? (m :place-saving)
+               (:place state) (m :place-change)
+               :else (m :place-needed))
         guide (cond
                 busy? ""
-                preview? (:place-preview-note messages)
-                :else (:place-move messages))
+                preview? (m :place-preview-note)
+                :else (m :place-move))
         disabled (if busy? " disabled" "")
         hidden (fn [act]
                  (str "<form data-act=\"" act "\" method=\"post\">"
@@ -883,24 +1262,24 @@
                       "<input type=\"hidden\" name=\"south\" value=\"" south "\">"
                       "<input type=\"hidden\" name=\"east\" value=\"" east "\">"
                       "<input type=\"hidden\" name=\"north\" value=\"" north "\">"))]
-    (layout (:map-title messages)
-            (str (nav-user)
+    (layout (m :map-title)
+            (str (nav-user state)
                  (flash-html state)
                  "<p>" (esc lead) "</p>"
                  (when-not (str/blank? guide) (str "<p>" (esc guide) "</p>"))
-                 "<p class=\"attr\">" (esc (:place-gsi-attr messages)) "</p>"
+                 "<p class=\"attr\">" (esc (m :place-gsi-attr)) "</p>"
                  "<p id=\"place-extent\"></p>"
                  (if busy?
                    ""
                    (if preview?
                      (str (hidden "cancel-place-preview")
-                          "<button type=\"submit\"" disabled ">" (esc (:place-back-gsi messages)) "</button></form>"
+                          "<button type=\"submit\"" disabled ">" (esc (m :place-back-gsi)) "</button></form>"
                           (hidden "save-place")
-                          "<button type=\"submit\"" disabled ">" (esc (:place-set messages)) "</button></form>")
+                          "<button type=\"submit\"" disabled ">" (esc (m :place-set)) "</button></form>")
                      (str (hidden "preview-place")
-                          "<button type=\"submit\"" disabled ">" (esc (:place-preview messages)) "</button></form>"
+                          "<button type=\"submit\"" disabled ">" (esc (m :place-preview)) "</button></form>"
                           (hidden "save-place")
-                          "<button type=\"submit\"" disabled ">" (esc (:place-set messages)) "</button></form>")))
+                          "<button type=\"submit\"" disabled ">" (esc (m :place-set)) "</button></form>")))
                  "<div id=\"ol-map\" class=\"ol-map\" data-place-mode=\"1\""
                  " data-west=\"" west "\" data-south=\"" south "\" data-east=\"" east "\" data-north=\"" north "\""
                  (when preview? " data-preview=\"aerial\"")
@@ -908,10 +1287,10 @@
 
 (defn map-view [state]
   (let [mode (map-mode state)]
-    (layout (:map-title messages)
-            (str (nav-user)
+    (layout (m :map-title)
+            (str (nav-user state)
                  (flash-html state)
-                 "<p><a data-nav href=\"/map/place\">作業場所を変える</a></p>"
+                 "<p><a data-nav href=\"/map/place\">" (esc (m :change-place)) "</a></p>"
                  "<p id=\"map-hint\">" (esc (map-hint-for mode)) "</p>"
                  "<p id=\"map-selection\"></p>"
                  (case mode
@@ -925,10 +1304,6 @@
                    "basemap" (basemap-panel state)
                    (browse-panel state))
                  "<div id=\"ol-map\" class=\"ol-map\"></div>"))))
-
-(defn- pad2 [n]
-  (let [s (str n)]
-    (if (= 1 (count s)) (str "0" s) s)))
 
 (defn- tokyo-ymd []
   #?(:clj
@@ -1031,11 +1406,11 @@
 
 (defn gantt-view [state]
   (let [fields (:fields state)]
-    (layout (:gantt-title messages)
-            (str (nav-user)
+    (layout (m :gantt-title)
+            (str (nav-user state)
                  (flash-html state)
                  (if (empty? fields)
-                   (str "<p>" (esc (:gantt-no-fields messages)) "</p>")
+                   (str "<p>" (esc (m :gantt-no-fields)) "</p>")
                    (let [axis (if (nil? (:gantt-axis state)) "day" (:gantt-axis state))
                          bounds (gantt-axis-bounds axis)
                          sel (gantt-row-by-id state (:gantt-selected state))
@@ -1051,13 +1426,13 @@
                       "<div class=\"toolbar\">"
                       "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
                       "<input type=\"hidden\" name=\"axis\" value=\"day\">"
-                      "<button type=\"submit\">" (esc (:gantt-axis-day messages)) "</button></form>"
+                      "<button type=\"submit\">" (esc (m :gantt-axis-day)) "</button></form>"
                       "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
                       "<input type=\"hidden\" name=\"axis\" value=\"week\">"
-                      "<button type=\"submit\">" (esc (:gantt-axis-week messages)) "</button></form>"
+                      "<button type=\"submit\">" (esc (m :gantt-axis-week)) "</button></form>"
                       "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
                       "<input type=\"hidden\" name=\"axis\" value=\"month\">"
-                      "<button type=\"submit\">" (esc (:gantt-axis-month messages)) "</button></form>"
+                      "<button type=\"submit\">" (esc (m :gantt-axis-month)) "</button></form>"
                       "</div>"
                       "<div id=\"gantt-axis\" class=\"gantt-axis\" data-start=\"" (esc (:start bounds))
                       "\" data-end=\"" (esc (:end bounds))
@@ -1075,30 +1450,30 @@
                                       "<div class=\"gantt-bar\"></div></form>"))))
                       "</div>"
                       "<form data-act=\"add-gantt-row\" method=\"post\" id=\"gantt-add-form\">"
-                      "<label>" (esc (:gantt-title-label messages))
-                      "<input id=\"gantt-new-title\" name=\"title\" placeholder=\"新しい予定\"></label>"
-                      "<label>" (esc (:gantt-start messages))
+                      "<label>" (esc (m :gantt-title-label))
+                      "<input id=\"gantt-new-title\" name=\"title\" placeholder=\"" (esc (m :gantt-new-placeholder)) "\"></label>"
+                      "<label>" (esc (m :gantt-start))
                       "<input id=\"gantt-new-start\" name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
-                      "<label>" (esc (:gantt-end messages))
+                      "<label>" (esc (m :gantt-end))
                       "<input id=\"gantt-new-end\" name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
-                      "<button type=\"submit\" id=\"gantt-add-btn\">" (esc (:gantt-add messages)) "</button></form>"
+                      "<button type=\"submit\" id=\"gantt-add-btn\">" (esc (m :gantt-add)) "</button></form>"
                       (when sel
                         (str
                          "<form data-act=\"save-gantt-row\" method=\"post\" id=\"gantt-save-form\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
-                         "<label>" (esc (:gantt-title-label messages))
+                         "<label>" (esc (m :gantt-title-label))
                          "<input name=\"title\" value=\"" (esc (:title sel)) "\" required></label>"
-                         "<label>" (esc (:gantt-start messages))
+                         "<label>" (esc (m :gantt-start))
                          "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
-                         "<label>" (esc (:gantt-end messages))
+                         "<label>" (esc (m :gantt-end))
                          "<input name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
-                         "<label>" (esc (:work-name messages))
+                         "<label>" (esc (m :work-name))
                          "<input name=\"work_name\" list=\"gantt-work-name-list\" value=\"" (esc (or (:work_name sel) "")) "\">"
                          "<datalist id=\"gantt-work-name-list\">"
                          (apply str (for [nm (:work-names state)]
                                       (str "<option value=\"" (esc nm) "\">")))
                          "</datalist></label>"
-                         "<fieldset><legend>" (esc (:gantt-targets messages)) "</legend>"
+                         "<fieldset><legend>" (esc (m :gantt-targets)) "</legend>"
                          (apply str
                                 (for [f fields]
                                   (let [checked? (some #(same-gantt-id? % (:id f)) (:field_ids sel))]
@@ -1106,8 +1481,9 @@
                                          (when checked? " checked") "> "
                                          (esc (:name f)) "</label>"))))
                          "</fieldset>"
-                         "<button type=\"submit\" id=\"gantt-save-btn\">保存</button></form>"))
+                         "<button type=\"submit\" id=\"gantt-save-btn\">" (esc (m :btn-save)) "</button></form>"))
                       "<div id=\"gantt-circle\" class=\"gantt-circle\""
+                      " data-percent-unit=\"" (esc (m :gantt-percent-unit)) "\""
                       (when applicable?
                         (str " data-percent=\"" (esc (:percent progress)) "\""))
                       "></div>"
@@ -1118,26 +1494,28 @@
                       "></div>")))))))
 
 (defn render [state]
-  (if (and (:narrow? state) (contains? #{:fields :map :map-place :gantt :orders-new :others} (:page state)))
-    (phone-view state)
-    (case (:page state)
-      :login (login-view state)
-      :reset-request (reset-request-view state)
-      :reset (reset-view state)
-      :home (home-view state)
-      :invite (invite-view state)
-      :password (password-view state)
-      :users (users-view state)
-      :fields (fields-view state)
-      :map (if (:place state) (map-view state) (map-place-view state))
-      :map-place (map-place-view state)
-      :gantt (gantt-view state)
-      :orders (orders-view state)
-      :orders-new (orders-new-view state)
-      :order (order-view state)
-      :others (others-view state)
-      :relations (relations-view state)
-      (unknown-view))))
+  (with-ui-lang state
+    (fn []
+      (if (and (:narrow? state) (contains? #{:fields :map :map-place :gantt :orders-new :others} (:page state)))
+        (phone-view state)
+        (case (:page state)
+          :login (login-view state)
+          :reset-request (reset-request-view state)
+          :reset (reset-view state)
+          :home (home-view state)
+          :invite (invite-view state)
+          :password (password-view state)
+          :users (users-view state)
+          :fields (fields-view state)
+          :map (if (:place state) (map-view state) (map-place-view state))
+          :map-place (map-place-view state)
+          :gantt (gantt-view state)
+          :orders (orders-view state)
+          :orders-new (orders-new-view state)
+          :order (order-view state)
+          :others (others-view state)
+          :relations (relations-view state)
+          (unknown-view state))))))
 
 (defn apply-route [state path search]
   (let [r (route-for path)]
@@ -1152,7 +1530,7 @@
 (defn guarded [state]
   (cond
     (and (needs-auth? (:page state)) (nil? (:session state)))
-    {:state (assoc state :flash {:error? true :text (:unauthorized messages)})
+    {:state (assoc state :flash {:error? true :text (m :unauthorized)})
      :fx [[:nav (login-path (:kind state))]]}
 
     (and (= :login (:page state)) (:session state))
@@ -1163,15 +1541,20 @@
     {:state state
      :fx [[:html (render state)]]}))
 
-(defn boot [state {:keys [path search narrow?]}]
-  (let [s (apply-route (assoc state :narrow? (boolean narrow?)) path search)
+(defn boot [state {:keys [path search narrow? ui-lang]}]
+  (let [s (apply-route (assoc state
+                              :narrow? (boolean narrow?)
+                              :ui-lang (normalize-lang (or ui-lang (:ui-lang state) "ja")))
+                       path search)
         token (:token (parse-query search))]
     {:state (assoc s :form (if token {:token token} {}))
      :fx [[:session (:kind s)]]}))
 
 (defn session-loaded [state body]
   (let [s (if (:ok body)
-            (assoc state :session {:email (:email body)})
+            (cond-> (assoc state :session {:email (:email body)})
+              (contains? body :ui_lang)
+              (assoc :ui-lang (normalize-lang (:ui_lang body))))
             (assoc state :session nil))]
     (cond
       (and (= :users (:page s)) (:session s))
@@ -1317,7 +1700,7 @@
             [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]})
     (let [code (:code body)
           text (if (= "work_name_required" code)
-                 (:gantt-work-needed messages)
+                 (m :gantt-work-needed)
                  (code-message code))
           s (assoc state :flash {:error? true :text text})]
       {:state s :fx [[:html (render s)]]})))
@@ -1360,9 +1743,9 @@
        :fx [[:nav (str "/orders/" id)]]})
     (let [code (:code body)
           text (cond
-                 (= "no_fields" code) (:order-no-fields messages)
-                 (= "time_invalid" code) (:order-time-invalid messages)
-                 (= "time_order" code) (:order-time-order messages)
+                 (= "no_fields" code) (m :order-no-fields)
+                 (= "time_invalid" code) (m :order-time-invalid)
+                 (= "time_order" code) (m :order-time-order)
                  :else (code-message code))
           s (assoc state :flash {:error? true :text text})]
       {:state s :fx [[:html (render s)]]})))
@@ -1395,7 +1778,7 @@
 
 (defn relation-cut-result [state body]
   (if (:ok body)
-    (let [s (assoc state :flash {:error? false :text (:relations-cut-ok messages)})]
+    (let [s (assoc state :flash {:error? false :text (m :relations-cut-ok)})]
       {:state s :fx [[:html (render s)]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
@@ -1432,7 +1815,7 @@
 
 (defn after-place-save [state body]
   (if (:ok body)
-    (let [s (assoc state :flash {:error? false :text (:place-saving messages)}
+    (let [s (assoc state :flash {:error? false :text (m :place-saving)}
                    :place-preview nil :place-busy true)]
       {:state s
        :fx [[:html (render s)]
@@ -1445,9 +1828,9 @@
   (let [ok? (:ok body)
         busy? (= "emaff_busy" (:code body))
         text (cond
-               busy? (:emaff-busy messages)
-               (and ok? (= "emaff_partial" (:code body))) (:emaff-partial messages)
-               ok? (:emaff-import-ok messages)
+               busy? (m :emaff-busy)
+               (and ok? (= "emaff_partial" (:code body))) (m :emaff-partial)
+               ok? (m :emaff-import-ok)
                :else (code-message (:code body)))
         s (assoc state
                  :flash {:error? (not (or ok? busy?)) :text text}
@@ -1467,7 +1850,7 @@
 
 (defn after-field-save [state body]
   (if (:ok body)
-    {:state (assoc state :flash {:error? false :text "保存しました"} :form {}
+    {:state (assoc state :flash {:error? false :text (m :saved-ok)} :form {}
                    :map-mode "browse" :map-mode-parent nil)
      :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
     (let [text (if (= "field_has_paint" (:code body))
@@ -1483,7 +1866,7 @@
           form (cond-> (dissoc (:form state) :paint-geojson :paint-id)
                  (not (str/blank? wn)) (assoc :work_name wn)
                  fid (assoc :field_id (str fid) :id (str fid)))]
-      {:state (assoc state :flash {:error? false :text (:paint-ok messages)} :form form
+      {:state (assoc state :flash {:error? false :text (m :paint-ok)} :form form
                      :map-mode "paint")
        :fx [[:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
@@ -1523,14 +1906,14 @@
 
 (defn after-basemap-upload [state body]
   (if (:ok body)
-    {:state (assoc state :flash {:error? false :text "下地を取り込みました"})
+    {:state (assoc state :flash {:error? false :text (m :basemap-uploaded)})
      :fx [[:api "GET" "/api/user/basemaps" nil :basemaps-loaded]]}
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn after-image-save [state body]
   (if (:ok body)
-    {:state (assoc state :flash {:error? false :text (:image-ok messages)})
+    {:state (assoc state :flash {:error? false :text (m :image-ok)})
      :fx [[:api "GET" "/api/user/place" nil :place-loaded]]}
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
@@ -1540,17 +1923,21 @@
 
 (defn after-login [state body]
   (if (:ok body)
-    {:state (assoc state :session {:email (:email body)} :flash nil)
+    {:state (assoc state
+                   :session {:email (:email body)}
+                   :ui-lang (normalize-lang (:ui_lang body))
+                   :flash nil)
      :fx [[:nav (home-path (:kind state))]]}
     {:state (assoc state :flash {:error? true :text (code-message (:code body))})
      :fx [[:html (render (assoc state :flash {:error? true :text (code-message (:code body))}))]]}))
 
 (defn after-logout [state]
   {:state (assoc state :session nil :flash nil)
-   :fx [[:nav (login-path (:kind state))]]})
+   :fx [[:restore-guest-lang (:kind state)]
+        [:nav (login-path (:kind state))]]})
 
 (defn after-reset-request [state]
-  (let [s (assoc state :flash {:error? false :text (:reset-requested messages)})]
+  (let [s (assoc state :flash {:error? false :text (m :reset-requested)})]
     {:state s :fx [[:html (render s)]]}))
 
 (defn after-reset-complete [state body]
@@ -1564,14 +1951,14 @@
   (if (:ok body)
     (let [s (assoc state
                    :initial-password (:initial_password body)
-                   :flash {:error? false :text (:invite-ok messages)})]
+                   :flash {:error? false :text (m :invite-ok)})]
       {:state s :fx [[:html (render s)]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn after-password [state body]
   (if (:ok body)
-    (let [s (assoc state :flash {:error? false :text (:password-ok messages)})]
+    (let [s (assoc state :flash {:error? false :text (m :password-ok)})]
       {:state s :fx [[:html (render s)]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
@@ -1580,13 +1967,15 @@
   {:state state :fx [[:api "GET" "/api/admin/users" nil :users-loaded]]})
 
 (defn after-api-error [state]
-  (let [s (assoc state :flash {:error? true :text (:api-error messages)})]
+  (let [s (assoc state :flash {:error? true :text (m :api-error)})]
     {:state s :fx [[:html (render s)]]}))
 
 (defn handle [state msg]
-  (let [[op arg] (if (vector? msg) msg [msg nil])]
-    (case op
-      :boot (boot state arg)
+  (with-ui-lang state
+    (fn []
+      (let [[op arg] (if (vector? msg) msg [msg nil])]
+        (case op
+          :boot (boot state arg)
       :session-loaded (session-loaded state arg)
       :users-loaded (users-loaded state arg)
       :place-loaded (place-loaded state arg)
@@ -1647,7 +2036,8 @@
         (if (and (:session s) (= (:kind s) (:kind state)))
           (session-loaded s {:ok true :email (get-in s [:session :email])})
           {:state (assoc s :session nil)
-           :fx [[:session (:kind s)]]}))
+           :fx [[:restore-guest-lang (:kind s)]
+                [:session (:kind s)]]}))
       :submit
       (let [act (:act arg)
             form (:form arg)
@@ -1655,7 +2045,7 @@
         (case act
           "login" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/login" "/api/user/login") form :login-result]]}
           "logout" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/logout" "/api/user/logout") {} :logout-result]]}
-          "reset-request" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password/reset/request" "/api/user/password/reset/request") form :reset-request-result]]}
+          "reset-request" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password/reset/request" "/api/user/password/reset/request") (assoc form :ui_lang (ui-lang state)) :reset-request-result]]}
           "reset-complete" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password/reset" "/api/user/password/reset")
                                               (assoc form :token (or (:token form) (:token (parse-query (:search state)))))
                                               :reset-complete-result]]}
@@ -1676,7 +2066,7 @@
             {:state state :fx [[:html (render state)]]}
             (let [s (assoc state :place-busy true
                            :form (merge (or (:form state) {}) form)
-                           :flash {:error? false :text (:place-saving messages)})]
+                           :flash {:error? false :text (m :place-saving)})]
               {:state s
                :fx [[:html (render s)]
                     [:api "PUT" "/api/user/place" form :place-save-result]]}))
@@ -1684,7 +2074,7 @@
           (if (:place-busy state)
             {:state state :fx [[:html (render state)]]}
             (let [s (assoc state :place-busy true
-                           :flash {:error? false :text (:place-saving messages)})]
+                           :flash {:error? false :text (m :place-saving)})]
               {:state s
                :fx [[:html (render s)]
                     [:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}))
@@ -1750,7 +2140,7 @@
             (if (str/blank? wn)
               (let [s (assoc state :form (assoc (:form state) :work_name "") :paint-data nil
                              :map-mode "paint"
-                             :flash {:error? true :text (:work-name-needed messages)})]
+                             :flash {:error? true :text (m :work-name-needed)})]
                 {:state s :fx [[:html (render s)]]})
               {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil
                              :map-mode "paint")
@@ -1761,7 +2151,7 @@
                 gj (paint-geojson-of form state)]
             (cond
               (blank-work-name? form state)
-              (flash-html-state state (:work-name-needed messages))
+              (flash-html-state state (m :work-name-needed))
               (nil? fid)
               (flash-html-state state (code-message "field_not_found"))
               (nil? gj)
@@ -1782,7 +2172,7 @@
                 wn (work-name-of form state)]
             (cond
               (blank-work-name? form state)
-              (flash-html-state state (:work-name-needed messages))
+              (flash-html-state state (m :work-name-needed))
               (nil? fid)
               (flash-html-state state (code-message "field_not_found"))
               :else
@@ -1800,7 +2190,7 @@
                 wn (work-name-of form state)]
             (cond
               (blank-work-name? form state)
-              (flash-html-state state (:work-name-needed messages))
+              (flash-html-state state (m :work-name-needed))
               (nil? fid)
               (flash-html-state state (code-message "field_not_found"))
               :else
@@ -1809,7 +2199,7 @@
           "discard-drafts"
           (let [s (assoc state
                          :form (dissoc (:form state) :paint-geojson)
-                         :flash {:error? false :text (:paint-discard messages)})]
+                         :flash {:error? false :text (m :paint-discard)})]
             {:state s :fx [[:html (render s)]]})
           "import-fields" {:state state :fx [[:upload "POST" "/api/user/fields/import" form :field-save-result]]}
           "save-image-extent" {:state state :fx [[:api "PUT" "/api/user/place/image" form :image-save-result]]}
@@ -1829,12 +2219,12 @@
               (guarded (assoc s :gantt-progress nil))))
           "add-gantt-row"
           (let [title (str/trim (as-text (:title form)))
-                title' (if (str/blank? title) "新しい予定" title)
+                title' (if (str/blank? title) (m :gantt-new-placeholder) title)
                 start (str/trim (as-text (:start_at form)))
                 end (str/trim (as-text (:end_at form)))]
             (cond
               (or (str/blank? start) (str/blank? end))
-              (flash-html-state state (:time-invalid messages))
+              (flash-html-state state (m :time-invalid))
               :else
               {:state state
                :fx [[:api "POST" "/api/user/gantt"
@@ -1851,11 +2241,11 @@
                 wn (str/trim (as-text (:work_name body)))]
             (cond
               (str/blank? id)
-              (flash-html-state state (:gantt-not-found messages))
+              (flash-html-state state (m :gantt-not-found))
               (and (seq fids) (str/blank? wn))
-              (flash-html-state state (:gantt-work-needed messages))
+              (flash-html-state state (m :gantt-work-needed))
               (or (str/blank? (:start_at body)) (str/blank? (:end_at body)))
-              (flash-html-state state (:time-invalid messages))
+              (flash-html-state state (m :time-invalid))
               :else
               {:state state
                :fx [[:api "PUT" (str "/api/user/gantt/" id) body :gantt-save-result]]}))
@@ -1881,19 +2271,19 @@
                       :end_time (str/trim (as-text (:end_time form)))
                       :body (as-text (:body form))}]
             (if (str/blank? id)
-              (flash-html-state state (:order-not-found messages))
+              (flash-html-state state (m :order-not-found))
               {:state state
                :fx [[:api "PUT" (str "/api/user/orders/" id) body :order-save-result]]}))
           "close-order"
           (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))]
             (if (str/blank? id)
-              (flash-html-state state (:order-not-found messages))
+              (flash-html-state state (m :order-not-found))
               {:state state
                :fx [[:api "POST" (str "/api/user/orders/" id "/close") {} :order-save-result]]}))
           "post-journal"
           (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))]
             (if (str/blank? id)
-              (flash-html-state state (:order-not-found messages))
+              (flash-html-state state (m :order-not-found))
               {:state state
                :fx [[:api "POST" (str "/api/user/orders/" id "/journal")
                      {:body (:body form)}
@@ -1903,7 +2293,7 @@
             (if (str/blank? wn)
               (flash-html-state (assoc state :form (assoc (:form state) :work_name "")
                                        :others-paint-data nil)
-                                (:work-name-needed messages))
+                                (m :work-name-needed))
               {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil)
                :fx [[:api "GET" (str "/api/user/others/paints?work_name=" (encode-q wn))
                      nil :others-paints-loaded]]}))
@@ -1911,4 +2301,22 @@
           {:state state
            :fx [[:api "POST" "/api/admin/relations/cut" form :relation-cut-result]]}
           {:state state :fx [[:html (render state)]]}))
-      {:state state :fx [[:html (render state)]]})))
+      :set-lang
+      (let [lang (normalize-lang (if (map? arg) (:lang arg) arg))
+            s (assoc state :ui-lang lang :flash nil)]
+        (if (:session s)
+          {:state s
+           :fx [[:api "PUT"
+                 (if (= "admin" (:kind s)) "/api/admin/language" "/api/user/language")
+                 {:ui_lang lang}
+                 :language-saved]]}
+          {:state s
+           :fx [[:guest-lang (:kind s) lang]
+                [:html (render s)]]}))
+      :language-saved
+      (if (:ok arg)
+        {:state state :fx [[:html (render state)]]}
+        (let [s (assoc state :flash {:error? true
+                                     :text (code-message (or (:code arg) "lang_invalid"))})]
+          {:state s :fx [[:html (render s)]]}))
+      {:state state :fx [[:html (render state)]]})))))

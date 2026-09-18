@@ -286,7 +286,8 @@
         (is (map? (ui/handle s [:users-loaded {}])))
         (is (= :nav (ffirst (:fx (ui/handle s [:login-result {:ok true :email "a"}])))))
         (is (re-find #"違います" (get-in (ui/handle s [:login-result {:ok false :code "login_failed"}]) [:state :flash :text])))
-        (is (= :nav (ffirst (:fx (ui/handle s [:logout-result])))))
+        (is (= :restore-guest-lang (ffirst (:fx (ui/handle s [:logout-result])))))
+        (is (= :nav (first (second (:fx (ui/handle s [:logout-result]))))))
         (is (re-find #"案内" (get-in (ui/handle s [:reset-request-result]) [:state :flash :text])))
         (is (= :nav (ffirst (:fx (ui/handle s [:reset-complete-result {:ok true}])))))
         (is (true? (get-in (ui/handle s [:reset-complete-result {:ok false :code "reset_invalid"}]) [:state :flash :error?])))
@@ -445,8 +446,10 @@
     (is (= :api (fx-op (assoc s :page :home) [:path {:path "/fields" :search ""}])))
     (is (= :api (fx-op (assoc s :page :map) [:path {:path "/home" :search ""}])))
     (is (= :api (fx-op (assoc s :page :home) [:path {:path "/gantt" :search ""}])))
-    (is (= :session (fx-op (assoc (dissoc s :session) :page :home) [:path {:path "/map" :search ""}])))
-    (is (= :session (fx-op (assoc s :page :home :kind "user") [:path {:path "/admin/users" :search ""}])))
+    (let [fx (:fx (ui/handle (assoc (dissoc s :session) :page :home) [:path {:path "/map" :search ""}]))]
+      (is (= :restore-guest-lang (ffirst fx)))
+      (is (= :session (ffirst (rest fx)))))
+    (is (= :restore-guest-lang (fx-op (assoc s :page :home :kind "user") [:path {:path "/admin/users" :search ""}])))
     (let [b (ui/handle (ui/init-state) [:boot {:path "/map" :search "" :narrow? true}])]
       (is (true? (get-in b [:state :narrow?]))))
     (is (= :html (fx-op s [:submit {:act "save-place" :form {:west "1" :south "2" :east "3" :north "4"}}])))

@@ -81,7 +81,7 @@
             (is (not (re-find #"この指示を閉じる" issuer-phone))))
           (is (re-find #"パソコンで開いてください"
                        (html {:page :orders-new :narrow? true :fields [{:id 1}]})))
-          (is (not (re-find #"言語切替|English" (html {:page :orders :narrow? true}))))
+          (is (re-find #"data-lang" (html {:page :orders :narrow? true})))
           (is (not (re-find #"ブラシ|全面完了|gantt-circle" detail))))
         (testing "B5-3-02 / B5-5.3-03 指示を出す権限"
           (is (true? (:ok (orders/create-order sys uid {:work_date "2026-09-12"
@@ -190,9 +190,10 @@
         (testing "B5-8-01 通知は無い"
           (is (nil? (http/match-api :post "/api/user/orders/notify")))
           (is (nil? (http/match-api :post "/api/notify"))))
-        (testing "B5-10-02 言語切替は出さない"
+        (testing "B5-10-02 言語は工程6（/language）。旧 locale 経路は置かない"
           (is (nil? (http/match-api :put "/api/user/locale")))
-          (is (not (re-find #"言語切替|English" wide))))))))
+          (is (some? (http/match-api :put "/api/user/language")))
+          (is (re-find #"data-lang" wide)))))))
 
 (deftest b5-spec-ids-present
   (let [doc (slurp (io/file "docs/基本試験仕様書_工程5.md"))

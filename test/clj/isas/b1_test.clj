@@ -35,10 +35,10 @@
           (let [sid (tu/user-sid app "b1@example.com" pw)]
             (is (seq (:initial_password (tu/parse (tu/post-json app "/api/user/invite"
                                                                {:email "from-user@example.com"} "user" sid)))))))
-        (testing "B1-2-05 後工程のうち未着手は出さない（言語切替）"
+        (testing "B1-2-05 旧 locale 経路は置かない（言語は /language）"
           (is (some? (http/match-api :post "/api/user/orders")))
           (is (nil? (http/match-api :put "/api/user/locale")))
-          (is (not (re-find #"言語切替|English" (html {:page :home :kind "user"})))))
+          (is (some? (http/match-api :put "/api/user/language"))))
         (testing "B1-2-06 端末で入口を分けない"
           (is (= :login (:page (ui/route-for "/"))))
           (is (re-find #"利用者ログイン" (tu/page-html {:page :login :kind "user" :narrow? true}))))
@@ -130,4 +130,4 @@
         (testing "B1-8 / B1-9 / B1-10"
           (is (nil? (http/match-api :get "/api/oauth")))
           (is (not (re-find #"農機|GAP|在庫|オフライン下書き" (html {:page :home :kind "user"}))))
-          (is (not (re-find #"言語切替" (html {:page :login :kind "user" :session nil})))))))))
+          (is (re-find #"data-lang" (html {:page :login :kind "user" :session nil}))))))))

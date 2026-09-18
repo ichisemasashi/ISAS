@@ -7,9 +7,12 @@
 (deftest subject-and-body-test
   (is (= "ISAS パスワードの再設定" (mail/reset-subject "user")))
   (is (= "ISAS 管理者パスワードの再設定" (mail/reset-subject "admin")))
+  (is (= "ISAS password reset" (mail/reset-subject "user" "en")))
+  (is (= "ISAS admin password reset" (mail/reset-subject "admin" "en")))
   (is (re-find #"http://localhost:8080/reset\?token=abc"
                (mail/reset-body "user" "http://localhost:8080/" "abc")))
-  (is (re-find #"/admin/reset\?token=z" (mail/reset-body "admin" "http://x" "z"))))
+  (is (re-find #"/admin/reset\?token=z" (mail/reset-body "admin" "http://x" "z")))
+  (is (re-find #"24 hours" (mail/reset-body "user" "http://x/" "t" "en"))))
 
 (deftest smtp-opts-test
   (let [c (assoc (:conf (tu/test-system)) :smtp-user "" :smtp-password "")]

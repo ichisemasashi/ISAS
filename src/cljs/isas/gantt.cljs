@@ -117,7 +117,9 @@
   (when-let [^js el (.getElementById js/document "gantt-circle")]
     (let [progress (:gantt-progress state)
           pct (when (and progress (:applicable progress)) (:percent progress))
-          unit (:gantt-percent-unit ui/messages)]
+          unit (or (when (fn? (.-getAttribute el))
+                     (.getAttribute el "data-percent-unit"))
+                   (get (ui/messages-for (ui/ui-lang state)) :gantt-percent-unit))]
       (if (nil? pct)
         (set! (.-innerHTML el) "")
         (let [r 42
