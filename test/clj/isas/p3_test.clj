@@ -395,8 +395,8 @@
                                            [:state :flash :text]))))
     (is (= "" (#'ui/work-name-of {} {})))
     (is (true? (#'ui/blank-work-name? {} {})))
-    (testing "P3-6-03 他人地図の経路は無い"
-      (is (nil? (http/match-api :get "/api/user/others/paints")))
+    (testing "P3-6-03 他人地図の塗り POST は無い（GET は工程5）"
+      (is (some? (http/match-api :get "/api/user/others/paints")))
       (is (nil? (http/match-api :post "/api/user/others/paints"))))
     (testing "P3-S 操作シナリオ（試験書と画面の要点）"
       (let [doc (slurp (io/file "docs/詳細試験仕様書_工程3.md"))]

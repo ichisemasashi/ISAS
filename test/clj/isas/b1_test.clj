@@ -54,9 +54,9 @@
           (is (true? (:ok (accounts/revoke-user sys (:id (db/find-user-by-email (:ds sys) "from-user@example.com"))))))
           (is (= 401 (:status (tu/post-json app "/api/admin/users/revoke" {:user_id 1} "user"
                                            (tu/user-sid app "b1@example.com" pw))))))
-        (testing "B1-3-05 関係の切断はまだ無い"
-          (is (nil? (http/match-api :post "/api/admin/relations/cut")))
-          (is (not (re-find #"関係を切" (html {:page :home :kind "admin"})))))
+        (testing "B1-3-05 関係の切断は工程5（管理者のみ）"
+          (is (some? (http/match-api :post "/api/admin/relations/cut")))
+          (is (re-find #"関係を切" (html {:page :home :kind "admin"}))))
         (testing "B1-3-06 同じメールを両方に置かない"
           (is (= "invite_duplicate_admin" (:code (accounts/invite sys "admin" 1 "admin@example.com")))))
         (testing "B1-3-07〜08 管理者は画面から増やさない"
@@ -102,7 +102,7 @@
         (testing "B1-5.2 / B1-5.3"
           (is (re-find #"招待" (html {:page :home :kind "admin"})))
           (is (re-find #"取消し" (html {:page :home :kind "admin"})))
-          (is (not (re-find #"関係を切" (html {:page :home :kind "admin"}))))
+          (is (re-find #"関係を切" (html {:page :home :kind "admin"})))
           (is (not (re-find #"href=\"/fields\"" (html {:page :home :kind "admin"}))))
           (is (re-find #"招待" (html {:page :home :kind "user"})))
           (is (not (re-find #"取り消す" (html {:page :invite :kind "user"})))))
