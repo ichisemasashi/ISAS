@@ -449,10 +449,7 @@
                         "<p><a data-nav href=\"/orders/new\">" (esc (:orders-create messages)) "</a></p>"))
                  (when (not admin?)
                    (str "<p><a data-nav href=\"/orders\">" (esc (:orders-title messages)) "</a></p>"
-                        "<p><a data-nav href=\"/others\">" (esc (:others-title messages)) "</a></p>"))
-                 (when admin?
-                   (str "<p><a data-nav href=\"/admin/relations\">" (esc (:relations-title messages)) "</a></p>"))))))
-
+                        "<p><a data-nav href=\"/others\">" (esc (:others-title messages)) "</a></p>"))))))
 (defn invite-view [state]
   (layout "利用者を招待"
           (str (if (= "admin" (:kind state)) (nav-admin) (nav-user))

@@ -47,6 +47,7 @@
           (is (re-find #"北（未）" detail)))
         (testing "B5-2-02 / B5-3-01 / B5-5.2-01 管理者は切断だけ"
           (is (re-find #"関係を切" (html {:page :home :kind "admin"})))
+          (is (= 1 (count (re-seq #"href=\"/admin/relations\"" (html {:page :home :kind "admin"})))))
           (is (not (re-find #"href=\"/orders\"|href=\"/gantt\"|href=\"/map\""
                             (html {:page :home :kind "admin"}))))
           (is (= 403 (:status (tu/get-path app "/api/user/orders" "admin" asid))))

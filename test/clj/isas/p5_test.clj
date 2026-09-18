@@ -97,7 +97,12 @@
     (is (re-find #"href=\"/orders/new\"" (html {:page :home :fields [{:id 1}]})))
     (is (not (re-find #"href=\"/orders/new\"" (html {:page :home :fields []}))))
     (is (not (re-find #"href=\"/orders\"" (html {:page :home :kind "admin"}))))
-    (is (re-find #"href=\"/admin/relations\"" (html {:page :home :kind "admin"}))))
+    (let [admin-home (html {:page :home :kind "admin"})]
+      (is (re-find #"href=\"/admin/relations\"" admin-home))
+      (is (= 1 (count (re-seq #"href=\"/admin/relations\"" admin-home)))
+          "関係を切るリンクはナビに1つだけ")
+      (is (= 1 (count (re-seq #"関係を切る" admin-home)))
+          "「関係を切る」文言も1回だけ")))
   (testing "P5-2.1-08 / P5-2.1-09 狭い画面"
     (is (re-find #"出した指示|受けた指示" (html {:page :orders :narrow? true})))
     (is (re-find #"指示の作成・修正・閉じはパソコンで開いてください"
