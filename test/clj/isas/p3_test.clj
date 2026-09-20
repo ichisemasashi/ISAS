@@ -56,7 +56,19 @@
     (let [h (map-html [{:id 1 :name "北"}])]
       (is (re-find #"ブラシ" h))
       (is (not (re-find #">手描き<" h)))
-      (is (re-find #"圃場を直す" h))))
+      (is (re-find #"圃場を直す" h))
+      (is (re-find #"map-section|塗る" h))
+      (is (re-find #">塗る<" h))
+      (is (re-find #">選んだ圃場<" h))
+      (is (re-find #">選んだ塗り<" h))
+      (is (re-find #">ほか<" h))))
+  (testing "P3-2.1-01b2 未選択・下書きなしは無効"
+    (let [h (map-html [{:id 1 :name "北"}])]
+      (is (re-find #"id=\"paint-confirm-btn\"[^>]*disabled" h))
+      (is (re-find #"id=\"paint-discard-btn\"[^>]*disabled" h))
+      (is (re-find #"id=\"paint-complete-btn\"[^>]*disabled" h))
+      (is (re-find #"id=\"paint-delete-all-btn\"[^>]*disabled" h))
+      (is (re-find #"id=\"paint-delete-btn\"[^>]*disabled" h))))
   (testing "P3-2.1-01c 圃場を直すと手描きが戻る"
     (let [h (html {:page :map
                    :place {:west 139 :south 35 :east 141 :north 37}

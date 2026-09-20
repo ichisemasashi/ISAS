@@ -66,6 +66,13 @@
         complete (make-form {"id" c-id "work_name" c-wn})
         del-paint (make-form {"id" d-id})
         del-all (make-form {"id" da-id "work_name" da-wn})
+        confirm-btn (js-obj "disabled" true)
+        discard-btn (js-obj "disabled" true)
+        complete-btn (js-obj "disabled" true)
+        delete-all-btn (js-obj "disabled" true)
+        delete-btn (js-obj "disabled" true)
+        field-note (js-obj "hidden" false)
+        stroke-note (js-obj "hidden" false)
         forms {"save-place" save
                "preview-place" save
                "save-image-extent" img
@@ -88,6 +95,13 @@
                       "map-hint" hint
                       "map-selection" selection
                       "app" app-el
+                      "paint-confirm-btn" confirm-btn
+                      "paint-discard-btn" discard-btn
+                      "paint-complete-btn" complete-btn
+                      "paint-delete-all-btn" delete-all-btn
+                      "paint-delete-btn" delete-btn
+                      "paint-field-note" field-note
+                      "paint-stroke-note" stroke-note
                       nil))
                   "querySelector"
                   (fn [sel]
@@ -98,10 +112,15 @@
                     (when (or (= ev "click") (= ev "change"))
                       (swap! clicks conj f)))))
     (set! js/window (js-obj "innerWidth" 1200 "addEventListener" (fn [_ _])))
-    {:west west :extent extent :clicks clicks :ol-el ol-el}))
+    {:west west :extent extent :clicks clicks :ol-el ol-el
+     :confirm-btn confirm-btn :discard-btn discard-btn
+     :complete-btn complete-btn :delete-all-btn delete-all-btn
+     :delete-btn delete-btn :field-note field-note :stroke-note stroke-note
+     :d-id d-id}))
 
 (deftest map-install-and-tools-test
-  (let [{:keys [west extent clicks]} (setup-dom!)]
+  (let [{:keys [west extent clicks confirm-btn discard-btn complete-btn
+                delete-all-btn delete-btn field-note stroke-note d-id]} (setup-dom!)]
     (reset! m/current nil)
     (reset! m/installed? false)
     (reset! b/app-state (assoc (ui/init-state)
@@ -221,14 +240,32 @@
             (set! (.-features mod) mod)
             (call-ol mod "modifyend" #js {:features mod})))
         (enter "paint")
+        (is (true? (.-disabled confirm-btn)))
+        (is (true? (.-disabled discard-btn)))
         (fire "brush" nil)
         (let [draw (last-ol "drawend")]
           (call-ol draw "drawend" #js {:feature draw})
           ;; P3-S-02: one brush stroke clears Draw so pan works again
           (is (nil? (:draw @m/current)))
-          (is (false? (:drawing? @m/current))))
+          (is (false? (:drawing? @m/current)))
+          (is (false? (.-disabled confirm-btn)))
+          (is (false? (.-disabled discard-btn))))
         (fire "discard" nil)
         (is (nil? (seq (:drafts @m/current))))
+        (is (true? (.-disabled confirm-btn)))
+        (let [click (last-ol "click")]
+          (when click
+            (set! (.-props click) (js-obj "id" 1 "name" "北"))
+            (call-ol click "click" #js {:pixel #js [1 1]})
+            (is (false? (.-disabled complete-btn)))
+            (is (false? (.-disabled delete-all-btn)))
+            (is (true? (.-hidden field-note)))
+            (is (true? (.-disabled delete-btn)))
+            (set! (.-value d-id) "9")
+            (m/refresh-paint-actions!)
+            (is (= "9" (str (.-value d-id))))
+            (is (false? (.-disabled delete-btn)))
+            (is (true? (.-hidden stroke-note)))))
         (enter "merge")
         (fire "image-shift" nil)
         (fire "image-scale" nil)

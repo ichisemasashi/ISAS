@@ -50,7 +50,7 @@
    :merge-keep-missing "残す圃場を対象に含めてください"
    :map-hint "いま必要な操作のボタンだけ出しています。やめるとメニューに戻ります"
    :map-hint-browse "作業名を入れるか、塗り・圃場の形・下地のどれかを選んでください"
-   :map-hint-paint "作業名を入れ、圃場をクリックしてからブラシで塗ります。塗り終わったら地図をドラッグして動かせます。圃場の形を直すときは「圃場を直す」"
+   :map-hint-paint "上から順に: ブラシで塗る → 塗りを確定する。全面完了や削除は地図で圃場／塗りを選んでから。形を直すときは「ほか」の圃場を直す"
    :map-hint-draw "閉じた形を描き、名前を付けて「圃場を保存」してください"
    :map-hint-edit "頂点を動かして「形と名前を保存」してください"
    :map-hint-split "分割する圃場をクリックして選び、そのあと圃場を横切る線を引いて「分割を保存」してください"
@@ -88,6 +88,13 @@
    :paint-empty "圃場の内側に塗れる場所がありません"
    :paint-not-found "その塗りはありません"
    :map-hint-brush "ブラシを押してからなぞります。一筆ごとに終わり、そのあと地図をドラッグできます"
+   :map-section-paint "塗る"
+   :map-section-field "選んだ圃場"
+   :map-section-stroke "選んだ塗り"
+   :map-section-other "ほか"
+   :map-need-draft "先にブラシで下書きを書いてください"
+   :map-need-field "先に地図で圃場をクリックしてください"
+   :map-need-paint "先に地図で塗りをクリックしてください"
    :paint-ok "塗りを保存しました"
    :gantt-title "ガント"
    :phone-gantt "ガントの編集はパソコンで開いてください"
@@ -270,7 +277,7 @@
    :merge-keep-missing "Include the field to keep among the targets"
    :map-hint "Only the buttons you need now are shown. Cancel returns to the menu"
    :map-hint-browse "Enter a work name, or choose paint, field shapes, or basemap"
-   :map-hint-paint "Enter a work name, click a field, then paint with the brush. After painting you can drag the map. To edit field shapes, choose Edit fields"
+   :map-hint-paint "Top to bottom: brush, then confirm paint. Complete or delete after selecting a field or paint on the map. To edit shapes, use Edit fields under Other"
    :map-hint-draw "Draw a closed shape, name it, and save the field"
    :map-hint-edit "Move vertices and save the shape and name"
    :map-hint-split "Click the field to split, then draw a line across it and save the split"
@@ -308,6 +315,13 @@
    :paint-empty "There is nowhere to paint inside the field"
    :paint-not-found "That paint does not exist"
    :map-hint-brush "Press the brush, then stroke. Each stroke finishes, then you can drag the map"
+   :map-section-paint "Paint"
+   :map-section-field "Selected field"
+   :map-section-stroke "Selected paint"
+   :map-section-other "Other"
+   :map-need-draft "Draw a draft with the brush first"
+   :map-need-field "Click a field on the map first"
+   :map-need-paint "Click a paint on the map first"
    :paint-ok "Paint saved"
    :gantt-title "Gantt"
    :phone-gantt "Edit the Gantt on a computer"
@@ -1142,11 +1156,23 @@
          "</datalist></label>"
          "<button type=\"submit\">" (esc (m :work-name-see)) "</button></form>")))
 
+(defn- map-action-section [title body]
+  (str "<section class=\"map-actions\">"
+       "<h3 class=\"map-actions-title\">" (esc title) "</h3>"
+       body
+       "</section>"))
+
 (defn- paint-panel [state]
   (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))
         fid (str/trim (str (or (get-in state [:form :field_id]) (get-in state [:form :id]) "")))
         pid (str/trim (str (or (get-in state [:form :paint-id]) "")))
-        gj (str/trim (str (or (get-in state [:form :paint-geojson]) "")))]
+        gj (str/trim (str (or (get-in state [:form :paint-geojson]) "")))
+        has-draft? (not (str/blank? gj))
+        has-field? (not (str/blank? fid))
+        has-paint? (not (str/blank? pid))
+        dis (fn [ok? tip]
+              (str (when-not ok? " disabled")
+                   " title=\"" (esc (if ok? "" tip)) "\""))]
     (str
      "<div class=\"paint-tools\" data-none=\"" (:none paint-colors)
      "\" data-partial=\"" (:partial paint-colors)
@@ -1158,26 +1184,50 @@
         "<span>" (esc (m :status-none)) "</span> "
         "<span>" (esc (m :status-partial)) "</span> "
         "<span>" (esc (m :status-done)) "</span></p>"
-        "<div class=\"toolbar\">"
-        "<button type=\"button\" data-map=\"brush\" data-hint=\"" (esc (m :map-hint-brush)) "\">" (esc (m :brush)) "</button>"
-        "<button type=\"button\" data-map=\"discard\" data-hint=\"" (esc (m :map-hint-brush)) "\">" (esc (m :paint-discard)) "</button>"
-        "</div>"
-        "<form data-act=\"confirm-paint\" method=\"post\">"
-        "<input type=\"hidden\" name=\"field_id\" value=\"" (esc fid) "\">"
-        "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
-        "<input type=\"hidden\" name=\"geojson\" value=\"" (esc gj) "\">"
-        "<button type=\"submit\">" (esc (m :paint-confirm)) "</button></form>"
-        "<form data-act=\"complete-field\" method=\"post\">"
-        "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
-        "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
-        "<button type=\"submit\">" (esc (m :paint-complete)) "</button></form>"
-        "<form data-act=\"delete-field-paints\" method=\"post\">"
-        "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
-        "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
-        "<button type=\"submit\">" (esc (m :paint-delete-all)) "</button></form>"
-        "<form data-act=\"delete-paint\" method=\"post\">"
-        "<input type=\"hidden\" name=\"id\" value=\"" (esc pid) "\">"
-        "<button type=\"submit\">" (esc (m :paint-delete)) "</button></form>"))
+        (map-action-section
+         (m :map-section-paint)
+         (str "<div class=\"toolbar paint-flow\">"
+              "<button type=\"button\" id=\"paint-brush-btn\" data-map=\"brush\" data-hint=\""
+              (esc (m :map-hint-brush)) "\">" (esc (m :brush)) "</button>"
+              "<form data-act=\"confirm-paint\" method=\"post\" class=\"inline\">"
+              "<input type=\"hidden\" name=\"field_id\" value=\"" (esc fid) "\">"
+              "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
+              "<input type=\"hidden\" name=\"geojson\" value=\"" (esc gj) "\">"
+              "<button type=\"submit\" id=\"paint-confirm-btn\" data-need=\"draft\""
+              (dis has-draft? (m :map-need-draft)) ">"
+              (esc (m :paint-confirm)) "</button></form>"
+              "<button type=\"button\" id=\"paint-discard-btn\" data-map=\"discard\" data-need=\"draft\""
+              (dis has-draft? (m :map-need-draft))
+              " data-hint=\"" (esc (m :map-hint-brush)) "\">"
+              (esc (m :paint-discard)) "</button>"
+              "</div>"))
+        (map-action-section
+         (m :map-section-field)
+         (str "<p class=\"map-actions-note\" id=\"paint-field-note\""
+              (when has-field? " hidden") ">"
+              (esc (m :map-need-field)) "</p>"
+              "<form data-act=\"complete-field\" method=\"post\" class=\"inline\">"
+              "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
+              "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
+              "<button type=\"submit\" id=\"paint-complete-btn\" data-need=\"field\""
+              (dis has-field? (m :map-need-field)) ">"
+              (esc (m :paint-complete)) "</button></form>"
+              "<form data-act=\"delete-field-paints\" method=\"post\" class=\"inline\">"
+              "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
+              "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
+              "<button type=\"submit\" id=\"paint-delete-all-btn\" data-need=\"field\""
+              (dis has-field? (m :map-need-field)) ">"
+              (esc (m :paint-delete-all)) "</button></form>"))
+        (map-action-section
+         (m :map-section-stroke)
+         (str "<p class=\"map-actions-note\" id=\"paint-stroke-note\""
+              (when has-paint? " hidden") ">"
+              (esc (m :map-need-paint)) "</p>"
+              "<form data-act=\"delete-paint\" method=\"post\" class=\"inline\">"
+              "<input type=\"hidden\" name=\"id\" value=\"" (esc pid) "\">"
+              "<button type=\"submit\" id=\"paint-delete-btn\" data-need=\"paint\""
+              (dis has-paint? (m :map-need-paint)) ">"
+              (esc (m :paint-delete)) "</button></form>"))))
      "</div>")))
 
 (defn- browse-panel [state]
@@ -1268,10 +1318,12 @@
   (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))]
     (str (paint-panel state)
          (when-not (str/blank? wn)
-           (str "<div class=\"toolbar\">"
-                (map-mode-select [["browse" (m :map-do-fields)]
-                                  ["basemap" (m :map-do-basemap)]])
-                "</div>"))
+           (map-action-section
+            (m :map-section-other)
+            (str "<div class=\"toolbar\">"
+                 (map-mode-select [["browse" (m :map-do-fields)]
+                                   ["basemap" (m :map-do-basemap)]])
+                 "</div>")))
          (when (str/blank? wn)
            (cancel-form)))))
 

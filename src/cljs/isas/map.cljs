@@ -276,6 +276,28 @@
     (let [s (str/trim (str id))]
       (when-not (str/blank? s) s))))
 
+(defn refresh-paint-actions! []
+  (let [has-draft? (boolean (seq (:drafts @current)))
+        has-field? (boolean (field-key (:active-field @current)))
+        pid (some-> (.querySelector js/document "form[data-act='delete-paint']")
+                    (.querySelector "input[name='id']")
+                    .-value
+                    str
+                    str/trim)
+        has-paint? (not (str/blank? (str pid)))]
+    (doseq [id ["paint-confirm-btn" "paint-discard-btn"]]
+      (when-let [^js el (.getElementById js/document id)]
+        (set! (.-disabled el) (not has-draft?))))
+    (doseq [id ["paint-complete-btn" "paint-delete-all-btn"]]
+      (when-let [^js el (.getElementById js/document id)]
+        (set! (.-disabled el) (not has-field?))))
+    (when-let [^js el (.getElementById js/document "paint-delete-btn")]
+      (set! (.-disabled el) (not has-paint?)))
+    (when-let [^js el (.getElementById js/document "paint-field-note")]
+      (set! (.-hidden el) has-field?))
+    (when-let [^js el (.getElementById js/document "paint-stroke-note")]
+      (set! (.-hidden el) has-paint?))))
+
 (defn- same-field? [a b]
   (and (some? a) (some? b) (= (field-key a) (field-key b))))
 
@@ -321,7 +343,8 @@
       (set-form-input "confirm-paint" "geojson" gj-str)
       (remember-form! {:paint-geojson gj-str}))
     (set-field-targets! id)
-    (set-work-name-targets! wn)))
+    (set-work-name-targets! wn)
+    (refresh-paint-actions!)))
 
 (defn- clear-drafts-only! []
   (swap! current assoc :drafts [])
@@ -329,7 +352,8 @@
     (when (.-clear src)
       (.clear src)))
   (set-form-input "confirm-paint" "geojson" "")
-  (remember-form! {:paint-geojson ""}))
+  (remember-form! {:paint-geojson ""})
+  (refresh-paint-actions!))
 
 (defn- suppress-select! []
   (reset! suppress-select-until (+ (.now js/Date) 600)))
@@ -374,7 +398,8 @@
 (defn- discard-drafts! []
   (stop-draw!)
   (clear-drafts-only!)
-  (set-selection ""))
+  (set-selection "")
+  (refresh-paint-actions!))
 
 (defn- start-edit []
   (stop-draw!)
@@ -477,9 +502,12 @@
                                              (set-form-input "merge-fields" "keep_id" (first ids))
                                              (write-json "merge-fields" "ids" ids))
                                            (when-not paint-id
+                                             (set-form-input "delete-paint" "id" "")
+                                             (remember-form! {:paint-id ""})
                                              (set-selection (str "選んでいる圃場: " (or nm id)
                                                                  (when (and merge? (> (count ids) 1))
                                                                    (str "（合筆の対象 " (count ids) "枚）")))))
+                                           (refresh-paint-actions!)
                                            ;; 圃場を選んだあとで線引きを付ける（このクリックでは線を始めない）
                                            (when (= :split (:tool @current))
                                              (start-draw :split))))
@@ -594,7 +622,8 @@
           (set-field-targets! active)
           (set-work-name-targets! (or (get-in state [:form :work_name]) (current-work-name))))
         (when-not read-only?
-          (apply-map-mode! state))
+          (apply-map-mode! state)
+          (refresh-paint-actions!))
         nil))))
 
 (defn install! []
