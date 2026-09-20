@@ -112,7 +112,13 @@
    :gantt-work-add "作業を足す"
    :gantt-work-new-placeholder "新しい作業"
    :gantt-works-label "作業"
-   :gantt-title-of-work "所属の題名"
+   :gantt-title-of-work "関連する題名"
+   :gantt-title-none "（なし）"
+   :works-title "作業"
+   :nav-works "作業"
+   :phone-works "作業の編集はパソコンで開いてください"
+   :works-no-fields "圃場が1枚以上あるときだけ、作業を管理できます"
+   :works-empty "まだ作業がありません"
    :gantt-start "開始"
    :gantt-end "終了"
    :gantt-targets "対象圃場"
@@ -367,7 +373,13 @@
    :gantt-work-add "Add work"
    :gantt-work-new-placeholder "New work"
    :gantt-works-label "Works"
-   :gantt-title-of-work "Title"
+   :gantt-title-of-work "Related title"
+   :gantt-title-none "(none)"
+   :works-title "Works"
+   :nav-works "Works"
+   :phone-works "Edit works on a computer"
+   :works-no-fields "Work management is available only when you have at least one field"
+   :works-empty "No works yet"
    :gantt-start "Start"
    :gantt-end "End"
    :gantt-targets "Target fields"
@@ -734,6 +746,7 @@
           "/fields" {:page :fields :kind "user"}
           "/map" {:page :map :kind "user"}
           "/map/place" {:page :map-place :kind "user"}
+          "/works" {:page :works :kind "user"}
           "/gantt" {:page :gantt :kind "user"}
           "/orders" {:page :orders :kind "user"}
           "/orders/new" {:page :orders-new :kind "user"}
@@ -762,7 +775,7 @@
   (if (= kind "admin") "/admin/home" "/home"))
 
 (defn needs-auth? [page]
-  (contains? #{:home :invite :password :users :fields :map :map-place :gantt
+  (contains? #{:home :invite :password :users :fields :map :map-place :works :gantt
                :orders :orders-new :order :others :relations :gantt-progress} page))
 
 (defn init-state []
@@ -862,6 +875,7 @@
        "<a data-nav href=\"/home\">" (esc (m :nav-home)) "</a>"
        "<a data-nav href=\"/fields\">" (esc (m :nav-fields)) "</a>"
        "<a data-nav href=\"/map\">" (esc (m :nav-map)) "</a>"
+       "<a data-nav href=\"/works\">" (esc (m :nav-works)) "</a>"
        "<a data-nav href=\"/invite\">" (esc (m :nav-invite)) "</a>"
        "<a data-nav href=\"/password\">" (esc (m :nav-password)) "</a>"
        "<form data-act=\"logout\" method=\"post\"><button type=\"submit\">"
@@ -920,7 +934,8 @@
                  (flash-html state)
                  "<p>" (esc (get-in state [:session :email])) "</p>"
                  (when (and (not admin?) (seq (:fields state)))
-                   (str "<p><a data-nav href=\"/gantt\">" (esc (m :gantt-title)) "</a></p>"
+                   (str "<p><a data-nav href=\"/works\">" (esc (m :works-title)) "</a></p>"
+                        "<p><a data-nav href=\"/gantt\">" (esc (m :gantt-title)) "</a></p>"
                         "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
                  (when (not admin?)
                    (str "<p><a data-nav href=\"/orders\">" (esc (m :orders-title)) "</a></p>"
@@ -979,6 +994,10 @@
     (= :gantt (:page state))
     (layout (m :gantt-title)
             (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-gantt)) "</p>"))
+
+    (= :works (:page state))
+    (layout (m :works-title)
+            (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-works)) "</p>"))
 
     :else
     (layout (m :map-title)
@@ -1207,7 +1226,8 @@
                              "<label>" (esc (m :unit-m2))
                              "<input name=\"area_m2\" inputmode=\"numeric\" value=\"" (esc (:area_m2 f)) "\"></label>"
                              "<label>" (esc (m :memo-label))
-                             "<textarea name=\"memo\" rows=\"2\">" (esc (or (:memo f) "")) "</textarea></label>"
+                             "<textarea name=\"memo\" rows=\"16\" cols=\"60\">"
+                             (esc (or (:memo f) "")) "</textarea></label>"
                              "<button type=\"submit\">" (esc (m :btn-save-field-row)) "</button></form>"
                              "<form data-act=\"delete-field\" method=\"post\">"
                              "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
@@ -1598,6 +1618,104 @@
       (not (str/blank? wn)) (assoc :work_name wn)
       (str/blank? wn) (assoc :work_name nil))))
 
+(defn- gantt-title-select-html [titles selected-id include-none? select-id]
+  (str "<select name=\"title_id\""
+       (when-not (str/blank? (str select-id))
+         (str " id=\"" (esc select-id) "\""))
+       ">"
+       (when include-none?
+         (str "<option value=\"\""
+              (when (or (nil? selected-id) (str/blank? (str selected-id))) " selected")
+              ">" (esc (m :gantt-title-none)) "</option>"))
+       (apply str
+              (for [t titles]
+                (str "<option value=\"" (esc (:id t)) "\""
+                     (when (same-gantt-id? (:id t) selected-id) " selected")
+                     ">" (esc (:name t)) "</option>")))
+       "</select>"))
+
+(defn- work-related-title-label [state title-id]
+  (if-let [t (gantt-title-by-id state title-id)]
+    (:name t)
+    (m :gantt-title-none)))
+
+(defn- work-targets-fieldset [fields selected-ids]
+  (str "<fieldset><legend>" (esc (m :gantt-targets)) "</legend>"
+       (apply str
+              (for [f fields]
+                (let [checked? (some #(same-gantt-id? % (:id f)) selected-ids)]
+                  (str "<label><input type=\"checkbox\" name=\"field_ids\" value=\""
+                       (esc (:id f)) "\""
+                       (when checked? " checked") "> "
+                       (esc (:name f)) "</label>"))))
+       "</fieldset>"))
+
+(defn works-view [state]
+  (let [fields (:fields state)]
+    (layout (m :works-title)
+            (str (nav-user state)
+                 (flash-html state)
+                 (if (empty? fields)
+                   (str "<p>" (esc (m :works-no-fields)) "</p>")
+                   (let [titles (or (:gantt-titles state) [])
+                         rows (or (:gantt-rows state) [])
+                         sel (gantt-row-by-id state (:gantt-selected state))]
+                     (str
+                      "<section class=\"works-list\" id=\"works-list\">"
+                      "<h2>" (esc (m :gantt-works-label)) "</h2>"
+                      (if (empty? rows)
+                        (str "<p>" (esc (m :works-empty)) "</p>")
+                        (apply str
+                               (for [r rows]
+                                 (let [selected? (same-gantt-id? (:id r) (:gantt-selected state))]
+                                   (str "<form class=\"work-item" (when selected? " selected")
+                                        "\" data-act=\"select-gantt-row\" method=\"post\">"
+                                        "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
+                                        "<button type=\"submit\" id=\"work-btn-" (esc (:id r)) "\">"
+                                        (esc (:title r))
+                                        " / " (esc (work-related-title-label state (:title_id r)))
+                                        " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")</button></form>")))))
+                      "</section>"
+                      "<form data-act=\"add-gantt-row\" method=\"post\" id=\"works-add-form\">"
+                      "<label>" (esc (m :gantt-title-of-work))
+                      (gantt-title-select-html titles nil true "works-add-title-id") "</label>"
+                      "<label>" (esc (m :gantt-title-label))
+                      "<input id=\"works-new-title\" name=\"title\" placeholder=\""
+                      (esc (m :gantt-work-new-placeholder)) "\"></label>"
+                      "<label>" (esc (m :gantt-start))
+                      "<input id=\"works-new-start\" name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<label>" (esc (m :gantt-end))
+                      "<input id=\"works-new-end\" name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<button type=\"submit\" id=\"works-add-btn\">"
+                      (esc (m :gantt-work-add)) "</button></form>"
+                      (when sel
+                        (str
+                         "<form data-act=\"save-gantt-row\" method=\"post\" id=\"works-save-form\">"
+                         "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
+                         "<label>" (esc (m :gantt-title-of-work))
+                         (gantt-title-select-html titles (:title_id sel) true "works-save-title-id") "</label>"
+                         "<label>" (esc (m :gantt-title-label))
+                         "<input name=\"title\" value=\"" (esc (:title sel)) "\" required></label>"
+                         "<label>" (esc (m :gantt-start))
+                         "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
+                         "<label>" (esc (m :gantt-end))
+                         "<input name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
+                         "<label>" (esc (m :work-name))
+                         "<input name=\"work_name\" list=\"works-work-name-list\" value=\""
+                         (esc (or (:work_name sel) "")) "\">"
+                         "<datalist id=\"works-work-name-list\">"
+                         (apply str (for [nm (:work-names state)]
+                                      (str "<option value=\"" (esc nm) "\">")))
+                         "</datalist></label>"
+                         (work-targets-fieldset fields (:field_ids sel))
+                         "<button type=\"submit\" id=\"works-save-btn\">"
+                         (esc (m :btn-save)) "</button></form>"
+                         "<form data-act=\"delete-gantt-row\" method=\"post\" id=\"works-delete-form\""
+                         " data-confirm=\"" (esc (m :gantt-delete-confirm)) "\">"
+                         "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
+                         "<button type=\"submit\" id=\"works-delete-btn\">"
+                         (esc (m :gantt-delete)) "</button></form>")))))))))
+
 (defn gantt-view [state]
   (let [fields (:fields state)]
     (layout (m :gantt-title)
@@ -1778,7 +1896,7 @@
 (defn render [state]
   (with-ui-lang state
     (fn []
-      (if (and (:narrow? state) (contains? #{:fields :map :map-place :gantt :orders-new :others} (:page state)))
+      (if (and (:narrow? state) (contains? #{:fields :map :map-place :works :gantt :orders-new :others} (:page state)))
         (phone-view state)
         (case (:page state)
           :login (login-view state)
@@ -1791,6 +1909,7 @@
           :fields (fields-view state)
           :map (if (:place state) (map-view state) (map-place-view state))
           :map-place (map-place-view state)
+          :works (works-view state)
           :gantt (gantt-view state)
           :orders (orders-view state)
           :orders-new (orders-new-view state)
@@ -1850,6 +1969,9 @@
       (and (= :fields (:page s)) (:session s) (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
 
+      (and (= :works (:page s)) (:session s) (not (:narrow? s)))
+      {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+
       (and (= :orders (:page s)) (:session s))
       {:state s :fx [[:api "GET" "/api/user/orders" nil :orders-loaded]
                      [:api "GET" "/api/user/fields" nil :home-fields-loaded]]}
@@ -1904,6 +2026,14 @@
     (cond
       (and (= :gantt (:page s)) (empty? (:fields s)))
       (guarded s)
+
+      (and (= :works (:page s)) (empty? (:fields s)))
+      (guarded s)
+
+      (= :works (:page s))
+      {:state s
+       :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
+            [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]}
 
       (= :orders-new (:page s))
       (let [defaults #?(:clj {:work_date (time/today-work-date)
@@ -2390,7 +2520,7 @@
           start (str/trim (as-text (:start_at form)))
           end (str/trim (as-text (:end_at form)))]
       (cond
-        (str/blank? tid)
+        (and (= :gantt (:page state)) (str/blank? tid))
         (flash-html-state state (m :gantt-title-select))
         (or (str/blank? start) (str/blank? end))
         (flash-html-state state (m :time-invalid))
@@ -2398,7 +2528,7 @@
         {:state state
          :fx [[:api "POST" "/api/user/gantt"
                {:title title'
-                :title_id tid
+                :title_id (when-not (str/blank? tid) tid)
                 :start_at start
                 :end_at end
                 :work_name nil
@@ -2408,19 +2538,21 @@
     (let [id (str/trim (as-text (if (nil? (:id form)) (:gantt-selected state) (:id form))))
           body (gantt-body-from-form form (:gantt-title-selected state))
           fids (:field_ids body)
-          wn (str/trim (as-text (:work_name body)))]
+          wn (str/trim (as-text (:work_name body)))
+          body' (assoc body :title_id (let [tid (str/trim (as-text (:title_id body)))]
+                                        (when-not (str/blank? tid) tid)))]
       (cond
         (str/blank? id)
         (flash-html-state state (m :gantt-not-found))
-        (str/blank? (str (:title_id body)))
+        (and (= :gantt (:page state)) (nil? (:title_id body')))
         (flash-html-state state (m :gantt-title-select))
         (and (seq fids) (str/blank? wn))
         (flash-html-state state (m :gantt-work-needed))
-        (or (str/blank? (:start_at body)) (str/blank? (:end_at body)))
+        (or (str/blank? (:start_at body')) (str/blank? (:end_at body')))
         (flash-html-state state (m :time-invalid))
         :else
         {:state state
-         :fx [[:api "PUT" (str "/api/user/gantt/" id) body :gantt-save-result]]}))
+         :fx [[:api "PUT" (str "/api/user/gantt/" id) body' :gantt-save-result]]}))
     "delete-gantt-row"
     (let [id (str/trim (as-text (if (nil? (:id form)) (:gantt-selected state) (:id form))))]
       (if (str/blank? id)

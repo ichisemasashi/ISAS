@@ -39,6 +39,8 @@
           (is (re-find #"name=\"area_ha\"" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo "a"}]})))
           (is (re-find #"name=\"area_m2\"" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo "a"}]})))
           (is (re-find #"name=\"memo\"" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo "a"}]})))
+          (is (re-find #"rows=\"16\"" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo "a"}]})))
+          (is (re-find #"field-ledger-form" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo ""}]})))
           (is (= "/" (second (first (:fx (ui/guarded (assoc (ui/init-state) :page :fields :kind "user"))))))))
         (testing "P2-2.1-04〜06 地図経路"
           (is (= :map (:page (ui/route-for "/map"))))

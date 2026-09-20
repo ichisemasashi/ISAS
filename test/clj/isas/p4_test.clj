@@ -83,7 +83,7 @@
       (is (re-find #"終了" h))
       (is (re-find #"作業名" h))
       (is (re-find #"対象圃場" h))
-      (is (re-find #"所属の題名" h))
+      (is (re-find #"関連する題名" h))
       (is (re-find #"id=\"gantt-row-title-id\"" h))
       (is (re-find #"作業を足す" h))
       (is (re-find #"id=\"gantt-delete-btn\"" h))
@@ -97,8 +97,54 @@
       (is (= :restore-guest-lang (ffirst fx)))
       (is (= :session (ffirst (rest fx))))))
   (testing "P4-2.1-03 / P4-2.1-04 ホームの出口"
-    (is (re-find #"href=\"/gantt\"" (html {:page :home :fields [{:id 1}]})))
-    (is (not (re-find #"href=\"/gantt\"" (html {:page :home :fields []})))))
+    (is (re-find #"<p><a data-nav href=\"/works\">" (html {:page :home :fields [{:id 1}]})))
+    (is (re-find #"<p><a data-nav href=\"/gantt\">" (html {:page :home :fields [{:id 1}]})))
+    (is (not (re-find #"<p><a data-nav href=\"/works\">|<p><a data-nav href=\"/gantt\">"
+                      (html {:page :home :fields []})))))
+  (testing "作業画面 /works"
+    (is (= :works (:page (ui/route-for "/works"))))
+    (let [h (html {:page :works
+                   :fields [{:id 1 :name "北"}]
+                   :gantt-titles [{:id 10 :name "題A"}]
+                   :gantt-rows [{:id 1 :title_id 10 :title "予定A" :start_at "2026-09-18T08:00"
+                                 :end_at "2026-09-18T17:00" :work_name "田植え" :field_ids [1]}
+                                {:id 2 :title_id nil :title "独立" :start_at "2026-09-19T08:00"
+                                 :end_at "2026-09-19T17:00" :work_name nil :field_ids []}]
+                   :gantt-selected 1
+                   :work-names ["田植え"]})]
+      (is (re-find #"works-list" h))
+      (is (re-find #"関連する題名" h))
+      (is (re-find #"（なし）" h))
+      (is (re-find #"対象圃場" h))
+      (is (re-find #"id=\"works-add-btn\"" h))
+      (is (re-find #"id=\"works-save-btn\"" h))
+      (is (re-find #"id=\"works-delete-btn\"" h))
+      (is (re-find #"予定A" h))
+      (is (re-find #"独立" h)))
+    (is (re-find #"まだ作業がありません"
+                 (html {:page :works :fields [{:id 1}] :gantt-titles nil :gantt-rows nil})))
+    (is (re-find #"作業の編集はパソコン" (html {:page :works :narrow? true})))
+    (is (re-find #"圃場が1枚以上" (html {:page :works :fields []})))
+    (is (re-find #"works-save-form"
+                 (html {:page :works :fields [{:id 1 :name "北"}]
+                        :gantt-selected 2
+                        :gantt-rows [{:id 2 :title_id nil :title "無題名"
+                                      :start_at "2026-09-19T08:00" :end_at "2026-09-19T17:00"
+                                      :work_name nil :field_ids []}]})))
+    (is (re-find #"<select name=\"title_id\">"
+                 (ui/with-ui-lang {:ui-lang "ja"}
+                   #(#'ui/gantt-title-select-html [{:id 1 :name "題"}] nil true nil))))
+    (let [s0 (assoc (ui/init-state) :page :works :session {:email "a"} :kind "user")
+          s1 (assoc s0 :fields [{:id 1}])
+          empty-fields (ui/fields-loaded s0 {:ok true :fields []})
+          with-fields (ui/fields-loaded s1 {:ok true :fields [{:id 1}]})]
+      (is (= :api (ffirst (:fx (ui/session-loaded s0 {:ok true :email "a"})))))
+      (is (= :html (ffirst (:fx (ui/session-loaded (assoc s0 :narrow? true)
+                                                   {:ok true :email "a"})))))
+      (is (= :nav (ffirst (:fx (ui/session-loaded (assoc (ui/init-state) :page :works)
+                                                  {:ok false})))))
+      (is (= :html (ffirst (:fx empty-fields))))
+      (is (= :api (ffirst (:fx with-fields))))))
   (testing "P4-2.1-05 / P4-7-07 管理者にガントは無い"
     (is (not (re-find #"href=\"/gantt\"" (html {:page :home :kind "admin"}))))
     (is (= :unknown (:page (ui/route-for "/admin/gantt")))))
@@ -554,6 +600,14 @@
                                          :form {:id "3" :title "行" :start_at "2026-09-18T08:00"
                                                 :end_at "2026-09-18T09:00" :work_name "田植え"
                                                 :field_ids ["1"] :title_id ""}}])))
+      (let [ws (assoc s :page :works)]
+        (is (= :api (tu/fx-op ws [:submit {:act "add-gantt-row"
+                                           :form {:title "独立" :start_at "2026-09-18T08:00"
+                                                  :end_at "2026-09-18T09:00" :title_id ""}}])))
+        (is (= :api (tu/fx-op ws [:submit {:act "save-gantt-row"
+                                           :form {:id "3" :title "行" :start_at "2026-09-18T08:00"
+                                                  :end_at "2026-09-18T09:00" :work_name "田植え"
+                                                  :field_ids ["1"] :title_id ""}}]))))
       (is (= :api (tu/fx-op s [:gantt-title-save-result {:ok true :title {:id 11 :name "x"}}])))
       (is (= :html (tu/fx-op s [:gantt-title-save-result {:ok false :code "title_required"}])))
       (is (= :api (tu/fx-op s [:gantt-title-delete-result {:ok true}])))

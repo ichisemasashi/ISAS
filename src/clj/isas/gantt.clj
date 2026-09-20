@@ -77,12 +77,15 @@
   (nil? (:deleted_at t)))
 
 (defn- resolve-title-id [sys user-id raw]
-  (let [tid (geo/as-int raw)
-        t (when tid (db/find-gantt-title (:ds sys) user-id tid))]
-    (cond
-      (nil? tid) {:ok false :code "title_not_found"}
-      (or (nil? t) (not (active-title? t))) {:ok false :code "title_not_found"}
-      :else {:ok true :title-id tid})))
+  (let [s (str/trim (str (or raw "")))]
+    (if (str/blank? s)
+      {:ok true :title-id nil}
+      (let [tid (geo/as-int s)
+            t (when tid (db/find-gantt-title (:ds sys) user-id tid))]
+        (cond
+          (nil? tid) {:ok false :code "title_not_found"}
+          (or (nil? t) (not (active-title? t))) {:ok false :code "title_not_found"}
+          :else {:ok true :title-id tid})))))
 
 (defn list-titles [sys user-id]
   (let [gate (require-fields sys user-id)]

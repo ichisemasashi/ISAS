@@ -283,9 +283,11 @@
             f (fields/create-field sys uid {:name "北" :geojson tu/square})
             fid (get-in f [:field :id])]
         (testing "title_id 検証と題名エッジ"
-          (is (= "title_not_found"
-                 (:code (gantt/create-row sys uid {:title "x" :start_at "2026-09-18T08:00"
-                                                   :end_at "2026-09-18T09:00"}))))
+          (let [orphan (gantt/create-row sys uid {:title "独立"
+                                                  :start_at "2026-09-18T08:00"
+                                                  :end_at "2026-09-18T09:00"})]
+            (is (true? (:ok orphan)))
+            (is (nil? (get-in orphan [:row :title_id]))))
           (is (= "title_not_found"
                  (:code (gantt/create-row sys uid {:title_id "x" :title "x"
                                                    :start_at "2026-09-18T08:00"
