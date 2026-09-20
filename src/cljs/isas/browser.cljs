@@ -8,6 +8,8 @@
 
 (defonce gantt-sync-fn (atom nil))
 
+(defonce pending-form-draft (atom nil))
+
 (defn register-map-sync! [f]
   (reset! map-sync-fn f))
 
@@ -24,6 +26,81 @@
 (defn set-html! [html]
   (when-let [el (root-el)]
     (set! (.-innerHTML el) html)))
+
+(defn- draft-skip-el? [^js el]
+  (let [typ (str/lower-case (str (or (.-type el) "")))]
+    (or (.getAttribute el "data-select")
+        (= typ "file")
+        (= typ "submit")
+        (= typ "button")
+        (= typ "image")
+        (= typ "reset"))))
+
+(defn collect-form-draft []
+  (let [out (atom {})]
+    (try
+      (when-let [root (root-el)]
+        (when (exists? (.-querySelectorAll root))
+          (let [nodes (.querySelectorAll root "input, textarea, select")
+                n (.-length nodes)]
+            (dotimes [i n]
+              (let [^js el (.item nodes i)
+                    nm (.getAttribute el "name")]
+                (when (and nm (not (draft-skip-el? el)))
+                  (let [typ (str/lower-case (str (or (.-type el) "")))
+                        k (keyword nm)]
+                    (cond
+                      (= typ "checkbox")
+                      (when (.-checked el)
+                        (swap! out update k
+                               (fn [prev]
+                                 (let [v (.-value el)]
+                                   (cond
+                                     (nil? prev) [v]
+                                     (vector? prev) (conj prev v)
+                                     :else [prev v])))))
+                      (= typ "radio")
+                      (when (.-checked el)
+                        (swap! out assoc k (.-value el)))
+                      :else
+                      (swap! out assoc k (.-value el))))))))))
+      (catch :default _
+        nil))
+    @out))
+
+(defn restore-form-draft! [draft]
+  (try
+    (when (seq draft)
+      (when-let [root (root-el)]
+        (when (exists? (.-querySelectorAll root))
+          (doseq [[k v] draft]
+            (let [nm (name k)
+                  nodes (.querySelectorAll root (str "[name=\"" nm "\"]"))
+                  n (.-length nodes)]
+              (dotimes [i n]
+                (let [^js el (.item nodes i)]
+                  (when-not (draft-skip-el? el)
+                    (let [typ (str/lower-case (str (or (.-type el) "")))]
+                      (cond
+                        (= typ "checkbox")
+                        (let [vals (if (vector? v) v [v])]
+                          (set! (.-checked el)
+                                (boolean (some #(= (str %) (.-value el)) vals))))
+                        (= typ "radio")
+                        (set! (.-checked el) (= (str v) (.-value el)))
+                        :else
+                        (set! (.-value el)
+                              (str (if (vector? v) (first v) v)))))))))))))
+    (catch :default _
+      nil)))
+
+(defn queue-form-draft! []
+  (reset! pending-form-draft (collect-form-draft)))
+
+(defn take-form-draft! []
+  (let [d @pending-form-draft]
+    (reset! pending-form-draft nil)
+    d))
 
 (defn current-path []
   (.-pathname js/location))
@@ -109,12 +186,15 @@
 (defn apply-fx! [fx]
   (let [[op a b c d] fx]
     (case op
-      :html (do (set-html! a)
-                (set-document-lang! (:ui-lang @app-state))
-                (when-let [f @map-sync-fn]
-                  (f @app-state dispatch!))
-                (when-let [f @gantt-sync-fn]
-                  (f @app-state dispatch!)))
+      :html (let [draft (take-form-draft!)]
+              (set-html! a)
+              (when (seq draft)
+                (restore-form-draft! draft))
+              (set-document-lang! (:ui-lang @app-state))
+              (when-let [f @map-sync-fn]
+                (f @app-state dispatch!))
+              (when-let [f @gantt-sync-fn]
+                (f @app-state dispatch!)))
       :nav (do (push-path! a)
                (dispatch! [:path {:path a :search ""}]))
       :session (fetch-api "GET"
@@ -162,9 +242,12 @@
         v (when t (.-value t))]
     (when kind
       (case kind
-        "lang" (dispatch! [:set-lang v])
-        "gantt-axis" (dispatch! [:submit {:act "set-gantt-axis" :form {:axis v}}])
+        "lang" (do (queue-form-draft!)
+                   (dispatch! [:set-lang v]))
+        "gantt-axis" (do (queue-form-draft!)
+                         (dispatch! [:submit {:act "set-gantt-axis" :form {:axis v}}]))
         "map-mode" (when-not (str/blank? v)
+                     (queue-form-draft!)
                      (dispatch! [:submit {:act "set-map-mode" :form {:mode v}}]))
         "basemap-kind" nil
         nil))))

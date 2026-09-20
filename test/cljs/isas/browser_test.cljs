@@ -127,6 +127,97 @@
     (b/on-change (clj->js {:target (clj->js {:getAttribute (fn [_] "map-mode") :value ""})}))
     (b/on-change (clj->js {:target (clj->js {:getAttribute (fn [_] "basemap-kind") :value "aerial"})}))
     (b/on-change (clj->js {:target (clj->js {:getAttribute (fn [_] nil) :value "x"})}))
+    ;; P6-2.1-08 / B6-4.8-07: 切替で HTML を描き直しても未送信入力を残す
+    (let [email-el (js-obj "tagName" "INPUT"
+                           "type" "text"
+                           "name" "email"
+                           "value" "typed@example.com"
+                           "checked" false
+                           "getAttribute" (fn [a] (when (= a "name") "email")))
+          lang-el (js-obj "tagName" "SELECT"
+                          "type" "select-one"
+                          "name" nil
+                          "value" "en"
+                          "checked" false
+                          "getAttribute" (fn [a] (when (= a "data-select") "lang")))
+          cb1 (js-obj "tagName" "INPUT"
+                      "type" "checkbox"
+                      "name" "field_ids"
+                      "value" "1"
+                      "checked" true
+                      "getAttribute" (fn [a] (when (= a "name") "field_ids")))
+          cb2 (js-obj "tagName" "INPUT"
+                      "type" "checkbox"
+                      "name" "field_ids"
+                      "value" "2"
+                      "checked" true
+                      "getAttribute" (fn [a] (when (= a "name") "field_ids")))
+          radio-el (js-obj "tagName" "INPUT"
+                           "type" "radio"
+                           "name" "kind"
+                           "value" "aerial"
+                           "checked" true
+                           "getAttribute" (fn [a] (when (= a "name") "kind")))
+          file-el (js-obj "tagName" "INPUT"
+                          "type" "file"
+                          "name" "file"
+                          "value" "x"
+                          "checked" false
+                          "getAttribute" (fn [a] (when (= a "name") "file")))
+          nodes-atom (atom #js [email-el lang-el cb1 cb2 radio-el file-el])
+          root (js-obj "querySelectorAll"
+                       (fn [sel]
+                         (let [arr (if (re-find #"^input" (str sel))
+                                     @nodes-atom
+                                     (clj->js
+                                      (filterv (fn [el]
+                                                 (= (second (re-find #"name=\"([^\"]+)\"" (str sel)))
+                                                    (.getAttribute el "name")))
+                                               (array-seq @nodes-atom))))]
+                           (js-obj "length" (.-length arr)
+                                   "item" (fn [i] (aget arr i)))))
+                       "innerHTML" "")]
+      (set! js/document (clj->js {:getElementById (fn [_] root)
+                                  :documentElement doc-el
+                                  :addEventListener (fn [_ _ _])}))
+      (let [draft (b/collect-form-draft)]
+        (is (= "typed@example.com" (:email draft)))
+        (is (= ["1" "2"] (:field_ids draft)))
+        (is (= "aerial" (:kind draft)))
+        (is (nil? (:file draft))))
+      (set! (.-value email-el) "")
+      (set! (.-checked cb1) false)
+      (set! (.-checked cb2) false)
+      (set! (.-checked radio-el) false)
+      (b/restore-form-draft! {:email "typed@example.com"
+                              :field_ids ["1" "2"]
+                              :kind "aerial"})
+      (is (= "typed@example.com" (.-value email-el)))
+      (is (true? (.-checked cb1)))
+      (is (true? (.-checked cb2)))
+      (is (true? (.-checked radio-el)))
+      (set! (.-value email-el) "keep-me")
+      (reset! b/pending-form-draft nil)
+      (b/queue-form-draft!)
+      (reset! b/app-state (assoc (ui/init-state) :ui-lang "ja"))
+      (b/apply-fx! [:html "<p>switched</p>"])
+      (is (= "keep-me" (.-value email-el)))
+      ;; 切替以外の描き直しでは draft を復元しない
+      (set! (.-value email-el) "nav-value")
+      (b/apply-fx! [:html "<p>nav</p>"])
+      (is (= "nav-value" (.-value email-el)))
+      (b/restore-form-draft! {:email ["vector-email"] :field_ids "1"})
+      (is (= "vector-email" (.-value email-el)))
+      (is (true? (.-checked cb1)))
+      (reset! nodes-atom #js [])
+      (is (= {} (b/collect-form-draft)))
+      (b/restore-form-draft! {})
+      (b/restore-form-draft! nil)
+      (set! js/document (clj->js {:getElementById (fn [_] nil)
+                                  :documentElement doc-el}))
+      (is (= {} (b/collect-form-draft)))
+      (b/restore-form-draft! {:email "x"})
+      (set! js/document doc))
     (is (= "user" (b/kind-from-path "/home")))
     (is (= "admin" (b/kind-from-path "/admin/home")))
     (b/bind-events!)
