@@ -30,9 +30,9 @@
             f (fields/create-field sys uid {:name "北" :geojson tu/square})
             fid (get-in f [:field :id])]
         (testing "B6-2-01 / B6-4.8 / B6-5 切替が出る"
-          (is (re-find #"data-lang=\"ja\"" (html {:page :login :session nil})))
-          (is (re-find #"data-lang" (html {:page :home :kind "admin"})))
-          (is (re-find #"data-lang" (html {:page :orders :narrow? true})))
+          (is (re-find #"data-select=\"lang\"" (html {:page :login :session nil})))
+          (is (re-find #"data-select=\"lang\"" (html {:page :home :kind "admin"})))
+          (is (re-find #"data-select=\"lang\"" (html {:page :orders :narrow? true})))
           (is (re-find #"User login" (html {:page :login :session nil :ui-lang "en"}))))
         (testing "B6-2-03 / B6-3.4 対象外の置き場所は無い"
           (is (not (re-find #"農機|GAP|在庫|オフライン下書き|Excel|公開登録"

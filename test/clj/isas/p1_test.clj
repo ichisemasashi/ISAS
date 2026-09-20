@@ -346,7 +346,7 @@
         (testing "P1-5 文言"
           (is (= "利用者ログイン" (:user-login-title ui/messages)))
           (is (= "管理者ログイン" (:admin-login-title ui/messages)))
-          (is (re-find #"data-lang=\"ja\".*data-lang=\"en\"|data-lang=\"en\".*data-lang=\"ja\""
+          (is (re-find #"data-select=\"lang\".*option value=\"ja\".*option value=\"en\""
                        (html {:page :login :kind "user" :session nil}))))
         (testing "P1-6 メール"
           (is (= "ISAS パスワードの再設定" (mail/reset-subject "user")))
@@ -364,4 +364,4 @@
           (is (re-find #"data/isas.sqlite" (slurp "src/clj/isas/core.clj")))
           (is (re-find #"data/isas.conf" (slurp "src/clj/isas/core.clj")))
           (is (not (re-find #"oauth|IdP|WebAuthn|twitter" (html {:page :login :kind "user" :session nil}))))
-          (is (re-find #"data-lang" (html {:page :home :kind "user"}))))))))
+          (is (re-find #"data-select=\"lang\"" (html {:page :home :kind "user"}))))))))

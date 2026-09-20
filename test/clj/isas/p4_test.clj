@@ -124,6 +124,7 @@
                        [:submit {:act "set-gantt-axis" :form {:axis "week"}}])]
       (is (= "week" (get-in r [:state :gantt-axis])))
       (is (re-find #"data-range=\"week\"" (ui/render (:state r))))
+      (is (re-find #"data-select=\"gantt-axis\"" (ui/render (:state r))))
       (is (re-find #"gantt-ticks" (ui/render (:state r)))))
     (is (= "day" (get-in (ui/handle (assoc (ui/init-state) :page :gantt)
                                     [:submit {:act "set-gantt-axis" :form {:axis "nope"}}])

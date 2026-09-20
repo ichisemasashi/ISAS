@@ -213,6 +213,7 @@
         (testing "P2-2.6 地図は自分の圃場。後工程は出さない。段階表示"
           (let [h (html {:page :map :place place :fields [{:id 1 :name "北"}]})]
             (is (re-find #"手描き|修正|分割|合筆" h))
+            (is (re-find #"data-select=\"map-mode\"" h))
             (is (not (re-find #"圃場を保存|合筆する|分割を保存" h)))
             (is (not (re-find #"ガント|指示" h)))
             (is (re-find #"圃場を保存" (html {:page :map :place place :map-mode "draw"})))

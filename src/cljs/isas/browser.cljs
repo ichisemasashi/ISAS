@@ -149,18 +149,25 @@
 
 (defn on-click [ev]
   (let [t (.-target ev)
-        lang-btn (.closest t "button[data-lang]")
         a (.closest t "a[data-nav]")]
-    (cond
-      lang-btn
-      (do (.preventDefault ev)
-          (dispatch! [:set-lang (.getAttribute lang-btn "data-lang")]))
+    (when a
+      (.preventDefault ev)
+      (let [href (.getAttribute a "href")]
+        (push-path! href)
+        (dispatch! [:path {:path href :search ""}])))))
 
-      a
-      (do (.preventDefault ev)
-          (let [href (.getAttribute a "href")]
-            (push-path! href)
-            (dispatch! [:path {:path href :search ""}]))))))
+(defn on-change [ev]
+  (let [t (.-target ev)
+        kind (when t (.getAttribute t "data-select"))
+        v (when t (.-value t))]
+    (when kind
+      (case kind
+        "lang" (dispatch! [:set-lang v])
+        "gantt-axis" (dispatch! [:submit {:act "set-gantt-axis" :form {:axis v}}])
+        "map-mode" (when-not (str/blank? v)
+                     (dispatch! [:submit {:act "set-map-mode" :form {:mode v}}]))
+        "basemap-kind" nil
+        nil))))
 
 (defn on-popstate [_ev]
   (dispatch! [:path {:path (current-path) :search (current-search)}]))
@@ -171,6 +178,7 @@
 (defn bind-events! []
   (.addEventListener js/document "submit" on-submit true)
   (.addEventListener js/document "click" on-click)
+  (.addEventListener js/document "change" on-change)
   (.addEventListener js/window "popstate" on-popstate)
   (.addEventListener js/window "resize" on-resize))
 

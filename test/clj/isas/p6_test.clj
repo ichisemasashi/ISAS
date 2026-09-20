@@ -14,27 +14,28 @@
   (tu/page-html (merge {:kind "user" :session {:email "a@example.com"} :ui-lang "ja"} opts)))
 
 (deftest p6-screens-and-switcher
-  (testing "P6-2.1-01 / P6-5-01〜04 利用者入口の切替"
+  (testing "P6-2.1-01 / P6-5-01〜05 利用者入口の切替"
     (let [ja (html {:page :login :session nil :ui-lang "ja"})
           en (html {:page :login :session nil :ui-lang "en"})]
-      (is (re-find #"data-lang=\"ja\"" ja))
-      (is (re-find #"data-lang=\"en\"" ja))
+      (is (re-find #"data-select=\"lang\"" ja))
+      (is (re-find #"<option value=\"ja\" selected" ja))
+      (is (re-find #"<option value=\"en\"" ja))
       (is (re-find #"日本語" ja))
       (is (re-find #"English" ja))
-      (is (re-find #"aria-current=\"true\"" ja))
+      (is (re-find #"<option value=\"en\" selected" en))
       (is (re-find #"User login" en))
       (is (re-find #"利用者ログイン" ja))))
   (testing "P6-2.1-02 管理者入口"
-    (is (re-find #"data-lang" (html {:page :login :kind "admin" :session nil})))
+    (is (re-find #"data-select=\"lang\"" (html {:page :login :kind "admin" :session nil})))
     (is (re-find #"Admin login"
                  (html {:page :login :kind "admin" :session nil :ui-lang "en"}))))
   (testing "P6-2.1-03 / P6-2.1-04 ログイン後"
     (doseq [page [:home :fields :map :gantt :orders :others :invite :password]]
-      (is (re-find #"data-lang" (html {:page page})) (str page)))
+      (is (re-find #"data-select=\"lang\"" (html {:page page})) (str page)))
     (doseq [page [:home :invite :users :relations :password]]
-      (is (re-find #"data-lang" (html {:page page :kind "admin"})) (str "admin-" page))))
+      (is (re-find #"data-select=\"lang\"" (html {:page page :kind "admin"})) (str "admin-" page))))
   (testing "P6-2.1-05 狭い画面の指示"
-    (is (re-find #"data-lang" (html {:page :orders :narrow? true})))
+    (is (re-find #"data-select=\"lang\"" (html {:page :orders :narrow? true})))
     (is (re-find #"Orders|指示"
                  (html {:page :orders :narrow? true :ui-lang "en"
                         :orders-sent [] :orders-received []}))))

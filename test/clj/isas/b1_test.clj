@@ -130,4 +130,4 @@
         (testing "B1-8 / B1-9 / B1-10"
           (is (nil? (http/match-api :get "/api/oauth")))
           (is (not (re-find #"農機|GAP|在庫|オフライン下書き" (html {:page :home :kind "user"}))))
-          (is (re-find #"data-lang" (html {:page :login :kind "user" :session nil}))))))))
+          (is (re-find #"data-select=\"lang\"" (html {:page :login :kind "user" :session nil}))))))))

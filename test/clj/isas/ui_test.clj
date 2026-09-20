@@ -121,6 +121,12 @@
                                                :map-mode "basemap"
                                                :place {:west 1 :south 2 :east 3 :north 4}
                                                :basemaps [{:kind "aerial" :ready true}]))))
+    (is (re-find #"衛星|data-select=\"basemap-kind\""
+                 (ui/render (assoc base :page :map :session {:email "a"}
+                                   :place {:west 1 :south 2 :east 3 :north 4}
+                                   :basemap-kind "satellite"
+                                   :basemaps [{:kind "satellite" :ready true}
+                                              {:kind "aerial" :ready true}]))))
     (is (re-find #"自動で取り込む" (ui/render (assoc base :page :map :session {:email "a"}
                                                   :map-mode "basemap"
                                                   :place {:west 1 :south 2 :east 3 :north 4}

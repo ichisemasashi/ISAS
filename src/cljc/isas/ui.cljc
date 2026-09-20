@@ -185,6 +185,11 @@
    :unit-m2 "㎡"
    :lang-ja "日本語"
    :lang-en "English"
+   :lang-label "言語"
+   :gantt-axis-label "横軸"
+   :map-mode-label "操作"
+   :map-mode-choose "選ぶ"
+   :basemap-kind-label "下地の種類"
    :email-a "メールアドレス A"
    :email-b "メールアドレス B"
    :btn-save-name "名前を保存"
@@ -396,6 +401,11 @@
    :unit-m2 "m²"
    :lang-ja "日本語"
    :lang-en "English"
+   :lang-label "Language"
+   :gantt-axis-label "Time scale"
+   :map-mode-label "Action"
+   :map-mode-choose "Choose"
+   :basemap-kind-label "Basemap kind"
    :email-a "Email A"
    :email-b "Email B"
    :btn-save-name "Save name"
@@ -741,16 +751,22 @@
 (defn layout [title body]
   (str "<main><h1>" (esc title) "</h1>" body "</main>"))
 
+(defn- select-switch [label data-select current options & [extra-attrs]]
+  (str "<label class=\"select-switch\">" (esc label)
+       "<select data-select=\"" (esc data-select) "\""
+       (or extra-attrs "")
+       " aria-label=\"" (esc label) "\">"
+       (apply str
+              (for [[value opt-label] options]
+                (str "<option value=\"" (esc value) "\""
+                     (when (= (str current) (str value)) " selected")
+                     ">" (esc opt-label) "</option>")))
+       "</select></label>"))
+
 (defn- lang-switcher [state]
-  (let [cur (ui-lang state)]
-    (str "<span class=\"lang-switch\">"
-         "<button type=\"button\" data-lang=\"ja\""
-         (when (= "ja" cur) " class=\"current\" aria-current=\"true\"")
-         ">" (esc (m :lang-ja)) "</button> "
-         "<button type=\"button\" data-lang=\"en\""
-         (when (= "en" cur) " class=\"current\" aria-current=\"true\"")
-         ">" (esc (m :lang-en)) "</button>"
-         "</span>")))
+  (select-switch (m :lang-label) "lang" (ui-lang state)
+                 [["ja" (m :lang-ja)]
+                  ["en" (m :lang-en)]]))
 
 (defn nav-user [state]
   (str "<nav>"
@@ -1087,14 +1103,24 @@
 (defn- basemap-ready? [state kind]
   (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state))))
 
-(defn- basemap-kind-buttons [state]
-  (apply str
-         (for [[k label] [["aerial" (m :basemap-aerial)]
-                          ["standard" (m :basemap-standard)]
-                          ["satellite" (m :basemap-satellite)]]]
-           (if (basemap-ready? state k)
-             (str "<button type=\"button\" data-map=\"basemap\" data-kind=\"" k "\">" (esc label) "</button>")
-             ""))))
+(defn- basemap-kind-label [kind]
+  (case (str kind)
+    "aerial" (m :basemap-aerial)
+    "standard" (m :basemap-standard)
+    (m :basemap-satellite)))
+
+(defn- basemap-kind-select [state]
+  (let [ready (vec (for [k ["aerial" "standard" "satellite"]
+                         :when (basemap-ready? state k)]
+                     [k (basemap-kind-label k)]))
+        cur (or (:basemap-kind state) "aerial")]
+    (when (seq ready)
+      (select-switch (m :basemap-kind-label) "basemap-kind" cur ready
+                     " data-map=\"basemap\""))))
+
+(defn- map-mode-select [modes]
+  (select-switch (m :map-mode-label) "map-mode" ""
+                 (cons ["" (m :map-mode-choose)] modes)))
 
 (defn- work-name-form [state]
   (let [wn (str/trim (str (or (get-in state [:form :work_name]) "")))]
@@ -1148,14 +1174,14 @@
 (defn- browse-panel [state]
   (str (work-name-form state)
        "<div class=\"toolbar\">"
-       (mode-form "paint" (m :map-do-paint))
-       (mode-form "draw" (m :map-draw))
-       (mode-form "edit" (m :map-edit))
-       (mode-form "split" (m :map-split))
-       (mode-form "merge" (m :map-merge))
-       (mode-form "import" (m :map-do-import))
-       (mode-form "basemap" (m :map-do-basemap))
-       (basemap-kind-buttons state)
+       (map-mode-select [["paint" (m :map-do-paint)]
+                         ["draw" (m :map-draw)]
+                         ["edit" (m :map-edit)]
+                         ["split" (m :map-split)]
+                         ["merge" (m :map-merge)]
+                         ["import" (m :map-do-import)]
+                         ["basemap" (m :map-do-basemap)]])
+       (or (basemap-kind-select state) "")
        "</div>"))
 
 (defn- draw-panel [state]
@@ -1199,7 +1225,7 @@
 
 (defn- basemap-panel [state]
   (str (cancel-form)
-       "<div class=\"toolbar\">" (basemap-kind-buttons state) "</div>"
+       "<div class=\"toolbar\">" (or (basemap-kind-select state) "") "</div>"
        "<form data-act=\"emaff-import\" method=\"post\">"
        "<button type=\"submit\">" (esc (m :emaff-import)) "</button></form>"
        "<form data-act=\"upload-basemap\" method=\"post\" enctype=\"multipart/form-data\">"
@@ -1234,8 +1260,8 @@
     (str (paint-panel state)
          (when-not (str/blank? wn)
            (str "<div class=\"toolbar\">"
-                (mode-form "browse" (m :map-do-fields))
-                (mode-form "basemap" (m :map-do-basemap))
+                (map-mode-select [["browse" (m :map-do-fields)]
+                                  ["basemap" (m :map-do-basemap)]])
                 "</div>"))
          (when (str/blank? wn)
            (cancel-form)))))
@@ -1424,15 +1450,10 @@
                          work-name (when applicable? (str (:work_name sel)))]
                      (str
                       "<div class=\"toolbar\">"
-                      "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
-                      "<input type=\"hidden\" name=\"axis\" value=\"day\">"
-                      "<button type=\"submit\">" (esc (m :gantt-axis-day)) "</button></form>"
-                      "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
-                      "<input type=\"hidden\" name=\"axis\" value=\"week\">"
-                      "<button type=\"submit\">" (esc (m :gantt-axis-week)) "</button></form>"
-                      "<form data-act=\"set-gantt-axis\" method=\"post\" class=\"inline\">"
-                      "<input type=\"hidden\" name=\"axis\" value=\"month\">"
-                      "<button type=\"submit\">" (esc (m :gantt-axis-month)) "</button></form>"
+                      (select-switch (m :gantt-axis-label) "gantt-axis" axis
+                                     [["day" (m :gantt-axis-day)]
+                                      ["week" (m :gantt-axis-week)]
+                                      ["month" (m :gantt-axis-month)]])
                       "</div>"
                       "<div id=\"gantt-axis\" class=\"gantt-axis\" data-start=\"" (esc (:start bounds))
                       "\" data-end=\"" (esc (:end bounds))

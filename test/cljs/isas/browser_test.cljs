@@ -104,13 +104,29 @@
     (is (= "en" (.-lang (.-documentElement js/document))))
     (b/apply-fx! [:restore-guest-lang "user"])
     (is (= "en" (:ui-lang @b/app-state)))
-    (let [btn (clj->js {:getAttribute (fn [a] (when (= a "data-lang") "en"))})
-          t (clj->js {:closest (fn [sel]
-                                 (when (= sel "button[data-lang]") btn))})
-          ev (clj->js {:target t :preventDefault (fn [])})]
+    (let [sel (clj->js {:getAttribute (fn [a] (when (= a "data-select") "lang"))
+                        :value "en"})
+          ev (clj->js {:target sel})]
       (reset! b/app-state (assoc (ui/init-state) :session nil :kind "user" :ui-lang "ja" :page :login))
-      (b/on-click ev)
+      (b/on-change ev)
       (is (= "en" (:ui-lang @b/app-state))))
+    (let [sel (clj->js {:getAttribute (fn [a] (when (= a "data-select") "gantt-axis"))
+                        :value "week"})
+          ev (clj->js {:target sel})]
+      (reset! b/app-state (assoc (ui/init-state) :page :gantt :gantt-axis "day"
+                                 :fields [{:id 1}] :gantt-rows []))
+      (b/on-change ev)
+      (is (= "week" (:gantt-axis @b/app-state))))
+    (let [sel (clj->js {:getAttribute (fn [a] (when (= a "data-select") "map-mode"))
+                        :value "paint"})
+          ev (clj->js {:target sel})]
+      (reset! b/app-state (assoc (ui/init-state) :page :map :map-mode "browse"
+                                 :place {:west 1 :south 2 :east 3 :north 4}))
+      (b/on-change ev)
+      (is (= "paint" (:map-mode @b/app-state))))
+    (b/on-change (clj->js {:target (clj->js {:getAttribute (fn [_] "map-mode") :value ""})}))
+    (b/on-change (clj->js {:target (clj->js {:getAttribute (fn [_] "basemap-kind") :value "aerial"})}))
+    (b/on-change (clj->js {:target (clj->js {:getAttribute (fn [_] nil) :value "x"})}))
     (is (= "user" (b/kind-from-path "/home")))
     (is (= "admin" (b/kind-from-path "/admin/home")))
     (b/bind-events!)

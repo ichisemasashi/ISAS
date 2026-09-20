@@ -429,13 +429,21 @@
     :else nil))
 
 (defn- on-doc-click [^js ev]
-  (when-let [^js btn (.closest (.-target ev) "[data-map]")]
-    (when-let [h (.getAttribute btn "data-hint")]
-      (set-hint h))
-    (on-tool (.getAttribute btn "data-map")
-             (.getAttribute btn "data-kind")
-             (.getAttribute btn "data-dir")
-             (.getAttribute btn "data-factor"))))
+  (when-let [^js el (.closest (.-target ev) "[data-map]")]
+    (when-not (= "SELECT" (.-tagName el))
+      (when-let [h (.getAttribute el "data-hint")]
+        (set-hint h))
+      (on-tool (.getAttribute el "data-map")
+               (.getAttribute el "data-kind")
+               (.getAttribute el "data-dir")
+               (.getAttribute el "data-factor")))))
+
+(defn- on-doc-change [^js ev]
+  (let [^js t (.-target ev)]
+    (when (and t (= "SELECT" (.-tagName t)) (.getAttribute t "data-map"))
+      (let [v (.-value t)]
+        (when-not (str/blank? v)
+          (on-tool (.getAttribute t "data-map") v nil nil))))))
 
 (defn- bind-map-click [^js ol-map]
   (.on ol-map "click"
@@ -593,4 +601,5 @@
   (browser/register-map-sync! sync!)
   (when-not @installed?
     (reset! installed? true)
-    (.addEventListener js/document "click" on-doc-click)))
+    (.addEventListener js/document "click" on-doc-click)
+    (.addEventListener js/document "change" on-doc-change)))

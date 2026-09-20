@@ -43,7 +43,7 @@
           (is (some? (http/match-api :put "/api/admin/language")))
           (is (nil? (http/match-api :put "/api/user/locale")))
           (is (= :unknown (:page (ui/route-for "/en"))))
-          (is (re-find #"data-lang" (html {:page :login :kind "user" :session nil}))))
+          (is (re-find #"data-select=\"lang\"" (html {:page :login :kind "user" :session nil}))))
         (doseq [[phase paths] later-apis]
           (testing (str phase " の本機能 API はまだ無い")
             (doseq [p paths]

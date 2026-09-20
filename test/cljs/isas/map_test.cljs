@@ -95,7 +95,7 @@
                       (get forms act)))
                   "addEventListener"
                   (fn [ev f]
-                    (when (= ev "click")
+                    (when (or (= ev "click") (= ev "change"))
                       (swap! clicks conj f)))))
     (set! js/window (js-obj "innerWidth" 1200 "addEventListener" (fn [_ _])))
     {:west west :extent extent :clicks clicks :ol-el ol-el}))
@@ -171,17 +171,28 @@
           (is (re-find #"選んでいる塗り:" t)))))
     (when (seq @clicks)
       (let [fire (fn [op kind]
-                   ((first @clicks)
-                    (clj->js {:target {:closest (fn [_]
-                                                  (js-obj "getAttribute"
-                                                          (fn [a]
-                                                            (cond
-                                                              (= a "data-map") op
-                                                              (= a "data-kind") kind
-                                                              (= a "data-dir") (if (= op "image-shift") "east" nil)
-                                                              (= a "data-factor") (if (= op "image-scale") "1.06" nil)
-                                                              (= a "data-hint") (str "hint-" op)
-                                                              :else nil))))}})))
+                   (let [handlers @clicks
+                         click-h (first handlers)
+                         change-h (second handlers)]
+                     (if (= op "basemap")
+                       (when change-h
+                         (change-h (clj->js {:target (js-obj "tagName" "SELECT"
+                                                             "value" kind
+                                                             "getAttribute"
+                                                             (fn [a]
+                                                               (when (= a "data-map") "basemap")))})))
+                       (when click-h
+                         (click-h (clj->js {:target {:closest (fn [_]
+                                                                (js-obj "tagName" "BUTTON"
+                                                                        "getAttribute"
+                                                                        (fn [a]
+                                                                          (cond
+                                                                            (= a "data-map") op
+                                                                            (= a "data-kind") kind
+                                                                            (= a "data-dir") (if (= op "image-shift") "east" nil)
+                                                                            (= a "data-factor") (if (= op "image-scale") "1.06" nil)
+                                                                            (= a "data-hint") (str "hint-" op)
+                                                                            :else nil))))}}))))))
             enter (fn [mode]
                     (swap! b/app-state assoc :map-mode mode :page :map
                            :place {:west 129 :south 26 :east 146 :north 46})
@@ -224,7 +235,18 @@
         (fire "image-reset" nil)
         (fire "basemap" "standard")
         (fire "nope" nil)
-        ((first @clicks) (clj->js {:target {:closest (fn [_] nil)}}))))
+        (when-let [change-h (second @clicks)]
+          (change-h (clj->js {:target (js-obj "tagName" "SELECT"
+                                              "value" ""
+                                              "getAttribute" (fn [a] (when (= a "data-map") "basemap")))}))
+          (change-h (clj->js {:target (js-obj "tagName" "DIV"
+                                              "value" "x"
+                                              "getAttribute" (fn [_] nil))})))
+        ((first @clicks) (clj->js {:target {:closest (fn [_] nil)}}))
+        ((first @clicks) (clj->js {:target {:closest (fn [_]
+                                                       (js-obj "tagName" "SELECT"
+                                                               "getAttribute" (fn [a]
+                                                                                (when (= a "data-map") "basemap"))))}}))))
     (b/apply-fx! [:html "<div id=\"ol-map\"></div>"])
     (set! js/document (js-obj "getElementById" (fn [_] nil)
                               "querySelector" (fn [_] nil)
