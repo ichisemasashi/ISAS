@@ -13,7 +13,22 @@
   (:import [java.time Instant]))
 
 (defn- html [opts]
-  (tu/page-html (merge {:kind "user" :session {:email "a@example.com"}} opts)))
+  (let [base {:kind "user" :session {:email "a@example.com"}}
+        opts (if (and (= :gantt (:page opts))
+                      (seq (:fields opts))
+                      (empty? (:gantt-titles opts)))
+               (assoc opts
+                      :gantt-titles [{:id 10 :name "題A"}]
+                      :gantt-title-selected (or (:gantt-title-selected opts) 10))
+               opts)
+        opts (if (and (= :gantt (:page opts)) (seq (:gantt-rows opts)))
+               (update opts :gantt-rows
+                       (fn [rows]
+                         (mapv (fn [r]
+                                 (if (contains? r :title_id) r (assoc r :title_id 10)))
+                               rows)))
+               opts)]
+    (tu/page-html (merge base opts))))
 
 (defn- place []
   {:west 139.0 :south 35.0 :east 141.0 :north 37.0})
@@ -33,17 +48,22 @@
   (:field (tu/parse (tu/post-json app "/api/user/fields" {:name name :geojson gj} "user" usid))))
 
 (defn- row-body
-  ([title start end] (row-body title start end nil []))
-  ([title start end wn fids]
-   (cond-> {:title title :start_at start :end_at end :field_ids fids}
+  ([tid title start end] (row-body tid title start end nil []))
+  ([tid title start end wn fids]
+   (cond-> {:title_id tid :title title :start_at start :end_at end :field_ids fids}
      (some? wn) (assoc :work_name wn))))
+
+(defn- make-title [app usid name]
+  (:title (tu/parse (tu/post-json app "/api/user/gantt/titles" {:name name} "user" usid))))
 
 (deftest p4-screens-and-routes
   (testing "P4-2.1-01 / P4-2.2-01 / P4-2.2-03 / P4-5-01〜03 / P4-5-08 / P4-5-09 広い画面のガント"
     (let [h (html {:page :gantt
                    :place (place)
                    :fields [{:id 1 :name "北"}]
-                   :gantt-rows [{:id 1 :title "予定A" :start_at "2026-09-18T08:00"
+                   :gantt-titles [{:id 10 :name "題A"}]
+                   :gantt-title-selected 10
+                   :gantt-rows [{:id 1 :title_id 10 :title "予定A" :start_at "2026-09-18T08:00"
                                  :end_at "2026-09-18T17:00" :work_name "田植え" :field_ids [1]}]
                    :gantt-selected 1
                    :gantt-progress {:ok true :applicable true :percent 40
@@ -63,8 +83,9 @@
       (is (re-find #"終了" h))
       (is (re-find #"作業名" h))
       (is (re-find #"対象圃場" h))
-      (is (re-find #"予定を足す" h))
-      (is (not (re-find #"消す|削除" h)))
+      (is (re-find #"作業を足す" h))
+      (is (re-find #"id=\"gantt-delete-btn\"" h))
+      (is (re-find #"id=\"gantt-review-btn\"" h))
       (is (not (re-find #"ブラシ|全面完了|分割|合筆|取込" h)))
       (is (= "未" (:status-none ui/messages)))
       (is (= "一部" (:status-partial ui/messages)))
@@ -82,7 +103,7 @@
   (testing "P4-2.1-06 / P4-5-07 狭い画面"
     (is (re-find #"ガントの編集はパソコンで開いてください"
                  (html {:page :gantt :narrow? true :fields [{:id 1}]})))
-    (is (not (re-find #"予定を足す|gantt-circle" (html {:page :gantt :narrow? true :fields [{:id 1}]})))))
+    (is (not (re-find #"作業を足す|gantt-circle" (html {:page :gantt :narrow? true :fields [{:id 1}]})))))
   (testing "P4-2.1-07 /map に％は無い"
     (is (not (re-find #"gantt-circle|パーセントサークル"
                       (html {:page :map :place (place) :fields [{:id 1}] :map-mode "paint"
@@ -123,18 +144,22 @@
     (binding [time/*now-fn* (fn [] (Instant/parse "2026-12-15T00:00:00Z"))]
       (is (= {:start "2026-12-15T00:00" :end "2027-01-01T00:00" :range "month"}
              (ui/gantt-axis-bounds "month"))))
-    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}])
+    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}]
+                                 :gantt-titles [{:id 10 :name "題A"}] :gantt-title-selected 10)
                        [:submit {:act "set-gantt-axis" :form {:axis "week"}}])]
       (is (= "week" (get-in r [:state :gantt-axis])))
       (is (re-find #"data-range=\"week\"" (ui/render (:state r))))
       (is (re-find #"data-select=\"gantt-axis\"" (ui/render (:state r))))
       (is (re-find #"gantt-ticks" (ui/render (:state r)))))
-    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}])
+    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}]
+                                 :gantt-titles [{:id 10 :name "題A"}] :gantt-title-selected 10)
                        [:submit {:act "set-gantt-axis" :form {:axis "weeks8"}}])]
       (is (= "weeks8" (get-in r [:state :gantt-axis])))
       (is (re-find #"data-range=\"weeks8\"" (ui/render (:state r))))
       (is (re-find #"8週|8 weeks" (ui/render (:state r)))))
-    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}] :gantt-orient "time-h")
+    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}]
+                                 :gantt-titles [{:id 10 :name "題A"}] :gantt-title-selected 10
+                                 :gantt-orient "time-h")
                        [:submit {:act "set-gantt-orient" :form {:orient "time-v"}}])]
       (is (= "time-v" (get-in r [:state :gantt-orient])))
       (is (re-find #"gantt-orient-time-v" (ui/render (:state r))))
@@ -183,7 +208,7 @@
     (let [h (html {:page :gantt :fields [{:id 1}]})
           doc (slurp (io/file "docs/詳細試験仕様書_工程4.md"))]
       (is (not (re-find #"指示|日誌|関係を切|言語切替" h)))
-      (is (nil? (http/match-api :delete "/api/user/gantt/1")))
+      (is (= [:gantt-delete "1"] (http/match-api :delete "/api/user/gantt/1")))
       (is (nil? (http/match-api :put "/api/user/work-names")))
       (is (some? (http/match-api :post "/api/user/orders")))
       (doseq [id ["P4-6-01" "P4-6-02" "P4-6-03" "P4-6-04" "P4-6-05"
@@ -204,28 +229,71 @@
             fo (add-field app usid2 "他人" tu/square)
             id1 (:id f1)
             id2 (:id f2)
-            oid (:id fo)]
+            oid (:id fo)
+            tid (:id (make-title app usid "題A"))]
         (testing "P4-2.4-10 管理者は forbidden"
           (is (= 403 (:status (tu/get-path app "/api/user/gantt" "admin" asid))))
           (is (= 403 (:status (tu/post-json app "/api/user/gantt"
-                                            (row-body "a" "2026-09-18T08:00" "2026-09-18T09:00")
-                                            "admin" asid)))))
+                                            (row-body tid "a" "2026-09-18T08:00" "2026-09-18T09:00")
+                                            "admin" asid))))
+          (is (= 403 (:status (tu/get-path app "/api/user/gantt/titles" "admin" asid)))))
+        (testing "題名 HTTP"
+          (let [listed (tu/parse (tu/get-path app "/api/user/gantt/titles" "user" usid))
+                created (tu/parse (tu/post-json app "/api/user/gantt/titles" {:name "題HTTP"} "user" usid))
+                cid (get-in created [:title :id])
+                ren (tu/parse (tu/put-json app (str "/api/user/gantt/titles/" cid)
+                                           {:name "題HTTP2"} "user" usid))
+                del (tu/parse (tu/delete-path app (str "/api/user/gantt/titles/" cid) "user" usid))
+                bad (tu/parse (tu/post-json app "/api/user/gantt/titles" {:name "  "} "user" usid))
+                boom (tu/parse (app (-> (mock/request :post "/api/user/gantt/titles")
+                                        (mock/content-type "application/json")
+                                        (mock/body "not-json")
+                                        (tu/as-user "user" usid))))
+                boom2 (tu/parse (app (-> (mock/request :put (str "/api/user/gantt/titles/" tid))
+                                         (mock/content-type "application/json")
+                                         (mock/body "not-json")
+                                         (tu/as-user "user" usid))))]
+            (is (true? (:ok listed)))
+            (is (some #(= "題A" (:name %)) (:titles listed)))
+            (is (= "題HTTP2" (get-in ren [:title :name])))
+            (is (true? (:ok del)))
+            (is (= "title_required" (:code bad)))
+            (is (= "title_required" (:code boom)))
+            (is (= "title_required" (:code boom2)))
+            (is (= [:gantt-titles-get] (http/match-api :get "/api/user/gantt/titles")))
+            (is (= [:gantt-titles-put "9"] (http/match-api :put "/api/user/gantt/titles/9")))
+            (is (= [:gantt-titles-delete "9"] (http/match-api :delete "/api/user/gantt/titles/9")))
+            (is (nil? (http/match-api :get "/api/user/gantt/titles/9")))))
+        (testing "題名 HTTP 失敗"
+          (let [pw0 (tu/invite-pw app asid "p4-title-zero@example.com")
+                sid0 (tu/user-sid app "p4-title-zero@example.com" pw0)]
+            (is (= "no_fields" (:code (tu/parse (tu/get-path app "/api/user/gantt/titles" "user" sid0)))))
+            (is (= "no_fields" (:code (tu/parse (tu/put-json app (str "/api/user/gantt/titles/" tid)
+                                                             {:name "x"} "user" sid0)))))
+            (is (= "no_fields" (:code (tu/parse (tu/delete-path app (str "/api/user/gantt/titles/" tid)
+                                                                "user" sid0))))))
+          (is (= "title_not_found"
+                 (:code (tu/parse (tu/put-json app "/api/user/gantt/titles/99999"
+                                               {:name "x"} "user" usid)))))
+          (is (= "title_not_found"
+                 (:code (tu/parse (tu/delete-path app "/api/user/gantt/titles/99999"
+                                                  "user" usid))))))
         (testing "P4-2.4-11 / P4-2.4-c01 / P4-7-05 圃場0"
           (let [pw0 (tu/invite-pw app asid "p4-zero@example.com")
                 sid0 (tu/user-sid app "p4-zero@example.com" pw0)]
             (is (= "no_fields" (:code (tu/parse (tu/get-path app "/api/user/gantt" "user" sid0)))))
             (is (= "no_fields" (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                              (row-body "x" "2026-09-18T08:00" "2026-09-18T09:00")
+                                                              (row-body tid "x" "2026-09-18T08:00" "2026-09-18T09:00")
                                                               "user" sid0)))))))
-        (testing "P4-2.4-01 / P4-2.4-02 / P4-2.4-03 / P4-7-04 作成・一覧・更新・重なり。DELETE無し"
+        (testing "P4-2.4-01 / P4-2.4-02 / P4-2.4-03 / P4-7-04 作成・一覧・更新・重なり・ソフト削除"
           (let [a (tu/parse (tu/post-json app "/api/user/gantt"
-                                          (row-body "後" "2026-09-18T12:00" "2026-09-18T13:00")
+                                          (row-body tid "後" "2026-09-18T12:00" "2026-09-18T13:00")
                                           "user" usid))
                 b (tu/parse (tu/post-json app "/api/user/gantt"
-                                          (row-body "先" "2026-09-18T08:00" "2026-09-18T17:00" "田植え" [id1])
+                                          (row-body tid "先" "2026-09-18T08:00" "2026-09-18T17:00" "田植え" [id1])
                                           "user" usid))
                 c (tu/parse (tu/post-json app "/api/user/gantt"
-                                          (row-body "重なり" "2026-09-18T08:00" "2026-09-18T10:00")
+                                          (row-body tid "重なり" "2026-09-18T08:00" "2026-09-18T10:00")
                                           "user" usid))
                 listed (tu/parse (tu/get-path app "/api/user/gantt" "user" usid))]
             (is (true? (:ok a)))
@@ -235,22 +303,26 @@
             (is (= ["先" "重なり" "後"] (mapv :title (:rows listed))))
             (let [gid (get-in b [:row :id])
                   u (tu/parse (tu/put-json app (str "/api/user/gantt/" gid)
-                                           (row-body "直した" "2026-09-18T08:00" "2026-09-18T17:00" "田植え" [id1 id2])
+                                           (row-body tid "直した" "2026-09-18T08:00" "2026-09-18T17:00" "田植え" [id1 id2])
                                            "user" usid))]
               (is (= "直した" (get-in u [:row :title])))
               (is (= [id1 id2] (get-in u [:row :field_ids]))))
-            (is (nil? (http/match-api :delete (str "/api/user/gantt/" (get-in b [:row :id])))))))
+            (let [gid (get-in b [:row :id])
+                  del (tu/parse (tu/delete-path app (str "/api/user/gantt/" gid) "user" usid))
+                  listed2 (tu/parse (tu/get-path app "/api/user/gantt" "user" usid))]
+              (is (true? (:ok del)))
+              (is (not (some #(= gid (:id %)) (:rows listed2)))))))
         (testing "P4-2.4-04 / P4-2.4-05 / P4-2.4-15 / P4-3.3-02〜04 progress"
           (let [memo (tu/parse (tu/post-json app "/api/user/gantt"
-                                             (row-body "メモ" "2026-09-19T08:00" "2026-09-19T09:00")
+                                             (row-body tid "メモ" "2026-09-19T08:00" "2026-09-19T09:00")
                                              "user" usid))
                 tgt (tu/parse (tu/post-json app "/api/user/gantt"
-                                            (row-body "％" "2026-09-19T10:00" "2026-09-19T11:00" "田植え" [id1 id2])
+                                            (row-body tid "％" "2026-09-19T10:00" "2026-09-19T11:00" "田植え" [id1 id2])
                                             "user" usid))
                 mid (get-in memo [:row :id])
-                tid (get-in tgt [:row :id])
+                gid (get-in tgt [:row :id])
                 na (tu/parse (tu/get-path app (str "/api/user/gantt/" mid "/progress") "user" usid))
-                p0 (tu/parse (tu/get-path app (str "/api/user/gantt/" tid "/progress") "user" usid))]
+                p0 (tu/parse (tu/get-path app (str "/api/user/gantt/" gid "/progress") "user" usid))]
             (is (false? (:applicable na)))
             (is (nil? (:percent na)))
             (is (true? (:applicable p0)))
@@ -265,7 +337,7 @@
             (tu/post-json app "/api/user/paints"
                           {:field_id id1 :work_name "田植え" :geojson tu/square-inner}
                           "user" usid)
-            (let [pp (tu/parse (tu/get-path app (str "/api/user/gantt/" tid "/progress") "user" usid))]
+            (let [pp (tu/parse (tu/get-path app (str "/api/user/gantt/" gid "/progress") "user" usid))]
               (is (pos? (:numerator_m2 pp)))
               (is (<= (:numerator_m2 pp) (:denominator_m2 pp)))
               (is (< (:percent pp) 100)))
@@ -273,13 +345,13 @@
                           {:work_name "田植え"} "user" usid)
             (tu/post-json app (str "/api/user/fields/" id2 "/complete")
                           {:work_name "田植え"} "user" usid)
-            (let [pd (tu/parse (tu/get-path app (str "/api/user/gantt/" tid "/progress") "user" usid))]
+            (let [pd (tu/parse (tu/get-path app (str "/api/user/gantt/" gid "/progress") "user" usid))]
               (is (= 100 (:percent pd)))
               (is (every? #(= "done" (:status %)) (:fields pd))))
             (is (= 99 (gantt/progress-percent 100 100 false)))))
         (testing "P4-2.4-06 / P4-2.4-08 / P4-2.4-09 / P4-3.5-01 候補"
           (tu/post-json app "/api/user/gantt"
-                        (row-body "候補" "2026-09-20T08:00" "2026-09-20T09:00" "ガント名" [])
+                        (row-body tid "候補" "2026-09-20T08:00" "2026-09-20T09:00" "ガント名" [])
                         "user" usid)
           (tu/post-json app "/api/user/paints"
                         {:field_id oid :work_name "秘密" :geojson tu/square-inner}
@@ -294,44 +366,44 @@
           (let [fx (:fx (ui/basemaps-loaded (assoc (ui/init-state) :page :map :fields [{:id 1}])
                                             {:ok true :basemaps []}))]
             (is (some #(= "/api/user/work-name-candidates" (nth % 2 nil)) fx))))
-        (testing "P4-2.4-07 DELETE 無し"
-          (is (nil? (http/match-api :delete "/api/user/gantt/1"))))
+        (testing "P4-2.4-07 ソフト削除 DELETE"
+          (is (= [:gantt-delete "1"] (http/match-api :delete "/api/user/gantt/1"))))
         (testing "P4-2.4-c02〜c09 失敗 code"
           (is (= "gantt_not_found"
                  (:code (tu/parse (tu/put-json app "/api/user/gantt/99999"
-                                               (row-body "a" "2026-09-18T08:00" "2026-09-18T09:00")
+                                               (row-body tid "a" "2026-09-18T08:00" "2026-09-18T09:00")
                                                "user" usid)))))
           (is (= "gantt_not_found"
                  (:code (tu/parse (tu/get-path app "/api/user/gantt/99999/progress" "user" usid)))))
           (is (= "title_required"
                  (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                (row-body "  " "2026-09-18T08:00" "2026-09-18T09:00")
+                                                (row-body tid "  " "2026-09-18T08:00" "2026-09-18T09:00")
                                                 "user" usid)))))
           (is (= "title_too_long"
                  (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                (row-body (apply str (repeat 201 "あ"))
+                                                (row-body tid (apply str (repeat 201 "あ"))
                                                           "2026-09-18T08:00" "2026-09-18T09:00")
                                                 "user" usid)))))
           (is (= "time_invalid"
                  (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                {:title "t" :start_at "bad" :end_at "2026-09-18T09:00"}
+                                                {:title_id tid :title "t" :start_at "bad" :end_at "2026-09-18T09:00"}
                                                 "user" usid)))))
           (is (= "time_order"
                  (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                (row-body "t" "2026-09-18T09:00" "2026-09-18T08:00")
+                                                (row-body tid "t" "2026-09-18T09:00" "2026-09-18T08:00")
                                                 "user" usid)))))
           (is (= "work_name_required"
                  (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                (row-body "t" "2026-09-18T08:00" "2026-09-18T09:00" nil [id1])
+                                                (row-body tid "t" "2026-09-18T08:00" "2026-09-18T09:00" nil [id1])
                                                 "user" usid)))))
           (is (= "work_name_too_long"
                  (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                (row-body "t" "2026-09-18T08:00" "2026-09-18T09:00"
+                                                (row-body tid "t" "2026-09-18T08:00" "2026-09-18T09:00"
                                                           (apply str (repeat 101 "あ")) [])
                                                 "user" usid)))))
           (is (= "field_not_found"
                  (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                (row-body "t" "2026-09-18T08:00" "2026-09-18T09:00" "田植え" [oid])
+                                                (row-body tid "t" "2026-09-18T08:00" "2026-09-18T09:00" "田植え" [oid])
                                                 "user" usid)))))
           (is (= "title_required"
                  (:code (tu/parse (app (-> (mock/request :post "/api/user/gantt")
@@ -339,7 +411,7 @@
                                            (mock/body "not-json")
                                            (tu/as-user "user" usid)))))))
           (let [gid (get-in (tu/parse (tu/post-json app "/api/user/gantt"
-                                                    (row-body "put壊" "2026-09-18T14:00" "2026-09-18T15:00")
+                                                    (row-body tid "put壊" "2026-09-18T14:00" "2026-09-18T15:00")
                                                     "user" usid))
                             [:row :id])]
             (is (= "title_required"
@@ -349,7 +421,7 @@
                                              (tu/as-user "user" usid)))))))))
         (testing "P4-2.4-12 / P4-4-04 圃場削除で対象から外す"
           (let [r (tu/parse (tu/post-json app "/api/user/gantt"
-                                          (row-body "残す" "2026-09-22T08:00" "2026-09-22T09:00" "田植え" [id2])
+                                          (row-body tid "残す" "2026-09-22T08:00" "2026-09-22T09:00" "田植え" [id2])
                                           "user" usid))
                 gid (get-in r [:row :id])]
             (is (true? (:ok (tu/parse (tu/delete-path app (str "/api/user/fields/" id2) "user" usid)))))
@@ -361,7 +433,7 @@
           (let [fs (add-field app usid "分割元" tu/square)
                 fid (:id fs)
                 r (tu/parse (tu/post-json app "/api/user/gantt"
-                                          (row-body "分割行" "2026-09-23T08:00" "2026-09-23T09:00" "田植え" [fid])
+                                          (row-body tid "分割行" "2026-09-23T08:00" "2026-09-23T09:00" "田植え" [fid])
                                           "user" usid))
                 gid (get-in r [:row :id])]
             (is (true? (:ok (fields/split-field sys uid fid {:polygons [tu/square tu/square-east]}))))
@@ -372,10 +444,10 @@
           (let [a (add-field app usid "合A" tu/square)
                 b (add-field app usid "合B" tu/square-east)
                 ra (tu/parse (tu/post-json app "/api/user/gantt"
-                                           (row-body "合A行" "2026-09-24T08:00" "2026-09-24T09:00" "田植え" [(:id a)])
+                                           (row-body tid "合A行" "2026-09-24T08:00" "2026-09-24T09:00" "田植え" [(:id a)])
                                            "user" usid))
                 rb (tu/parse (tu/post-json app "/api/user/gantt"
-                                           (row-body "合B行" "2026-09-24T10:00" "2026-09-24T11:00" "田植え" [(:id b)])
+                                           (row-body tid "合B行" "2026-09-24T10:00" "2026-09-24T11:00" "田植え" [(:id b)])
                                            "user" usid))
                 ga (get-in ra [:row :id])
                 gb (get-in rb [:row :id])]
@@ -388,7 +460,7 @@
         (testing "P4-3.1-01 0枚になっても行は残り、戻れば使える"
           (let [only (add-field app usid "最後" tu/square)
                 r (tu/parse (tu/post-json app "/api/user/gantt"
-                                          (row-body "残行" "2026-09-25T08:00" "2026-09-25T09:00")
+                                          (row-body tid "残行" "2026-09-25T08:00" "2026-09-25T09:00")
                                           "user" usid))
                 gid (get-in r [:row :id])
                 others (filter #(not= (:id only) (:id %))
@@ -403,17 +475,17 @@
         (testing "P4-3.1-02 / P4-3.2 / P4-7-03"
           (is (= "field_not_found"
                  (:code (tu/parse (tu/post-json app "/api/user/gantt"
-                                                (row-body "他" "2026-09-26T08:00" "2026-09-26T09:00" "田植え" [oid])
+                                                (row-body tid "他" "2026-09-26T08:00" "2026-09-26T09:00" "田植え" [oid])
                                                 "user" usid)))))
           (is (= "time_order"
-                 (:code (gantt/create-row sys uid (row-body "同" "2026-09-26T08:00" "2026-09-26T08:00")))))
-          (let [m (gantt/create-row sys uid (row-body "作業だけ" "2026-09-26T08:00" "2026-09-26T09:00" "ラベル" []))]
+                 (:code (gantt/create-row sys uid (row-body tid "同" "2026-09-26T08:00" "2026-09-26T08:00")))))
+          (let [m (gantt/create-row sys uid (row-body tid "作業だけ" "2026-09-26T08:00" "2026-09-26T09:00" "ラベル" []))]
             (is (true? (:ok m)))
             (is (= "ラベル" (get-in m [:row :work_name])))
             (is (false? (:applicable (gantt/row-progress sys uid (get-in m [:row :id])))))))
         (testing "P4-3.2-07 新規初期値"
           (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-18T00:00:00Z"))]
-            (is (= "新しい予定" (:title (gantt/default-new-row))))
+            (is (= "新しい作業" (:title (gantt/default-new-row))))
             (is (= "2026-09-18T08:00" (:start_at (gantt/default-new-row))))
             (is (= "2026-09-18T17:00" (:end_at (gantt/default-new-row))))))
         (testing "P4-4-01〜03 表"
@@ -432,7 +504,7 @@
         (testing "P4-7-02 ％と色が塗りと一致"
           (let [f (add-field app usid "色" tu/square)
                 r (tu/parse (tu/post-json app "/api/user/gantt"
-                                          (row-body "色行" "2026-09-27T08:00" "2026-09-27T09:00" "色作業" [(:id f)])
+                                          (row-body tid "色行" "2026-09-27T08:00" "2026-09-27T09:00" "色作業" [(:id f)])
                                           "user" usid))
                 gid (get-in r [:row :id])]
             (tu/post-json app "/api/user/paints"
@@ -448,15 +520,90 @@
   (testing "P4 UI handlers cover gantt acts"
     (let [s (assoc (ui/init-state) :page :gantt :session {:email "a"} :kind "user"
                    :fields [{:id 1 :name "北"}]
-                   :gantt-rows [{:id 3 :title "行" :start_at "2026-09-18T08:00"
+                   :gantt-titles [{:id 10 :name "題A"}]
+                   :gantt-title-selected 10
+                   :gantt-rows [{:id 3 :title_id 10 :title "行" :start_at "2026-09-18T08:00"
                                  :end_at "2026-09-18T09:00" :work_name "田植え" :field_ids [1]}
-                                {:id 4 :title "メモ" :start_at "2026-09-18T10:00"
+                                {:id 4 :title_id 10 :title "メモ" :start_at "2026-09-18T10:00"
                                  :end_at "2026-09-18T11:00" :field_ids []}])]
       (is (= :api (tu/fx-op s [:submit {:act "select-gantt-row" :form {:id "3"}}])))
       (is (= :html (tu/fx-op s [:submit {:act "select-gantt-row" :form {:id "4"}}])))
       (is (= :api (tu/fx-op s [:submit {:act "add-gantt-row"
                                         :form {:title "" :start_at "2026-09-18T08:00" :end_at "2026-09-18T09:00"}}])))
       (is (= :html (tu/fx-op s [:submit {:act "add-gantt-row" :form {:title "x"}}])))
+      (is (= :html (tu/fx-op (dissoc s :gantt-title-selected)
+                             [:submit {:act "add-gantt-row"
+                                       :form {:title "x" :start_at "2026-09-18T08:00" :end_at "2026-09-18T09:00"}}])))
+      (is (= :api (tu/fx-op s [:submit {:act "add-gantt-title" :form {:name "新題"}}])))
+      (is (= :html (tu/fx-op s [:submit {:act "add-gantt-title" :form {:name " "}}])))
+      (is (= :html (tu/fx-op s [:submit {:act "select-gantt-title" :form {:id "10"}}])))
+      (is (= :api (tu/fx-op s [:submit {:act "save-gantt-title" :form {:id "10" :name "題改"}}])))
+      (is (= :api (tu/fx-op s [:submit {:act "save-gantt-title" :form {:name "題選"}}])))
+      (is (= :html (tu/fx-op s [:submit {:act "save-gantt-title" :form {:id "" :name "題"}}])))
+      (is (= :html (tu/fx-op s [:submit {:act "save-gantt-title" :form {:id "10" :name " "}}])))
+      (is (= :api (tu/fx-op s [:submit {:act "delete-gantt-title" :form {:id "10"}}])))
+      (is (= :api (tu/fx-op s [:submit {:act "delete-gantt-title" :form {}}])))
+      (is (= :html (tu/fx-op (dissoc s :gantt-title-selected)
+                             [:submit {:act "delete-gantt-title" :form {}}])))
+      (is (= :api (tu/fx-op s [:submit {:act "add-gantt-row"
+                                        :form {:title_id "10" :title "明示"
+                                               :start_at "2026-09-18T08:00" :end_at "2026-09-18T09:00"}}])))
+      (is (= :html (tu/fx-op s [:submit {:act "save-gantt-row"
+                                         :form {:id "3" :title "行" :start_at "2026-09-18T08:00"
+                                                :end_at "2026-09-18T09:00" :work_name "田植え"
+                                                :field_ids ["1"] :title_id ""}}])))
+      (is (= :api (tu/fx-op s [:gantt-title-save-result {:ok true :title {:id 11 :name "x"}}])))
+      (is (= :html (tu/fx-op s [:gantt-title-save-result {:ok false :code "title_required"}])))
+      (is (= :api (tu/fx-op s [:gantt-title-delete-result {:ok true}])))
+      (is (= :html (tu/fx-op s [:gantt-title-delete-result {:ok false :code "title_not_found"}])))
+      (is (= "題名を選んでください" (ui/code-message "title_not_found")))
+      (is (re-find #"題名を足す|gantt-title-add" (ui/render s)))
+      (is (re-find #"作業を足す" (ui/render s)))
+      (is (re-find #"gantt-titles" (ui/render (dissoc s :gantt-titles))))
+      (is (= :html (tu/fx-op s [:gantt-loaded {:ok true :titles [] :rows []}])))
+      (is (= 10 (get-in (ui/handle (dissoc s :gantt-title-selected)
+                                   [:gantt-loaded {:ok true
+                                                   :titles [{:id 10 :name "題A"}]
+                                                   :rows []}])
+                        [:state :gantt-title-selected])))
+      (is (= 10 (get-in (ui/handle (assoc s :gantt-title-selected 99)
+                                   [:gantt-loaded {:ok true
+                                                   :titles [{:id 10 :name "題A"}]
+                                                   :rows []}])
+                        [:state :gantt-title-selected])))
+      (is (= 10 (get-in (ui/handle (assoc s :gantt-title-selected 10)
+                                   [:gantt-loaded {:ok true
+                                                   :titles [{:id 1 :name "他"} {:id 10 :name "題A"}]
+                                                   :rows []}])
+                        [:state :gantt-title-selected])))
+      (is (= :api (tu/fx-op (assoc s :gantt-selected 3 :gantt-title-selected 10)
+                            [:gantt-loaded {:ok true
+                                            :titles [{:id 10 :name "題A"}]
+                                            :rows [{:id 1 :title_id 10 :title "他"
+                                                    :start_at "2026-09-18T08:00"
+                                                    :end_at "2026-09-18T09:00"
+                                                    :field_ids []}
+                                                   {:id 3 :title_id 10 :title "行"
+                                                    :start_at "2026-09-18T08:00"
+                                                    :end_at "2026-09-18T09:00"
+                                                    :work_name "田植え" :field_ids [1]}]}])))
+      (is (nil? (get-in (ui/handle (assoc s :gantt-selected 3 :gantt-title-selected 10)
+                                   [:gantt-loaded {:ok true
+                                                   :titles [{:id 10 :name "題A"}]
+                                                   :rows [{:id 3 :title_id 99 :title "行"
+                                                           :start_at "2026-09-18T08:00"
+                                                           :end_at "2026-09-18T09:00"
+                                                           :work_name "田植え" :field_ids [1]}]}])
+                        [:state :gantt-selected])))
+      (is (nil? (get-in (ui/handle (assoc s :gantt-selected 3)
+                                   [:gantt-loaded {:ok true :titles [] :rows
+                                                   [{:id 3 :title_id 10 :title "行"
+                                                     :start_at "2026-09-18T08:00"
+                                                     :end_at "2026-09-18T09:00"
+                                                     :field_ids []}]}])
+                        [:state :gantt-selected])))
+      (is (= :html (tu/fx-op s [:submit {:act "select-gantt-title" :form {:id ""}}])))
+      (is (nil? (#'ui/submit-gantt-act s {} "nope")))
       (is (= :api (tu/fx-op (assoc s :gantt-selected 3)
                             [:submit {:act "save-gantt-row"
                                       :form {:id "3" :title "行" :start_at "2026-09-18T08:00"
@@ -475,7 +622,9 @@
       (is (= :html (tu/fx-op s [:gantt-loaded {:ok false :code "no_fields"}])))
       (is (= :html (tu/fx-op s [:gantt-loaded {:ok true :rows []}])))
       (is (= :api (tu/fx-op (assoc s :gantt-selected 3)
-                            [:gantt-loaded {:ok true :rows (:gantt-rows s)}])))
+                            [:gantt-loaded {:ok true
+                                            :titles (:gantt-titles s)
+                                            :rows (:gantt-rows s)}])))
       (is (= :html (tu/fx-op s [:gantt-save-result {:ok false :code "work_name_required"}])))
       (is (= :html (tu/fx-op s [:gantt-save-result {:ok false :code "time_order"}])))
       (is (= "題名を入れてください" (ui/code-message "title_required")))
@@ -502,7 +651,8 @@
       (is (= :html (tu/fx-op s [:gantt-loaded {:ok true}])))
       (is (= :html (tu/fx-op (assoc s :gantt-selected 3)
                             [:gantt-loaded {:ok true
-                                            :rows [{:id 3 :title "行" :start_at "2026-09-18T08:00"
+                                            :titles (:gantt-titles s)
+                                            :rows [{:id 3 :title_id 10 :title "行" :start_at "2026-09-18T08:00"
                                                     :end_at "2026-09-18T09:00"
                                                     :work_name nil :field_ids [1]}]}])))
       (is (re-find #"data-range=\"day\""
@@ -517,10 +667,10 @@
                                        :form {:title "行" :start_at "2026-09-18T08:00"
                                               :end_at "2026-09-18T09:00"}}])))
       (is (true? (boolean (ui/handle (assoc s :gantt-rows
-                                            [{:id 1 :title "a" :field_ids [1] :work_name nil}])
+                                            [{:id 1 :title_id 10 :title "a" :field_ids [1] :work_name nil}])
                                      [:submit {:act "select-gantt-row" :form {:id "1"}}]))))
       (is (re-find #"gantt-row"
-                   (ui/render (assoc s :gantt-rows [{:id nil :title "無ID" :start_at "2026-09-18T08:00"
+                   (ui/render (assoc s :gantt-rows [{:id nil :title_id 10 :title "無ID" :start_at "2026-09-18T08:00"
                                                      :end_at "2026-09-18T09:00" :field_ids []}]
                                      :gantt-selected 1))))
       (is (re-find #"gantt-circle"
@@ -556,6 +706,100 @@
                                             :end_at "2026-09-18T11:00" :work_name ""
                                             :field_ids "1"}}])]
         (is (re-find #"作業名を入れてください" (get-in r [:state :flash :text])))))))
+
+(deftest p4-progress-history-and-admin
+  (tu/with-sys
+    (fn [sys]
+      (let [{:keys [app asid usid uid]} (farm sys)
+            f (add-field app usid "北" tu/square)
+            fid (:id f)
+            tid (:id (make-title app usid "題歴"))
+            created (tu/parse (tu/post-json app "/api/user/gantt"
+                                            (row-body tid "歴" "2026-09-17T08:00" "2026-09-17T09:00" "田植え" [fid])
+                                            "user" usid))
+            gid (get-in created [:row :id])]
+        (is (= [:gantt-progress-days (str gid)]
+               (http/match-api :get (str "/api/user/gantt/" gid "/progress-days"))))
+        (is (= [:admin-gantt-progress-finalize]
+               (http/match-api :post "/api/admin/gantt/progress/finalize")))
+        (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-19T01:00:00Z"))]
+          (let [sess (tu/parse (tu/get-path app "/api/user/session" "user" usid))
+                days (tu/parse (tu/get-path app (str "/api/user/gantt/" gid "/progress-days") "user" usid))
+                fin (tu/parse (tu/post-json app "/api/admin/gantt/progress/finalize"
+                                            {:day "2026-09-18"} "admin" asid))
+                fin-user (tu/parse (tu/post-json app "/api/admin/gantt/progress/finalize"
+                                                 {:day "2026-09-17" :email "p4@example.com"}
+                                                 "admin" asid))
+                miss (tu/parse (tu/post-json app "/api/admin/gantt/progress/finalize"
+                                             {:email "nope@example.com"} "admin" asid))
+                unauth (tu/parse (tu/post-json app "/api/admin/gantt/progress/finalize" {}))
+                bad (tu/parse (app (tu/as-user (-> (mock/request :post "/api/admin/gantt/progress/finalize")
+                                                   (mock/content-type "application/json")
+                                                   (mock/body "{"))
+                                           "admin" asid)))]
+            (is (true? (:ok sess)))
+            (is (true? (:ok days)))
+            (is (seq (:days days)))
+            (is (true? (:ok fin)))
+            (is (true? (:ok fin-user)))
+            (is (= "user_not_found" (:code miss)))
+            (is (= "unauthorized" (:code unauth)))
+            (is (= "time_invalid" (:code bad)))))
+        (is (true? (:ok (tu/parse (tu/delete-path app (str "/api/user/gantt/" gid) "user" usid)))))
+        (is (= "gantt_not_found"
+               (:code (tu/parse (tu/delete-path app (str "/api/user/gantt/" gid) "user" usid)))))
+        (is (= "gantt_not_found"
+               (:code (tu/parse (tu/get-path app (str "/api/user/gantt/" gid "/progress-days") "user" usid)))))
+        (is (nil? (http/match-api :get "/api/user/gantt/1")))
+        (is (nil? (http/match-api :post "/api/user/gantt/1/progress-days")))
+        (let [base (assoc (ui/init-state) :kind "admin" :session {:email "a"} :page :gantt-progress
+                          :form {:day "2026-09-18" :email "a@b.c"})
+              empty-form (assoc (ui/init-state) :kind "admin" :session {:email "a"} :page :gantt-progress)
+              with-days (assoc (ui/init-state) :page :gantt :kind "user" :session {:email "a"}
+                               :fields [{:id 1 :name "北"}]
+                               :gantt-titles [{:id 10 :name "題A"}]
+                               :gantt-title-selected 10
+                               :gantt-rows [{:id 1 :title_id 10 :title "行" :start_at "2026-09-18T08:00"
+                                             :end_at "2026-09-18T09:00" :work_name "田植え" :field_ids [1]}]
+                               :gantt-selected 1
+                               :gantt-progress-days [{:day "2026-09-17" :percent 10 :applicable true}
+                                                     {:day "2026-09-18" :percent nil :applicable false}])]
+          (is (= :gantt-progress (:page (ui/route-for "/admin/gantt-progress"))))
+          (is (true? (ui/needs-auth? :gantt-progress)))
+          (is (re-find #"進捗確定" (ui/render base)))
+          (is (re-find #"進捗確定" (ui/render empty-form)))
+          (is (re-find #"進捗確定" (ui/render (assoc base :gantt-finalize-result {:finalized 2 :day "2026-09-18"}))))
+          (is (re-find #"振り返り" (ui/render with-days)))
+          (is (re-find #"—" (ui/render with-days)))
+          (is (= "その利用者はいません" (ui/code-message "user_not_found")))
+          (is (= :api (ffirst (:fx (ui/handle with-days [:submit {:act "delete-gantt-row" :form {:id "1"}}])))))
+          (is (= :html (ffirst (:fx (ui/handle (assoc with-days :gantt-selected nil)
+                                               [:submit {:act "delete-gantt-row" :form {}}])))))
+          (is (= :api (ffirst (:fx (ui/handle with-days [:submit {:act "review-gantt-row" :form {:id "1"}}])))))
+          (is (= :html (ffirst (:fx (ui/handle (assoc with-days :gantt-selected nil)
+                                               [:submit {:act "review-gantt-row" :form {}}])))))
+          (is (= :api (ffirst (:fx (ui/handle base [:submit {:act "finalize-gantt-progress"
+                                                             :form {:day "2026-09-18" :email "a@b.c"}}])))))
+          (is (= :api (ffirst (:fx (ui/handle empty-form [:submit {:act "finalize-gantt-progress"
+                                                                   :form {:day "" :email ""}}])))))
+          (is (= :api (ffirst (:fx (ui/handle with-days [:gantt-delete-result {:ok true}])))))
+          (is (true? (get-in (ui/handle with-days [:gantt-delete-result {:ok false :code "gantt_not_found"}])
+                             [:state :flash :error?])))
+          (is (map? (ui/handle with-days [:gantt-progress-days-loaded {:ok true}])))
+          (is (map? (ui/handle with-days [:gantt-progress-days-loaded {:ok true :days []}])))
+          (is (true? (get-in (ui/handle with-days [:gantt-progress-days-loaded {:ok false :code "gantt_not_found"}])
+                             [:state :flash :error?])))
+          (is (map? (ui/handle base [:gantt-finalize-result {:ok true :finalized 1 :day "2026-09-18"}])))
+          (is (true? (get-in (ui/handle base [:gantt-finalize-result {:ok false :code "user_not_found"}])
+                             [:state :flash :error?])))
+          (let [path-r (ui/handle (assoc base :page :home) [:path {:path "/admin/gantt-progress" :search ""}])]
+            (is (= :gantt-progress (get-in path-r [:state :page]))))
+          (is (re-find #"削除" (ui/render with-days)))
+          (is (re-find #"振り返り" (html {:page :gantt :fields [{:id 1}]
+                                          :gantt-rows [{:id 1 :title "行" :start_at "2026-09-18T08:00"
+                                                        :end_at "2026-09-18T09:00" :field_ids []}]
+                                          :gantt-selected 1
+                                          :gantt-progress-days []}))))))))
 
 (deftest p4-spec-ids-present
   (let [doc (slurp (io/file "docs/詳細試験仕様書_工程4.md"))

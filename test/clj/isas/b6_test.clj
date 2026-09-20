@@ -14,7 +14,22 @@
             [isas.ui :as ui]))
 
 (defn- html [opts]
-  (tu/page-html (merge {:kind "user" :session {:email "a@example.com"} :ui-lang "ja"} opts)))
+  (let [base {:kind "user" :session {:email "a@example.com"} :ui-lang "ja"}
+        opts (if (and (= :gantt (:page opts))
+                      (seq (:fields opts))
+                      (empty? (:gantt-titles opts)))
+               (assoc opts
+                      :gantt-titles [{:id 10 :name "題A"}]
+                      :gantt-title-selected (or (:gantt-title-selected opts) 10))
+               opts)
+        opts (if (and (= :gantt (:page opts)) (seq (:gantt-rows opts)))
+               (update opts :gantt-rows
+                       (fn [rows]
+                         (mapv (fn [r]
+                                 (if (contains? r :title_id) r (assoc r :title_id 10)))
+                               rows)))
+               opts)]
+    (tu/page-html (merge base opts))))
 
 (deftest b6-blocks
   (tu/with-sys
@@ -67,7 +82,8 @@
           (is (= "en" (:ui_lang (tu/parse (tu/get-path app "/api/admin/session" "admin" asid))))))
         (testing "B6-7.6-03 切替しても作業名・塗り％は数値のまま"
           (paints/create-paint sys uid {:field_id fid :work_name "田植え" :geojson tu/square-inner})
-          (let [row (gantt/create-row sys uid {:title "g" :start_at "2026-09-12T08:00"
+          (let [tid (:id (:title (gantt/create-title sys uid {:name "題"})))
+                row (gantt/create-row sys uid {:title_id tid :title "g" :start_at "2026-09-12T08:00"
                                                :end_at "2026-09-12T17:00" :work_name "田植え"
                                                :field_ids [fid]})
                 gid (get-in row [:row :id])

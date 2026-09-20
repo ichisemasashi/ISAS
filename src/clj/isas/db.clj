@@ -76,16 +76,28 @@
       created_at TEXT NOT NULL,
       FOREIGN KEY (field_id) REFERENCES fields(id)
     )"
+   "CREATE TABLE IF NOT EXISTS gantt_titles (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )"
    "CREATE TABLE IF NOT EXISTS gantt_rows (
       id INTEGER PRIMARY KEY,
       user_id INTEGER NOT NULL,
+      title_id INTEGER,
       title TEXT NOT NULL,
       start_at TEXT NOT NULL,
       end_at TEXT NOT NULL,
       work_name TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      deleted_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (title_id) REFERENCES gantt_titles(id)
     )"
    "CREATE TABLE IF NOT EXISTS gantt_targets (
       gantt_id INTEGER NOT NULL,
@@ -93,6 +105,16 @@
       PRIMARY KEY (gantt_id, field_id),
       FOREIGN KEY (gantt_id) REFERENCES gantt_rows(id),
       FOREIGN KEY (field_id) REFERENCES fields(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS gantt_progress_days (
+      gantt_id INTEGER NOT NULL,
+      day TEXT NOT NULL,
+      percent INTEGER,
+      applicable INTEGER NOT NULL,
+      finalized_at TEXT NOT NULL,
+      finalized_by TEXT NOT NULL,
+      PRIMARY KEY (gantt_id, day),
+      FOREIGN KEY (gantt_id) REFERENCES gantt_rows(id)
     )"
    "CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY,
@@ -152,6 +174,26 @@
   (when-not (contains? (table-columns ds table) (str column))
     (jdbc/execute! ds [(str "ALTER TABLE " table " ADD COLUMN " column " " decl)])))
 
+(defn- migrate-one-gantt-title!
+  [ds row]
+  (let [uid (:user_id row)
+        nm (str (:title row))
+        existing (jdbc/execute-one! ds
+                                    ["SELECT * FROM gantt_titles WHERE user_id = ? AND name = ? AND deleted_at IS NULL ORDER BY id LIMIT 1"
+                                     uid nm])
+        tid (if-let [eid (:id existing)]
+              eid
+              (:id (jdbc/execute-one! ds
+                                      ["INSERT INTO gantt_titles (user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?) RETURNING *"
+                                       uid nm (time/now-utc) (time/now-utc)])))]
+    (jdbc/execute-one! ds ["UPDATE gantt_rows SET title_id = ? WHERE id = ?" tid (:id row)])))
+
+(defn- migrate-gantt-titles!
+  "既存のガント行を題名グループへ移す。同じ題名文字列は1つの題名にまとめる。"
+  [ds]
+  (run! #(migrate-one-gantt-title! ds %)
+        (jdbc/execute! ds ["SELECT * FROM gantt_rows WHERE title_id IS NULL ORDER BY user_id, id"])))
+
 (defn migrate! [ds]
   (run! (fn [sql] (jdbc/execute! ds [sql])) schema)
   (ensure-column! ds "work_places" "image_west" "REAL")
@@ -160,6 +202,9 @@
   (ensure-column! ds "work_places" "image_north" "REAL")
   (ensure-column! ds "users" "ui_lang" "TEXT")
   (ensure-column! ds "admins" "ui_lang" "TEXT")
+  (ensure-column! ds "gantt_rows" "deleted_at" "TEXT")
+  (ensure-column! ds "gantt_rows" "title_id" "INTEGER")
+  (migrate-gantt-titles! ds)
   (log/info "データベースの表を用意しました")
   ds)
 
@@ -402,23 +447,88 @@
 (defn update-paint-geojson! [ds id geojson]
   (jdbc/execute-one! ds ["UPDATE paints SET geojson = ? WHERE id = ?" geojson id]))
 
-(defn insert-gantt-row! [ds {:keys [user-id title start-at end-at work-name]}]
+(defn insert-gantt-title! [ds {:keys [user-id name]}]
   (jdbc/execute-one! ds
-                     ["INSERT INTO gantt_rows (user_id, title, start_at, end_at, work_name, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *"
-                      user-id title start-at end-at work-name (time/now-utc) (time/now-utc)]))
+                     ["INSERT INTO gantt_titles (user_id, name, created_at, updated_at)
+                       VALUES (?, ?, ?, ?) RETURNING *"
+                      user-id name (time/now-utc) (time/now-utc)]))
 
-(defn update-gantt-row! [ds id {:keys [title start-at end-at work-name]}]
+(defn update-gantt-title! [ds id name]
   (jdbc/execute-one! ds
-                     ["UPDATE gantt_rows SET title = ?, start_at = ?, end_at = ?, work_name = ?, updated_at = ?
+                     ["UPDATE gantt_titles SET name = ?, updated_at = ?
+                       WHERE id = ? AND deleted_at IS NULL RETURNING *"
+                      name (time/now-utc) id]))
+
+(defn find-gantt-title [ds user-id id]
+  (jdbc/execute-one! ds ["SELECT * FROM gantt_titles WHERE id = ? AND user_id = ?" id user-id]))
+
+(defn list-gantt-titles [ds user-id]
+  (jdbc/execute! ds ["SELECT * FROM gantt_titles WHERE user_id = ? AND deleted_at IS NULL
+                      ORDER BY name, id"
+                     user-id]))
+
+(defn soft-delete-gantt-title! [ds id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_titles SET deleted_at = ?, updated_at = ?
+                       WHERE id = ? AND deleted_at IS NULL RETURNING *"
+                      (time/now-utc) (time/now-utc) id]))
+
+(defn soft-delete-gantt-rows-for-title! [ds title-id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_rows SET deleted_at = ?, updated_at = ?
+                       WHERE title_id = ? AND deleted_at IS NULL"
+                      (time/now-utc) (time/now-utc) title-id]))
+
+(defn insert-gantt-row! [ds {:keys [user-id title-id title start-at end-at work-name]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO gantt_rows (user_id, title_id, title, start_at, end_at, work_name, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+                      user-id title-id title start-at end-at work-name (time/now-utc) (time/now-utc)]))
+
+(defn update-gantt-row! [ds id {:keys [title-id title start-at end-at work-name]}]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_rows SET title_id = ?, title = ?, start_at = ?, end_at = ?, work_name = ?, updated_at = ?
                        WHERE id = ? RETURNING *"
-                      title start-at end-at work-name (time/now-utc) id]))
+                      title-id title start-at end-at work-name (time/now-utc) id]))
 
 (defn find-gantt-row [ds user-id id]
   (jdbc/execute-one! ds ["SELECT * FROM gantt_rows WHERE id = ? AND user_id = ?" id user-id]))
 
 (defn list-gantt-rows [ds user-id]
+  (jdbc/execute! ds ["SELECT * FROM gantt_rows WHERE user_id = ? AND deleted_at IS NULL ORDER BY start_at, id"
+                     user-id]))
+
+(defn list-gantt-rows-for-title [ds user-id title-id]
+  (jdbc/execute! ds ["SELECT * FROM gantt_rows
+                      WHERE user_id = ? AND title_id = ? AND deleted_at IS NULL
+                      ORDER BY start_at, id"
+                     user-id title-id]))
+
+(defn list-gantt-rows-all
+  "進捗確定用。ソフト削除済みも含む。"
+  [ds user-id]
   (jdbc/execute! ds ["SELECT * FROM gantt_rows WHERE user_id = ? ORDER BY start_at, id" user-id]))
+
+(defn soft-delete-gantt-row! [ds id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_rows SET deleted_at = ?, updated_at = ?
+                       WHERE id = ? AND deleted_at IS NULL RETURNING *"
+                      (time/now-utc) (time/now-utc) id]))
+
+(defn find-gantt-progress-day [ds gantt-id day]
+  (jdbc/execute-one! ds ["SELECT * FROM gantt_progress_days WHERE gantt_id = ? AND day = ?"
+                         gantt-id day]))
+
+(defn insert-gantt-progress-day! [ds {:keys [gantt-id day percent applicable finalized-by]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO gantt_progress_days
+                       (gantt_id, day, percent, applicable, finalized_at, finalized_by)
+                       VALUES (?, ?, ?, ?, ?, ?) RETURNING *"
+                      gantt-id day percent (if applicable 1 0) (time/now-utc) finalized-by]))
+
+(defn list-gantt-progress-days [ds gantt-id]
+  (jdbc/execute! ds ["SELECT * FROM gantt_progress_days WHERE gantt_id = ? ORDER BY day"
+                     gantt-id]))
 
 (defn list-gantt-targets [ds gantt-id]
   (mapv :field_id
@@ -439,7 +549,8 @@
   (mapv :work_name
         (jdbc/execute! ds
                        ["SELECT DISTINCT work_name AS work_name FROM gantt_rows
-                         WHERE user_id = ? AND work_name IS NOT NULL AND work_name <> ''
+                         WHERE user_id = ? AND deleted_at IS NULL
+                           AND work_name IS NOT NULL AND work_name <> ''
                          ORDER BY work_name"
                         user-id])))
 

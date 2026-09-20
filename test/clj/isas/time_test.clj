@@ -26,6 +26,13 @@
       (is (= "2026-09-12T08:00"
              (time/format-local-minute (LocalDateTime/of 2026 9 12 8 0))))
       (is (= "2026-09-12" (time/today-work-date)))
+      (is (= "2026-09-11" (time/yesterday-work-date)))
+      (is (= ["2026-09-10" "2026-09-11" "2026-09-12"]
+             (time/days-inclusive "2026-09-10" "2026-09-12")))
+      (is (= [] (time/days-inclusive "2026-09-12" "2026-09-10")))
+      (is (= [] (time/days-inclusive "bad" "2026-09-12")))
+      (is (= [] (time/days-inclusive "2026-09-12" "bad")))
+      (is (= "2026-09-12" (time/format-work-date (java.time.LocalDate/of 2026 9 12))))
       (is (= "08:00" (time/order-default-start)))
       (is (= "17:00" (time/order-default-end)))
       (is (true? (time/work-date-ok? "2026-09-12")))

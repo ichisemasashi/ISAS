@@ -69,7 +69,7 @@
         start (.getElementById js/document "gantt-new-start")
         end (.getElementById js/document "gantt-new-end")]
     (when (and title (str/blank? (.-value title)))
-      (set! (.-value title) "新しい予定"))
+      (set! (.-value title) "新しい作業"))
     (when (and start (str/blank? (.-value start)))
       (set! (.-value start) (ymd-minute y m d 8 0)))
     (when (and end (str/blank? (.-value end)))

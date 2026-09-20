@@ -226,8 +226,10 @@
   (when-let [form (.-target ev)]
     (when (.getAttribute form "data-act")
       (.preventDefault ev)
-      (dispatch! [:submit {:act (.getAttribute form "data-act")
-                           :form (form->map form)}]))))
+      (let [msg (.getAttribute form "data-confirm")]
+        (when (or (str/blank? (str msg)) (js/confirm msg))
+          (dispatch! [:submit {:act (.getAttribute form "data-act")
+                               :form (form->map form)}]))))))
 
 (defn on-click [ev]
   (let [t (.-target ev)

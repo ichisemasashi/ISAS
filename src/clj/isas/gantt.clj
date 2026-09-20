@@ -6,6 +6,10 @@
             [isas.paints :as paints]
             [isas.time :as time]))
 
+(declare finalize-missing-days-for-user)
+
+(def ^:private backfill-max-days 90)
+
 (defn- has-fields? [sys user-id]
   (pos? (count (db/list-fields (:ds sys) user-id))))
 
@@ -53,29 +57,107 @@
           {:ok true :field-ids uniq}
           {:ok false :code "field_not_found"})))))
 
+(defn- present-title [t]
+  {:id (:id t)
+   :name (:name t)})
+
 (defn- present-row [ds row]
   {:id (:id row)
+   :title_id (:title_id row)
    :title (:title row)
    :start_at (:start_at row)
    :end_at (:end_at row)
    :work_name (:work_name row)
    :field_ids (db/list-gantt-targets ds (:id row))})
 
+(defn- active-row? [row]
+  (nil? (:deleted_at row)))
+
+(defn- active-title? [t]
+  (nil? (:deleted_at t)))
+
+(defn- resolve-title-id [sys user-id raw]
+  (let [tid (geo/as-int raw)
+        t (when tid (db/find-gantt-title (:ds sys) user-id tid))]
+    (cond
+      (nil? tid) {:ok false :code "title_not_found"}
+      (or (nil? t) (not (active-title? t))) {:ok false :code "title_not_found"}
+      :else {:ok true :title-id tid})))
+
+(defn list-titles [sys user-id]
+  (let [gate (require-fields sys user-id)]
+    (if-not (:ok gate)
+      gate
+      (do
+        (log/info "ガント題名を一覧しました" :user-id user-id)
+        {:ok true
+         :titles (mapv present-title (db/list-gantt-titles (:ds sys) user-id))}))))
+
+(defn create-title [sys user-id body]
+  (let [gate (require-fields sys user-id)
+        name (normalize-title (:name body))]
+    (cond
+      (not (:ok gate)) gate
+      (not (:ok name)) name
+      :else
+      (let [t (db/insert-gantt-title! (:ds sys) {:user-id user-id :name (:title name)})]
+        (log/info "ガント題名を足しました" :user-id user-id :title-id (:id t) :name (:title name))
+        {:ok true :title (present-title t)}))))
+
+(defn update-title [sys user-id id body]
+  (let [gate (require-fields sys user-id)
+        tid (geo/as-int id)
+        t (when tid (db/find-gantt-title (:ds sys) user-id tid))
+        name (normalize-title (:name body))]
+    (cond
+      (not (:ok gate)) gate
+      (or (nil? tid) (nil? t) (not (active-title? t)))
+      (do
+        (log/warn "ガント題名が見つかりません" :user-id user-id :title-id id)
+        {:ok false :code "title_not_found"})
+      (not (:ok name)) name
+      :else
+      (do
+        (db/update-gantt-title! (:ds sys) tid (:title name))
+        (log/info "ガント題名を直しました" :user-id user-id :title-id tid :name (:title name))
+        {:ok true :title (present-title (db/find-gantt-title (:ds sys) user-id tid))}))))
+
+(defn soft-delete-title [sys user-id id]
+  (let [gate (require-fields sys user-id)
+        tid (geo/as-int id)
+        t (when tid (db/find-gantt-title (:ds sys) user-id tid))]
+    (cond
+      (not (:ok gate)) gate
+      (or (nil? tid) (nil? t) (not (active-title? t)))
+      (do
+        (log/warn "消すガント題名がありません" :user-id user-id :title-id id)
+        {:ok false :code "title_not_found"})
+      :else
+      (do
+        (db/soft-delete-gantt-rows-for-title! (:ds sys) tid)
+        (db/soft-delete-gantt-title! (:ds sys) tid)
+        (log/info "ガント題名をソフト削除しました" :user-id user-id :title-id tid)
+        {:ok true}))))
+
 (defn list-rows [sys user-id]
   (let [gate (require-fields sys user-id)]
     (if-not (:ok gate)
       gate
       (do
+        (finalize-missing-days-for-user sys user-id)
         (log/info "ガント行を一覧しました" :user-id user-id)
         {:ok true
+         :titles (mapv present-title (db/list-gantt-titles (:ds sys) user-id))
          :rows (mapv #(present-row (:ds sys) %) (db/list-gantt-rows (:ds sys) user-id))}))))
 
 (defn- validate-body [sys user-id body]
   (let [title (normalize-title (:title body))
         times (normalize-times (:start_at body) (:end_at body))
         wn (normalize-optional-work-name (:work_name body))
-        fields (normalize-field-ids sys user-id (:field_ids body))]
+        fields (normalize-field-ids sys user-id (:field_ids body))
+        tid (resolve-title-id sys user-id (:title_id body))]
     (cond
+      (not (:ok tid)) tid
       (not (:ok title)) title
       (not (:ok times)) times
       (not (:ok wn)) wn
@@ -86,6 +168,7 @@
         {:ok false :code "work_name_required"})
       :else
       {:ok true
+       :title-id (:title-id tid)
        :title (:title title)
        :start-at (:start-at times)
        :end-at (:end-at times)
@@ -100,39 +183,41 @@
         (if-not (:ok v)
           v
           (let [row (db/insert-gantt-row! (:ds sys) {:user-id user-id
+                                                     :title-id (:title-id v)
                                                      :title (:title v)
                                                      :start-at (:start-at v)
                                                      :end-at (:end-at v)
                                                      :work-name (:work-name v)})]
             (db/replace-gantt-targets! (:ds sys) (:id row) (:field-ids v))
-            (log/info "ガント行を足しました"
-                      :user-id user-id :gantt-id (:id row) :title (:title v)
-                      :fields (count (:field-ids v)))
+            (log/info "ガント作業を足しました"
+                      :user-id user-id :gantt-id (:id row) :title-id (:title-id v)
+                      :title (:title v) :fields (count (:field-ids v)))
             {:ok true :row (present-row (:ds sys) row)}))))))
 
 (defn update-row [sys user-id id body]
   (let [gate (require-fields sys user-id)
-        gid (geo/as-int id)]
+        gid (geo/as-int id)
+        row (when gid (db/find-gantt-row (:ds sys) user-id gid))]
     (cond
       (not (:ok gate)) gate
-      (nil? gid) {:ok false :code "gantt_not_found"}
-      (nil? (db/find-gantt-row (:ds sys) user-id gid))
+      (or (nil? gid) (nil? row) (not (active-row? row)))
       (do
-        (log/warn "ガント行が見つかりません" :user-id user-id :gantt-id id)
+        (log/warn "ガント作業が見つかりません" :user-id user-id :gantt-id id)
         {:ok false :code "gantt_not_found"})
       :else
       (let [v (validate-body sys user-id body)]
         (if-not (:ok v)
           v
           (do
-            (db/update-gantt-row! (:ds sys) gid {:title (:title v)
+            (db/update-gantt-row! (:ds sys) gid {:title-id (:title-id v)
+                                                 :title (:title v)
                                                  :start-at (:start-at v)
                                                  :end-at (:end-at v)
                                                  :work-name (:work-name v)})
             (db/replace-gantt-targets! (:ds sys) gid (:field-ids v))
-            (log/info "ガント行を直しました"
-                      :user-id user-id :gantt-id gid :title (:title v)
-                      :fields (count (:field-ids v)))
+            (log/info "ガント作業を直しました"
+                      :user-id user-id :gantt-id gid :title-id (:title-id v)
+                      :title (:title v) :fields (count (:field-ids v)))
             {:ok true :row (present-row (:ds sys) (db/find-gantt-row (:ds sys) user-id gid))}))))))
 
 (defn progress-percent [numerator denominator all-done?]
@@ -145,41 +230,165 @@
       (let [p (long (Math/floor (* 100.0 (/ n d))))]
         (if (>= p 100) 99 p)))))
 
+(defn- compute-progress [sys user-id row]
+  (let [gid (:id row)
+        fids (db/list-gantt-targets (:ds sys) gid)
+        wn (:work_name row)]
+    (if (or (empty? fids) (str/blank? (str wn)))
+      {:applicable false :percent nil :numerator_m2 0 :denominator_m2 0 :fields []}
+      (let [summaries (mapv (fn [fid]
+                              (let [field (db/find-field (:ds sys) user-id fid)
+                                    paints (db/list-paints-for-field-name (:ds sys) fid wn)]
+                                (paints/field-paint-summary field paints)))
+                            fids)
+            den (reduce + 0 (map :field_area_m2 summaries))
+            num (reduce + 0 (map (fn [s] (min (:area_m2 s) (:field_area_m2 s))) summaries))
+            all-done? (every? #(= "done" (:status %)) summaries)
+            pct (progress-percent num den all-done?)]
+        {:applicable true
+         :percent pct
+         :numerator_m2 (long num)
+         :denominator_m2 (long den)
+         :fields (mapv #(select-keys % [:id :status :area_m2 :field_area_m2]) summaries)}))))
+
+(defn- snapshot-day!
+  "未確定の日だけ確定％を書く。既存日はスキップ。戻り値は挿入した件数 0/1。"
+  [sys user-id row day finalized-by]
+  (let [gid (:id row)
+        existing (db/find-gantt-progress-day (:ds sys) gid day)]
+    (if existing
+      0
+      (let [p (compute-progress sys user-id row)]
+        (db/insert-gantt-progress-day! (:ds sys)
+                                       {:gantt-id gid
+                                        :day day
+                                        :percent (:percent p)
+                                        :applicable (:applicable p)
+                                        :finalized-by finalized-by})
+        1))))
+
+(defn- row-start-day [row]
+  (let [s (str (:start_at row))]
+    (when (>= (count s) 10)
+      (subs s 0 10))))
+
+(defn- backfill-days-for-row [sys user-id row through-day finalized-by]
+  (let [start (row-start-day row)
+        through (or (time/parse-work-date through-day) nil)
+        from (when start (time/parse-work-date start))]
+    (if (or (nil? from) (nil? through) (.isAfter from through))
+      0
+      (let [earliest (.minusDays through (long (dec backfill-max-days)))
+            from' (if (.isBefore from earliest) earliest from)
+            days (time/days-inclusive (time/format-work-date from') through-day)]
+        (reduce + 0 (map #(snapshot-day! sys user-id row % finalized-by) days))))))
+
+(defn finalize-missing-days-for-user
+  "東京時間の前日まで、未確定の日次％を自動確定する。"
+  [sys user-id]
+  (let [yesterday (time/yesterday-work-date)
+        rows (db/list-gantt-rows-all (:ds sys) user-id)
+        n (reduce + 0 (map #(backfill-days-for-row sys user-id % yesterday "auto") rows))]
+    (when (pos? n)
+      (log/info "ガント日次進捗を自動確定しました" :user-id user-id :count n :through yesterday))
+    {:ok true :finalized n}))
+
+(defn finalize-day-for-user
+  "指定日の未確定分を確定。戻り値は確定件数。"
+  [sys user-id day finalized-by]
+  (let [rows (db/list-gantt-rows-all (:ds sys) user-id)]
+    (reduce + 0 (map #(snapshot-day! sys user-id % day finalized-by) rows))))
+
+(defn admin-finalize-progress
+  "管理者による日次確定。day 省略=東京の前日。email 省略=全利用者。"
+  [sys {:keys [day email]}]
+  (let [day' (let [raw (str/trim (str (or day "")))]
+               (cond
+                 (str/blank? raw) (time/yesterday-work-date)
+                 (time/work-date-ok? raw) raw
+                 :else nil))]
+    (cond
+      (nil? day')
+      (do
+        (log/warn "進捗確定の日付が不正です" :day day)
+        {:ok false :code "time_invalid"})
+
+      (not (str/blank? (str (or email ""))))
+      (let [em (str/trim (str email))
+            user (db/find-user-by-email (:ds sys) em)]
+        (if (nil? user)
+          (do
+            (log/warn "進捗確定の利用者が見つかりません" :email em)
+            {:ok false :code "user_not_found"})
+          (let [n (finalize-day-for-user sys (:id user) day' "admin")]
+            (log/info "利用者のガント日次進捗を確定しました"
+                      :email em :day day' :count n)
+            {:ok true :day day' :finalized n})))
+
+      :else
+      (let [users (db/list-active-users (:ds sys))
+            n (reduce + 0 (map #(finalize-day-for-user sys (:id %) day' "admin") users))]
+        (log/info "全利用者のガント日次進捗を確定しました" :day day' :count n)
+        {:ok true :day day' :finalized n}))))
+
+(defn soft-delete-row [sys user-id id]
+  (let [gate (require-fields sys user-id)
+        gid (geo/as-int id)
+        row (when gid (db/find-gantt-row (:ds sys) user-id gid))]
+    (cond
+      (not (:ok gate)) gate
+      (or (nil? gid) (nil? row) (not (active-row? row)))
+      (do
+        (log/warn "消すガント行がありません" :user-id user-id :gantt-id id)
+        {:ok false :code "gantt_not_found"})
+      :else
+      (do
+        (db/soft-delete-gantt-row! (:ds sys) gid)
+        (log/info "ガント行をソフト削除しました" :user-id user-id :gantt-id gid)
+        {:ok true}))))
+
 (defn row-progress [sys user-id id]
   (let [gate (require-fields sys user-id)
         gid (geo/as-int id)
         row (when gid (db/find-gantt-row (:ds sys) user-id gid))]
     (cond
       (not (:ok gate)) gate
-      (nil? row)
+      (or (nil? row) (not (active-row? row)))
       (do
         (log/warn "進捗を見るガント行がありません" :user-id user-id :gantt-id id)
         {:ok false :code "gantt_not_found"})
       :else
-      (let [fids (db/list-gantt-targets (:ds sys) gid)
-            wn (:work_name row)]
-        (if (or (empty? fids) (str/blank? (str wn)))
+      (let [p (compute-progress sys user-id row)]
+        (if-not (:applicable p)
           (do
             (log/info "ガント行は％対象外です" :user-id user-id :gantt-id gid)
-            {:ok true :applicable false :percent nil :numerator_m2 0 :denominator_m2 0 :fields []})
-          (let [summaries (mapv (fn [fid]
-                                  (let [field (db/find-field (:ds sys) user-id fid)
-                                        paints (db/list-paints-for-field-name (:ds sys) fid wn)]
-                                    (paints/field-paint-summary field paints)))
-                                fids)
-                den (reduce + 0 (map :field_area_m2 summaries))
-                num (reduce + 0 (map (fn [s] (min (:area_m2 s) (:field_area_m2 s))) summaries))
-                all-done? (every? #(= "done" (:status %)) summaries)
-                pct (progress-percent num den all-done?)]
+            (merge {:ok true} p))
+          (do
             (log/info "ガント進捗を計算しました"
-                      :user-id user-id :gantt-id gid :percent pct
-                      :numerator-m2 num :denominator-m2 den)
-            {:ok true
-             :applicable true
-             :percent pct
-             :numerator_m2 (long num)
-             :denominator_m2 (long den)
-             :fields (mapv #(select-keys % [:id :status :area_m2 :field_area_m2]) summaries)}))))))
+                      :user-id user-id :gantt-id gid :percent (:percent p)
+                      :numerator-m2 (:numerator_m2 p) :denominator-m2 (:denominator_m2 p))
+            (merge {:ok true} p)))))))
+
+(defn list-progress-days [sys user-id id]
+  (let [gate (require-fields sys user-id)
+        gid (geo/as-int id)
+        row (when gid (db/find-gantt-row (:ds sys) user-id gid))]
+    (cond
+      (not (:ok gate)) gate
+      (or (nil? row) (not (active-row? row)))
+      (do
+        (log/warn "振り返りのガント行がありません" :user-id user-id :gantt-id id)
+        {:ok false :code "gantt_not_found"})
+      :else
+      (let [days (mapv (fn [d]
+                         {:day (:day d)
+                          :percent (:percent d)
+                          :applicable (= 1 (:applicable d))
+                          :finalized_at (:finalized_at d)
+                          :finalized_by (:finalized_by d)})
+                       (db/list-gantt-progress-days (:ds sys) gid))]
+        (log/info "ガント日次進捗を一覧しました" :user-id user-id :gantt-id gid :count (count days))
+        {:ok true :days days}))))
 
 (defn work-name-candidates [sys user-id]
   (log/info "作業名候補を一覧しました" :user-id user-id)
@@ -193,7 +402,7 @@
   {:ok true})
 
 (defn default-new-row []
-  {:title "新しい予定"
+  {:title "新しい作業"
    :start_at (time/gantt-default-start)
    :end_at (time/gantt-default-end)
    :work_name nil

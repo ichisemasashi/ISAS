@@ -79,6 +79,8 @@
 (defn session-get [sys req kind]
   (if-let [ctx (require-session sys req kind)]
     (let [lang (accounts/account-ui-lang (:account ctx))]
+      (when (= "user" kind)
+        (gantt/finalize-missing-days-for-user sys (get-in ctx [:account :id])))
       (log/info "セッションを返しました" :kind kind :email (get-in ctx [:account :email]) :ui-lang lang)
       (ok {:email (get-in ctx [:account :email]) :ui_lang lang}))
     (fail "unauthorized")))
@@ -421,7 +423,7 @@
         (let [r (gantt/create-row sys uid (read-body req))]
           (if (:ok r) (ok {:row (:row r)}) (fail (:code r))))
         (catch Exception e
-          (log/warn "ガント行の追加を読めませんでした" :error (.getMessage e))
+          (log/warn "ガント作業の追加を読めませんでした" :error (.getMessage e))
           (fail "title_required"))))))
 
 (defn gantt-put [sys req id]
@@ -431,8 +433,40 @@
         (let [r (gantt/update-row sys uid id (read-body req))]
           (if (:ok r) (ok {:row (:row r)}) (fail (:code r))))
         (catch Exception e
-          (log/warn "ガント行の更新を読めませんでした" :error (.getMessage e))
+          (log/warn "ガント作業の更新を読めませんでした" :error (.getMessage e))
           (fail "title_required"))))))
+
+(defn gantt-titles-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/list-titles sys uid)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn gantt-titles-post [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/create-title sys uid (read-body req))]
+          (if (:ok r) (ok {:title (:title r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "ガント題名の追加を読めませんでした" :error (.getMessage e))
+          (fail "title_required"))))))
+
+(defn gantt-titles-put [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/update-title sys uid id (read-body req))]
+          (if (:ok r) (ok {:title (:title r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "ガント題名の更新を読めませんでした" :error (.getMessage e))
+          (fail "title_required"))))))
+
+(defn gantt-titles-delete [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/soft-delete-title sys uid id)]
+        (if (:ok r) (ok {}) (fail (:code r)))))))
 
 (defn gantt-progress [sys req id]
   (with-farm sys req
@@ -440,10 +474,33 @@
       (let [r (gantt/row-progress sys uid id)]
         (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
 
+(defn gantt-progress-days [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/list-progress-days sys uid id)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn gantt-delete [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/soft-delete-row sys uid id)]
+        (if (:ok r) (ok {}) (fail (:code r)))))))
+
 (defn work-name-candidates-get [sys req]
   (with-farm sys req
     (fn [uid]
       (ok (select-keys (gantt/work-name-candidates sys uid) [:work_names])))))
+
+(defn admin-gantt-progress-finalize [sys req]
+  (if (require-session sys req "admin")
+    (try
+      (let [body (read-body req)
+            r (gantt/admin-finalize-progress sys body)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r))))
+      (catch Exception e
+        (log/warn "進捗確定を読めませんでした" :error (.getMessage e))
+        (fail "time_invalid")))
+    (fail "unauthorized")))
 
 (defn orders-get [sys req]
   (with-farm sys req
@@ -548,6 +605,7 @@
    [:get "/api/admin/users"] [:users]
    [:post "/api/admin/users/revoke"] [:revoke]
    [:post "/api/admin/relations/cut"] [:relations-cut]
+   [:post "/api/admin/gantt/progress/finalize"] [:admin-gantt-progress-finalize]
    [:get "/api/user/place"] [:place-get]
    [:put "/api/user/place"] [:place-put]
    [:put "/api/user/place/image"] [:place-image-put]
@@ -564,6 +622,8 @@
    [:post "/api/user/paints"] [:paints-post]
    [:get "/api/user/gantt"] [:gantt-get]
    [:post "/api/user/gantt"] [:gantt-post]
+   [:get "/api/user/gantt/titles"] [:gantt-titles-get]
+   [:post "/api/user/gantt/titles"] [:gantt-titles-post]
    [:get "/api/user/orders"] [:orders-get]
    [:post "/api/user/orders"] [:orders-post]
    [:get "/api/user/others/fields"] [:others-fields-get]
@@ -585,10 +645,20 @@
         (when (= method :post) [:field-split id]))
       (when-let [[_ id] (re-matches #"/api/user/paints/(\d+)" (str uri))]
         (when (= method :delete) [:paint-delete id]))
+      (when-let [[_ id] (re-matches #"/api/user/gantt/titles/(\d+)" (str uri))]
+        (cond
+          (= method :put) [:gantt-titles-put id]
+          (= method :delete) [:gantt-titles-delete id]
+          :else nil))
+      (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)/progress-days" (str uri))]
+        (when (= method :get) [:gantt-progress-days id]))
       (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)/progress" (str uri))]
         (when (= method :get) [:gantt-progress id]))
       (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)" (str uri))]
-        (when (= method :put) [:gantt-put id]))
+        (cond
+          (= method :put) [:gantt-put id]
+          (= method :delete) [:gantt-delete id]
+          :else nil))
       (when-let [[_ id] (re-matches #"/api/user/orders/(\d+)/close" (str uri))]
         (when (= method :post) [:order-close id]))
       (when-let [[_ id] (re-matches #"/api/user/orders/(\d+)/journal" (str uri))]
@@ -626,6 +696,7 @@
         :users (users-get sys req)
         :revoke (revoke-post sys req)
         :relations-cut (relations-cut sys req)
+        :admin-gantt-progress-finalize (admin-gantt-progress-finalize sys req)
         :place-get (place-get sys req)
         :place-put (place-put sys req)
         :place-image-put (place-image-put sys req)
@@ -651,7 +722,13 @@
         :gantt-get (gantt-get sys req)
         :gantt-post (gantt-post sys req)
         :gantt-put (gantt-put sys req (second spec))
+        :gantt-delete (gantt-delete sys req (second spec))
+        :gantt-titles-get (gantt-titles-get sys req)
+        :gantt-titles-post (gantt-titles-post sys req)
+        :gantt-titles-put (gantt-titles-put sys req (second spec))
+        :gantt-titles-delete (gantt-titles-delete sys req (second spec))
         :gantt-progress (gantt-progress sys req (second spec))
+        :gantt-progress-days (gantt-progress-days sys req (second spec))
         :orders-get (orders-get sys req)
         :orders-post (orders-post sys req)
         :order-get (order-get sys req (second spec))

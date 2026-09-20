@@ -11,7 +11,22 @@
             [isas.ui :as ui]))
 
 (defn- html [opts]
-  (tu/page-html (merge {:kind "user" :session {:email "a@example.com"}} opts)))
+  (let [base {:kind "user" :session {:email "a@example.com"}}
+        opts (if (and (= :gantt (:page opts))
+                      (seq (:fields opts))
+                      (empty? (:gantt-titles opts)))
+               (assoc opts
+                      :gantt-titles [{:id 10 :name "題A"}]
+                      :gantt-title-selected (or (:gantt-title-selected opts) 10))
+               opts)
+        opts (if (and (= :gantt (:page opts)) (seq (:gantt-rows opts)))
+               (update opts :gantt-rows
+                       (fn [rows]
+                         (mapv (fn [r]
+                                 (if (contains? r :title_id) r (assoc r :title_id 10)))
+                               rows)))
+               opts)]
+    (tu/page-html (merge base opts))))
 
 (deftest b4-blocks
   (tu/with-sys
@@ -30,8 +45,11 @@
             id2 (get-in f2 [:field :id])
             fo (fields/create-field sys uid2 {:name "他人" :geojson tu/square})
             oid (get-in fo [:field :id])
+            tid (:id (:title (gantt/create-title sys uid {:name "題A"})))
             wide (html {:page :gantt :fields [{:id fid :name "北"} {:id id2 :name "南"}]
-                        :gantt-rows [{:id 1 :title "予定" :start_at "2026-09-18T08:00"
+                        :gantt-titles [{:id 10 :name "題A"}]
+                        :gantt-title-selected 10
+                        :gantt-rows [{:id 1 :title_id 10 :title "予定" :start_at "2026-09-18T08:00"
                                       :end_at "2026-09-18T17:00" :work_name "田植え"
                                       :field_ids [fid]}]
                         :gantt-selected 1
@@ -41,13 +59,13 @@
           (is (re-find #"ガント" wide))
           (is (re-find #"gantt-circle" wide))
           (is (re-find #"data-percent=\"25\"" wide))
-          (is (re-find #"予定を足す" wide))
+          (is (re-find #"作業を足す" wide))
           (is (re-find #"題名|開始|終了|作業名|対象圃場" wide))
           (is (not (re-find #"指示|日誌" wide))))
         (testing "B4-2-03 / B4-5.4-01 狭い画面にガント編集は無い"
           (is (re-find #"パソコンで開いてください"
                        (html {:page :gantt :narrow? true :fields [{:id 1}]})))
-          (is (not (re-find #"予定を足す|data-percent=\""
+          (is (not (re-find #"作業を足す|data-percent=\""
                             (html {:page :gantt :narrow? true :fields [{:id 1}]})))))
         (testing "B4-2-04 / B4-4.6-05 / B4-6-03 / B4-10-02 ガント画面に指示・日誌・切断・言語は出さない"
           (is (not (re-find #"指示|日誌|関係を切|言語切替" wide)))
@@ -62,7 +80,7 @@
             (is (= "no_fields" (:code (gantt/list-rows sys uid0))))
             (is (re-find #"圃場が1枚以上" (html {:page :gantt :fields []})))))
         (testing "B4-4.3-01 圃場削除で対象から外す。行は残る"
-          (let [r (gantt/create-row sys uid {:title "対象行"
+          (let [r (gantt/create-row sys uid {:title_id tid :title "対象行"
                                              :start_at "2026-09-18T08:00"
                                              :end_at "2026-09-18T09:00"
                                              :work_name "田植え"
@@ -72,7 +90,7 @@
             (is (= [] (db/list-gantt-targets (:ds sys) gid)))
             (is (some? (db/find-gantt-row (:ds sys) uid gid)))))
         (testing "B4-4.4-01 候補は自分の塗りとガントだけ"
-          (gantt/create-row sys uid {:title "候補"
+          (gantt/create-row sys uid {:title_id tid :title "候補"
                                      :start_at "2026-09-19T08:00"
                                      :end_at "2026-09-19T09:00"
                                      :work_name "ガント作業"})
@@ -83,7 +101,7 @@
             (is (some #{"塗り作業"} c))
             (is (not (some #{"秘密"} c)))))
         (testing "B4-4.5-01 / B4-4.5-02 / B4-7.3-01 対象付き行の％と色"
-          (let [r (gantt/create-row sys uid {:title "％行"
+          (let [r (gantt/create-row sys uid {:title_id tid :title "％行"
                                              :start_at "2026-09-20T08:00"
                                              :end_at "2026-09-20T09:00"
                                              :work_name "塗り作業"
@@ -106,20 +124,20 @@
           (is (nil? (http/match-api :post "/api/user/journals")))
           (is (not (re-find #"日誌" wide))))
         (testing "B4-4.6-01 / B4-4.6-02 / B4-4.6-03 / B4-4.6-04 行の規則"
-          (is (true? (:ok (gantt/create-row sys uid {:title "メモ行"
+          (is (true? (:ok (gantt/create-row sys uid {:title_id tid :title "メモ行"
                                                      :start_at "2026-09-21T08:00"
                                                      :end_at "2026-09-21T09:00"}))))
           (is (= "work_name_required"
-                 (:code (gantt/create-row sys uid {:title "要名"
+                 (:code (gantt/create-row sys uid {:title_id tid :title "要名"
                                                    :start_at "2026-09-21T10:00"
                                                    :end_at "2026-09-21T11:00"
                                                    :field_ids [fid]}))))
-          (is (nil? (http/match-api :delete "/api/user/gantt/1")))
-          (is (not (re-find #"消す|削除" wide)))
-          (is (true? (:ok (gantt/create-row sys uid {:title "重1"
+          (is (= [:gantt-delete "1"] (http/match-api :delete "/api/user/gantt/1")))
+          (is (re-find #"削除" wide))
+          (is (true? (:ok (gantt/create-row sys uid {:title_id tid :title "重1"
                                                      :start_at "2026-09-21T12:00"
                                                      :end_at "2026-09-21T14:00"}))))
-          (is (true? (:ok (gantt/create-row sys uid {:title "重2"
+          (is (true? (:ok (gantt/create-row sys uid {:title_id tid :title "重2"
                                                      :start_at "2026-09-21T12:00"
                                                      :end_at "2026-09-21T13:00"}))))
           (is (re-find #"data-range=\"day\"" (html {:page :gantt :fields [{:id 1}]})))
@@ -129,12 +147,21 @@
                        (html {:page :gantt :fields [{:id fid}]
                               :gantt-rows [{:id 1 :title "行" :start_at "2026-09-18T08:00"
                                             :end_at "2026-09-18T09:00" :field_ids []}]
+                              :gantt-selected 1})))
+          (is (re-find #"id=\"gantt-delete-btn\""
+                       (html {:page :gantt :fields [{:id fid}]
+                              :gantt-rows [{:id 1 :title "行" :start_at "2026-09-18T08:00"
+                                            :end_at "2026-09-18T09:00" :field_ids []}]
                               :gantt-selected 1}))))
         (testing "B4-6-01 / B4-6-02 データ"
           (let [names (tu/table-names (:ds sys))
                 cols (db/table-columns (:ds sys) "gantt_rows")]
+            (is (contains? names "gantt_titles"))
             (is (contains? names "gantt_rows"))
             (is (contains? names "gantt_targets"))
+            (is (contains? names "gantt_progress_days"))
+            (is (contains? cols "deleted_at"))
+            (is (contains? cols "title_id"))
             (is (not (contains? names "work_names")))
             (is (contains? names "orders"))
             (is (contains? cols "work_name"))

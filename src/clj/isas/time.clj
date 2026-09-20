@@ -98,6 +98,27 @@
   []
   (.format (today-tokyo) work-date-fmt))
 
+(defn yesterday-work-date
+  "日本時間の昨日の YYYY-MM-DD。"
+  []
+  (.format (.minusDays (today-tokyo) 1) work-date-fmt))
+
+(defn format-work-date [^LocalDate d]
+  (.format d work-date-fmt))
+
+(defn days-inclusive
+  "from-day から to-day までの暦日（YYYY-MM-DD）を昇順で返す。不正や順序逆は空。"
+  [from-day to-day]
+  (let [a (parse-work-date from-day)
+        b (parse-work-date to-day)]
+    (if (or (nil? a) (nil? b) (.isAfter a b))
+      []
+      (loop [cur a
+             acc []]
+        (if (.isAfter cur b)
+          acc
+          (recur (.plusDays cur 1) (conj acc (format-work-date cur))))))))
+
 (defn order-default-start []
   "08:00")
 

@@ -26,9 +26,9 @@
           (is (contains? names "gantt_rows")))
         (testing "B3-2-03 / B3-5.4-01 狭い画面に塗りは持たない"
           (is (not (re-find #"手描き|全面完了|ブラシ" (html {:page :map :narrow? true})))))
-        (testing "P4 ガントはある。行 DELETE と旧 percent 経路は無い"
+        (testing "P4 ガントはある。旧 percent 経路は無い。行はソフト削除"
           (is (= [:gantt-get] (http/match-api :get "/api/user/gantt")))
-          (is (nil? (http/match-api :delete "/api/user/gantt/1")))
+          (is (= [:gantt-delete "1"] (http/match-api :delete "/api/user/gantt/1")))
           (is (nil? (http/match-api :get "/api/user/gantt/percent")))
           (is (= :gantt (:page (ui/route-for "/gantt"))))
           (is (not (re-find #"href=\"/gantt\"" home))))

@@ -394,9 +394,10 @@
               (is (empty? (:fields (tu/parse (tu/get-path app "/api/user/others/fields" "user" usid2)))))
               (is (some? (db/find-order (:ds sys) (:id c2)))))))
         (testing "P5-3.7-02 ガント対象だけでは止めない"
-          (gantt/create-row sys uid {:title "g" :start_at "2026-09-18T08:00" :end_at "2026-09-18T09:00"
-                                     :work_name "田植え" :field_ids [id1]})
-          (is (true? (:ok (fields/delete-field sys uid id1)))))
+          (let [tid (:id (:title (gantt/create-title sys uid {:name "題"})))]
+            (gantt/create-row sys uid {:title_id tid :title "g" :start_at "2026-09-18T08:00" :end_at "2026-09-18T09:00"
+                                       :work_name "田植え" :field_ids [id1]})
+            (is (true? (:ok (fields/delete-field sys uid id1))))))
         (testing "P5-4 表"
           (let [names (tu/table-names (:ds sys))
                 cols (db/table-columns (:ds sys) "orders")]

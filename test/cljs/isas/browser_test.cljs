@@ -59,7 +59,18 @@
     (let [form (clj->js {:getAttribute (fn [k] (when (= k "data-act") "login"))})
           ev (clj->js {:target form :preventDefault (fn [])})]
       (set! js/FormData (fn [_] (js-obj "forEach" (fn [f] (f "x" "email")))))
+      (set! js/confirm (fn [_] true))
       (b/on-submit ev))
+    (let [form (clj->js {:getAttribute (fn [k]
+                                         (case k
+                                           "data-act" "delete-gantt-row"
+                                           "data-confirm" "ok?"
+                                           nil))})
+          ev (clj->js {:target form :preventDefault (fn [])})
+          asked (atom nil)]
+      (set! js/confirm (fn [m] (reset! asked m) false))
+      (b/on-submit ev)
+      (is (= "ok?" @asked)))
     (let [form (clj->js {:getAttribute (fn [_] nil)})
           ev (clj->js {:target form :preventDefault (fn [])})]
       (b/on-submit ev))

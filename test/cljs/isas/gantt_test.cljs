@@ -129,7 +129,7 @@
     (g/install!)
     (g/install!)
     (is (true? @g/installed?))
-    (is (= "新しい予定" (.-value title)))
+    (is (= "新しい作業" (.-value title)))
     (is (re-find #"T08:00$" (.-value start)))
     (is (re-find #"T17:00$" (.-value end)))
     (is (re-find #"<svg" (.-innerHTML circle)))
