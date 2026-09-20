@@ -101,7 +101,12 @@
    :gantt-targets "対象圃場"
    :gantt-axis-day "日"
    :gantt-axis-week "週"
+   :gantt-axis-weeks8 "8週"
    :gantt-axis-month "月"
+   :gantt-axis-label "時間の範囲"
+   :gantt-orient-label "向き"
+   :gantt-orient-time-h "時刻を横"
+   :gantt-orient-time-v "時刻を縦"
    :gantt-percent-unit "％"
    :gantt-dim-color "#e8e8e8"
    :title-required "題名を入れてください"
@@ -186,7 +191,6 @@
    :lang-ja "日本語"
    :lang-en "English"
    :lang-label "言語"
-   :gantt-axis-label "横軸"
    :map-mode-label "操作"
    :map-mode-choose "選ぶ"
    :basemap-kind-label "下地の種類"
@@ -317,7 +321,12 @@
    :gantt-targets "Target fields"
    :gantt-axis-day "Day"
    :gantt-axis-week "Week"
+   :gantt-axis-weeks8 "8 weeks"
    :gantt-axis-month "Month"
+   :gantt-axis-label "Time range"
+   :gantt-orient-label "Layout"
+   :gantt-orient-time-h "Time across"
+   :gantt-orient-time-v "Time down"
    :gantt-percent-unit "%"
    :gantt-dim-color "#e8e8e8"
    :title-required "Enter a title"
@@ -402,7 +411,6 @@
    :lang-ja "日本語"
    :lang-en "English"
    :lang-label "Language"
-   :gantt-axis-label "Time scale"
    :map-mode-label "Action"
    :map-mode-choose "Choose"
    :basemap-kind-label "Basemap kind"
@@ -707,6 +715,7 @@
    :gantt-selected nil
    :gantt-progress nil
    :gantt-axis "day"
+   :gantt-orient "time-h"
    :orders-sent []
    :orders-received []
    :order nil
@@ -1384,12 +1393,18 @@
       "week"
       (let [[ey em ed] (add-calendar-days y m d 7)]
         {:start start :end (ymd-minute ey em ed 0 0) :range "week"})
+      "weeks8"
+      (let [[ey em ed] (add-calendar-days y m d 56)]
+        {:start start :end (ymd-minute ey em ed 0 0) :range "weeks8"})
       "month"
       (let [ny (if (= m 12) (inc y) y)
             nm (if (= m 12) 1 (inc m))]
         {:start start :end (ymd-minute ny nm 1 0 0) :range "month"})
       (let [[ey em ed] (add-calendar-days y m d 3)]
         {:start start :end (ymd-minute ey em ed 0 0) :range "day"}))))
+
+(defn- normalize-gantt-orient [v]
+  (if (= "time-v" (str v)) "time-v" "time-h"))
 
 (defn- as-text [v]
   (if (nil? v) "" (str v)))
@@ -1438,6 +1453,7 @@
                  (if (empty? fields)
                    (str "<p>" (esc (m :gantt-no-fields)) "</p>")
                    (let [axis (if (nil? (:gantt-axis state)) "day" (:gantt-axis state))
+                         orient (normalize-gantt-orient (:gantt-orient state))
                          bounds (gantt-axis-bounds axis)
                          sel (gantt-row-by-id state (:gantt-selected state))
                          progress (:gantt-progress state)
@@ -1447,18 +1463,27 @@
                                         (nil? progress) false
                                         :else (boolean (:applicable progress)))
                          target-ids (when applicable? (:field_ids sel))
-                         work-name (when applicable? (str (:work_name sel)))]
+                         work-name (when applicable? (str (:work_name sel)))
+                         time-v? (= "time-v" orient)]
                      (str
                       "<div class=\"toolbar\">"
                       (select-switch (m :gantt-axis-label) "gantt-axis" axis
                                      [["day" (m :gantt-axis-day)]
                                       ["week" (m :gantt-axis-week)]
+                                      ["weeks8" (m :gantt-axis-weeks8)]
                                       ["month" (m :gantt-axis-month)]])
+                      (select-switch (m :gantt-orient-label) "gantt-orient" orient
+                                     [["time-h" (m :gantt-orient-time-h)]
+                                      ["time-v" (m :gantt-orient-time-v)]])
                       "</div>"
-                      "<div id=\"gantt-axis\" class=\"gantt-axis\" data-start=\"" (esc (:start bounds))
+                      "<div id=\"gantt-axis\" class=\"gantt-axis"
+                      (when time-v? " gantt-orient-time-v")
+                      "\" data-start=\"" (esc (:start bounds))
                       "\" data-end=\"" (esc (:end bounds))
-                      "\" data-range=\"" (esc (:range bounds)) "\">"
+                      "\" data-range=\"" (esc (:range bounds))
+                      "\" data-orient=\"" (esc orient) "\">"
                       "<div id=\"gantt-ticks\" class=\"gantt-ticks\"></div>"
+                      "<div class=\"gantt-rows\">"
                       (apply str
                              (for [r (:gantt-rows state)]
                                (let [selected? (same-gantt-id? (:id r) (:gantt-selected state))]
@@ -1469,6 +1494,7 @@
                                       "<button type=\"submit\">" (esc (:title r))
                                       " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")</button>"
                                       "<div class=\"gantt-bar\"></div></form>"))))
+                      "</div>"
                       "</div>"
                       "<form data-act=\"add-gantt-row\" method=\"post\" id=\"gantt-add-form\">"
                       "<label>" (esc (m :gantt-title-label))
@@ -2047,7 +2073,7 @@
 
                 (= :gantt (:page s))
                 (assoc s :gantt-selected nil :gantt-progress nil :gantt-axis "day"
-                       :form {} :paint-data nil)
+                       :gantt-orient "time-h" :form {} :paint-data nil)
 
                 (#{:orders :orders-new :order :others} (:page s))
                 (assoc s :order nil :order-map nil :others-paint-data nil
@@ -2227,8 +2253,12 @@
           "upload-basemap" {:state state :fx [[:upload "PUT" (str "/api/user/basemaps/" (:kind form)) form :basemap-upload-result]]}
           "set-gantt-axis"
           (let [axis (str/trim (as-text (:axis form)))
-                axis' (if (#{"day" "week" "month"} axis) axis "day")
+                axis' (if (#{"day" "week" "weeks8" "month"} axis) axis "day")
                 s (assoc state :gantt-axis axis' :flash nil)]
+            {:state s :fx [[:html (render s)]]})
+          "set-gantt-orient"
+          (let [orient (normalize-gantt-orient (:orient form))
+                s (assoc state :gantt-orient orient :flash nil)]
             {:state s :fx [[:html (render s)]]})
           "select-gantt-row"
           (let [id (str/trim (as-text (:id form)))

@@ -117,6 +117,13 @@
                                  :fields [{:id 1}] :gantt-rows []))
       (b/on-change ev)
       (is (= "week" (:gantt-axis @b/app-state))))
+    (let [sel (clj->js {:getAttribute (fn [a] (when (= a "data-select") "gantt-orient"))
+                        :value "time-v"})
+          ev (clj->js {:target sel})]
+      (reset! b/app-state (assoc (ui/init-state) :page :gantt :gantt-orient "time-h"
+                                 :fields [{:id 1}] :gantt-rows []))
+      (b/on-change ev)
+      (is (= "time-v" (:gantt-orient @b/app-state))))
     (let [sel (clj->js {:getAttribute (fn [a] (when (= a "data-select") "map-mode"))
                         :value "paint"})
           ev (clj->js {:target sel})]

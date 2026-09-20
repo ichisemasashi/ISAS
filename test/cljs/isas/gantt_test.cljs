@@ -68,6 +68,7 @@
                                     "data-start" "2026-09-18T00:00"
                                     "data-end" "2026-09-21T00:00"
                                     "data-range" "day"
+                                    "data-orient" "time-h"
                                     nil))
                   :querySelectorAll (fn [_] rows)}
         save-btn #js {:disabled false}
@@ -138,6 +139,18 @@
     (is (false? (.-disabled save-btn)))
     (is (false? (.-disabled add-btn)))
     (is (pos? (count @listeners)))
+    (set! (.-getAttribute axis)
+          (fn [a]
+            (case a
+              "data-start" "2026-09-18T00:00"
+              "data-end" "2026-09-21T00:00"
+              "data-range" "day"
+              "data-orient" "time-v"
+              nil)))
+    (set! (.-innerHTML ticks) "")
+    (g/sync! @b/app-state b/dispatch!)
+    (is (string? (.-top bar-style)))
+    (is (re-find #"/" (.-innerHTML ticks)))
     (reset! b/app-state (assoc @b/app-state :gantt-progress nil))
     (g/sync! @b/app-state b/dispatch!)
     (is (= "" (.-innerHTML circle)))

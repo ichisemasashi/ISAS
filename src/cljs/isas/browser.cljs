@@ -249,6 +249,8 @@
                    (dispatch! [:set-lang v]))
         "gantt-axis" (do (queue-form-draft!)
                          (dispatch! [:submit {:act "set-gantt-axis" :form {:axis v}}]))
+        "gantt-orient" (do (queue-form-draft!)
+                           (dispatch! [:submit {:act "set-gantt-orient" :form {:orient v}}]))
         "map-mode" (when-not (str/blank? v)
                      (queue-form-draft!)
                      (dispatch! [:submit {:act "set-map-mode" :form {:mode v}}]))

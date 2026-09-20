@@ -102,18 +102,21 @@
                        [:path {:path "/gantt" :search ""}])]
       (is (nil? (get-in r [:state :gantt-selected])))
       (is (nil? (get-in r [:state :gantt-progress])))
-      (is (= "day" (get-in r [:state :gantt-axis])))))
+      (is (= "day" (get-in r [:state :gantt-axis])))
+      (is (= "time-h" (get-in r [:state :gantt-orient])))))
   (testing "P4-2.2-05 作った直後は選択してよい"
     (let [r (ui/handle (assoc (ui/init-state) :page :gantt)
                        [:gantt-save-result {:ok true :row {:id 7 :title "新"}}])]
       (is (= 7 (get-in r [:state :gantt-selected])))
       (is (= :api (ffirst (:fx r))))))
-  (testing "P4-2.3-01 / P4-2.3-02 / P4-2.3-04 横軸と目盛枠"
+  (testing "P4-2.3-01 / P4-2.3-02 / P4-2.3-04 / P4-2.3-05 時間軸・8週・向き"
     (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-18T00:00:00Z"))]
       (is (= {:start "2026-09-18T00:00" :end "2026-09-21T00:00" :range "day"}
              (ui/gantt-axis-bounds "day")))
       (is (= {:start "2026-09-18T00:00" :end "2026-09-25T00:00" :range "week"}
              (ui/gantt-axis-bounds "week")))
+      (is (= {:start "2026-09-18T00:00" :end "2026-11-13T00:00" :range "weeks8"}
+             (ui/gantt-axis-bounds "weeks8")))
       (is (= {:start "2026-09-18T00:00" :end "2026-10-01T00:00" :range "month"}
              (ui/gantt-axis-bounds "month")))
       (is (= "day" (:range (ui/gantt-axis-bounds nil)))))
@@ -126,6 +129,20 @@
       (is (re-find #"data-range=\"week\"" (ui/render (:state r))))
       (is (re-find #"data-select=\"gantt-axis\"" (ui/render (:state r))))
       (is (re-find #"gantt-ticks" (ui/render (:state r)))))
+    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}])
+                       [:submit {:act "set-gantt-axis" :form {:axis "weeks8"}}])]
+      (is (= "weeks8" (get-in r [:state :gantt-axis])))
+      (is (re-find #"data-range=\"weeks8\"" (ui/render (:state r))))
+      (is (re-find #"8週|8 weeks" (ui/render (:state r)))))
+    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}] :gantt-orient "time-h")
+                       [:submit {:act "set-gantt-orient" :form {:orient "time-v"}}])]
+      (is (= "time-v" (get-in r [:state :gantt-orient])))
+      (is (re-find #"gantt-orient-time-v" (ui/render (:state r))))
+      (is (re-find #"data-orient=\"time-v\"" (ui/render (:state r))))
+      (is (re-find #"data-select=\"gantt-orient\"" (ui/render (:state r)))))
+    (is (= "time-h" (get-in (ui/handle (assoc (ui/init-state) :page :gantt)
+                                       [:submit {:act "set-gantt-orient" :form {:orient "nope"}}])
+                            [:state :gantt-orient])))
     (is (= "day" (get-in (ui/handle (assoc (ui/init-state) :page :gantt)
                                     [:submit {:act "set-gantt-axis" :form {:axis "nope"}}])
                          [:state :gantt-axis]))))

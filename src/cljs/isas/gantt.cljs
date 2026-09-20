@@ -53,11 +53,15 @@
 (defn- tick-step-ms [range-key span]
   (case (str range-key)
     "week" (* 24 60 60 1000)
+    "weeks8" (* 7 24 60 60 1000)
     "month" (* 2 24 60 60 1000)
     (cond
       (> span (* 48 60 60 1000)) (* 12 60 60 1000)
       (> span (* 12 60 60 1000)) (* 6 60 60 1000)
       :else (* 3 60 60 1000))))
+
+(defn- time-vertical? [^js axis]
+  (= "time-v" (str (.getAttribute axis "data-orient"))))
 
 (defn- fill-new-defaults! []
   (let [[y m d] (tokyo-ymd)
@@ -77,17 +81,22 @@
       (let [t0 (local-ms (.getAttribute axis "data-start"))
             t1 (local-ms (.getAttribute axis "data-end"))
             span (when (and t0 t1 (> t1 t0)) (- t1 t0))
-            range-key (.getAttribute axis "data-range")]
+            range-key (.getAttribute axis "data-range")
+            time-v? (time-vertical? axis)]
         (set! (.-innerHTML ticks) "")
         (when span
           (let [step (tick-step-ms range-key span)]
             (loop [t t0]
               (when (<= t t1)
                 (let [pct (* 100 (/ (- t t0) span))
-                      el (.createElement js/document "span")]
+                      el (.createElement js/document "span")
+                      st (.-style el)]
                   (set! (.-className el) "gantt-tick")
                   (set! (.-textContent el) (minute-label t))
-                  (set! (.-left (.-style el)) (str pct "%"))
+                  (if time-v?
+                    (do (set! (.-top st) (str pct "%"))
+                        (set! (.-left st) "0"))
+                    (set! (.-left st) (str pct "%")))
                   (.appendChild ticks el)
                   (recur (+ t step)))))))))))
 
@@ -96,6 +105,7 @@
     (let [t0 (local-ms (.getAttribute axis "data-start"))
           t1 (local-ms (.getAttribute axis "data-end"))
           span (when (and t0 t1 (> t1 t0)) (- t1 t0))
+          time-v? (time-vertical? axis)
           rows (.querySelectorAll axis ".gantt-row")]
       (when span
         (.forEach rows
@@ -104,14 +114,21 @@
                           b (local-ms (.getAttribute row "data-end"))
                           ^js bar (.querySelector row ".gantt-bar")]
                       (when (and bar a b)
-                        (let [left (max 0 (* 100 (/ (- a t0) span)))
-                              right (min 100 (* 100 (/ (- b t0) span)))
-                              width (max 0.5 (- right left))]
-                          (set! (.-position (.-style bar)) "absolute")
-                          (set! (.-left (.-style bar)) (str left "%"))
-                          (set! (.-width (.-style bar)) (str width "%"))
-                          (set! (.-top (.-style bar)) "0.35rem")
-                          (set! (.-height (.-style bar)) "0.7rem"))))))))))
+                        (let [start-pct (max 0 (* 100 (/ (- a t0) span)))
+                              end-pct (min 100 (* 100 (/ (- b t0) span)))
+                              size (max 0.5 (- end-pct start-pct))
+                              st (.-style bar)]
+                          (set! (.-position st) "absolute")
+                          (if time-v?
+                            (do (set! (.-top st) (str start-pct "%"))
+                                (set! (.-height st) (str size "%"))
+                                (set! (.-left st) "0.35rem")
+                                (set! (.-width st) "0.7rem")
+                                (set! (.-right st) "auto"))
+                            (do (set! (.-left st) (str start-pct "%"))
+                                (set! (.-width st) (str size "%"))
+                                (set! (.-top st) "0.35rem")
+                                (set! (.-height st) "0.7rem"))))))))))))
 
 (defn- render-circle! [state]
   (when-let [^js el (.getElementById js/document "gantt-circle")]
