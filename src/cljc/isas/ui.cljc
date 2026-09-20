@@ -126,6 +126,8 @@
    :gantt-axis-week "週"
    :gantt-axis-weeks8 "8週"
    :gantt-axis-month "月"
+   :gantt-axis-months3 "3ヶ月"
+   :gantt-axis-months6 "6ヶ月"
    :gantt-axis-label "時間の範囲"
    :gantt-orient-label "向き"
    :gantt-orient-time-h "時刻を横"
@@ -387,6 +389,8 @@
    :gantt-axis-week "Week"
    :gantt-axis-weeks8 "8 weeks"
    :gantt-axis-month "Month"
+   :gantt-axis-months3 "3 months"
+   :gantt-axis-months6 "6 months"
    :gantt-axis-label "Time range"
    :gantt-orient-label "Layout"
    :gantt-orient-time-h "Time across"
@@ -1548,6 +1552,23 @@
         (js/parseInt (get "month") 10)
         (js/parseInt (get "day") 10)])))
 
+(defn- add-calendar-months [y m d months]
+  #?(:clj
+     (let [ld (.plusMonths (java.time.LocalDate/of (int y) (int m) (int d)) (long months))]
+       [(.getYear ld) (.getMonthValue ld) (.getDayOfMonth ld)])
+     :cljs
+     (let [total (+ (dec (int m)) (long months))
+           ny (+ (int y) (js/Math.floor (/ total 12)))
+           nm (inc (mod total 12))
+           leap? (or (zero? (mod ny 400))
+                     (and (zero? (mod ny 4)) (not (zero? (mod ny 100)))))
+           dim (case nm
+                 2 (if leap? 29 28)
+                 (4 6 9 11) 30
+                 31)
+           nd (min (int d) dim)]
+       [ny nm nd])))
+
 (defn gantt-axis-bounds [axis]
   (let [[y m d] (tokyo-ymd)
         start (ymd-minute y m d 0 0)
@@ -1563,6 +1584,12 @@
       (let [ny (if (= m 12) (inc y) y)
             nm (if (= m 12) 1 (inc m))]
         {:start start :end (ymd-minute ny nm 1 0 0) :range "month"})
+      "months3"
+      (let [[ey em ed] (add-calendar-months y m d 3)]
+        {:start start :end (ymd-minute ey em ed 0 0) :range "months3"})
+      "months6"
+      (let [[ey em ed] (add-calendar-months y m d 6)]
+        {:start start :end (ymd-minute ey em ed 0 0) :range "months6"})
       (let [[ey em ed] (add-calendar-days y m d 3)]
         {:start start :end (ymd-minute ey em ed 0 0) :range "day"}))))
 
@@ -1783,7 +1810,9 @@
                                         [["day" (m :gantt-axis-day)]
                                          ["week" (m :gantt-axis-week)]
                                          ["weeks8" (m :gantt-axis-weeks8)]
-                                         ["month" (m :gantt-axis-month)]])
+                                         ["month" (m :gantt-axis-month)]
+                                         ["months3" (m :gantt-axis-months3)]
+                                         ["months6" (m :gantt-axis-months6)]])
                          (select-switch (m :gantt-orient-label) "gantt-orient" orient
                                         [["time-h" (m :gantt-orient-time-h)]
                                          ["time-v" (m :gantt-orient-time-v)]])
@@ -1795,6 +1824,8 @@
                          "\" data-range=\"" (esc (:range bounds))
                          "\" data-orient=\"" (esc orient) "\">"
                          "<div id=\"gantt-ticks\" class=\"gantt-ticks\"></div>"
+                         "<div class=\"gantt-plot\">"
+                         "<div id=\"gantt-grid\" class=\"gantt-grid\" aria-hidden=\"true\"></div>"
                          "<div class=\"gantt-rows\">"
                          (apply str
                                 (for [r title-rows]
@@ -1807,6 +1838,7 @@
                                          "<button type=\"submit\">" (esc (:title r))
                                          " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")</button>"
                                          "<div class=\"gantt-bar\"></div></form>"))))
+                         "</div>"
                          "</div>"
                          "</div>"
                          "<form data-act=\"add-gantt-row\" method=\"post\" id=\"gantt-add-form\">"
@@ -2458,7 +2490,7 @@
   (case act
     "set-gantt-axis"
     (let [axis (str/trim (as-text (:axis form)))
-          axis' (if (#{"day" "week" "weeks8" "month"} axis) axis "day")
+          axis' (if (#{"day" "week" "weeks8" "month" "months3" "months6"} axis) axis "day")
           s (assoc state :gantt-axis axis' :flash nil)]
       {:state s :fx [[:html (render s)]]})
     "set-gantt-orient"

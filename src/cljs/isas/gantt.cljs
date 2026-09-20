@@ -55,6 +55,8 @@
     "week" (* 24 60 60 1000)
     "weeks8" (* 7 24 60 60 1000)
     "month" (* 2 24 60 60 1000)
+    "months3" (* 7 24 60 60 1000)
+    "months6" (* 14 24 60 60 1000)
     (cond
       (> span (* 48 60 60 1000)) (* 12 60 60 1000)
       (> span (* 12 60 60 1000)) (* 6 60 60 1000)
@@ -75,6 +77,19 @@
     (when (and end (str/blank? (.-value end)))
       (set! (.-value end) (ymd-minute y m d 17 0)))))
 
+(defn- append-axis-mark! [^js host t t0 span time-v? class-name label?]
+  (let [pct (* 100 (/ (- t t0) span))
+        el (.createElement js/document (if label? "span" "div"))
+        st (.-style el)]
+    (set! (.-className el) class-name)
+    (when label?
+      (set! (.-textContent el) (minute-label t)))
+    (if time-v?
+      (do (set! (.-top st) (str pct "%"))
+          (when label? (set! (.-left st) "0")))
+      (set! (.-left st) (str pct "%")))
+    (.appendChild host el)))
+
 (defn- render-ticks! []
   (when-let [^js axis (.getElementById js/document "gantt-axis")]
     (when-let [^js ticks (.getElementById js/document "gantt-ticks")]
@@ -88,18 +103,25 @@
           (let [step (tick-step-ms range-key span)]
             (loop [t t0]
               (when (<= t t1)
-                (let [pct (* 100 (/ (- t t0) span))
-                      el (.createElement js/document "span")
-                      st (.-style el)]
-                  (set! (.-className el) "gantt-tick")
-                  (set! (.-textContent el) (minute-label t))
-                  (if time-v?
-                    (do (set! (.-top st) (str pct "%"))
-                        (set! (.-left st) "0"))
-                    (set! (.-left st) (str pct "%")))
-                  (.appendChild ticks el)
-                  (recur (+ t step)))))))))))
+                (append-axis-mark! ticks t t0 span time-v? "gantt-tick" true)
+                (recur (+ t step))))))))))
 
+(defn- render-grid! []
+  (when-let [^js axis (.getElementById js/document "gantt-axis")]
+    (when-let [^js grid (.getElementById js/document "gantt-grid")]
+      (let [t0 (local-ms (.getAttribute axis "data-start"))
+            t1 (local-ms (.getAttribute axis "data-end"))
+            span (when (and t0 t1 (> t1 t0)) (- t1 t0))
+            range-key (.getAttribute axis "data-range")
+            time-v? (time-vertical? axis)]
+        (set! (.-innerHTML grid) "")
+        (when span
+          (let [step (tick-step-ms range-key span)
+                line-class (if time-v? "gantt-grid-line time-v" "gantt-grid-line time-h")]
+            (loop [t t0]
+              (when (<= t t1)
+                (append-axis-mark! grid t t0 span time-v? line-class false)
+                (recur (+ t step))))))))))
 (defn- render-bars! []
   (when-let [^js axis (.getElementById js/document "gantt-axis")]
     (let [t0 (local-ms (.getAttribute axis "data-start"))
@@ -215,10 +237,10 @@
   (when (= :gantt (:page state))
     (fill-new-defaults!)
     (render-ticks!)
+    (render-grid!)
     (render-bars!)
     (render-circle! state)
     (wire-validation!)))
-
 (defn install! []
   (browser/register-gantt-sync! sync!)
   (when-not @installed?

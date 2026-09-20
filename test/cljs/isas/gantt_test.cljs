@@ -54,6 +54,7 @@
         end #js {:value ""}
         circle #js {:innerHTML "x"}
         ticks #js {:innerHTML "old"}
+        grid #js {:innerHTML "old"}
         bar-style #js {}
         bar #js {:style bar-style}
         row #js {:getAttribute (fn [a]
@@ -100,6 +101,9 @@
     (set! (.-appendChild ticks) (fn [el]
                                   (set! (.-innerHTML ticks)
                                         (str (.-innerHTML ticks) (.-textContent el)))))
+    (set! (.-appendChild grid) (fn [el]
+                                 (set! (.-innerHTML grid)
+                                       (str (.-innerHTML grid) "|" (.-className el)))))
     (set! js/document
           #js {:getElementById
                (fn [id]
@@ -109,6 +113,7 @@
                    "gantt-new-end" end
                    "gantt-axis" axis
                    "gantt-ticks" ticks
+                   "gantt-grid" grid
                    "gantt-circle" circle
                    "gantt-save-form" save-form
                    "gantt-add-form" add-form
@@ -136,6 +141,7 @@
     (is (re-find #"40" (.-innerHTML circle)))
     (is (string? (.-left bar-style)))
     (is (re-find #"/" (.-innerHTML ticks)))
+    (is (re-find #"gantt-grid-line" (.-innerHTML grid)))
     (is (false? (.-disabled save-btn)))
     (is (false? (.-disabled add-btn)))
     (is (pos? (count @listeners)))
@@ -148,9 +154,11 @@
               "data-orient" "time-v"
               nil)))
     (set! (.-innerHTML ticks) "")
+    (set! (.-innerHTML grid) "")
     (g/sync! @b/app-state b/dispatch!)
     (is (string? (.-top bar-style)))
     (is (re-find #"/" (.-innerHTML ticks)))
+    (is (re-find #"time-v" (.-innerHTML grid)))
     (reset! b/app-state (assoc @b/app-state :gantt-progress nil))
     (g/sync! @b/app-state b/dispatch!)
     (is (= "" (.-innerHTML circle)))

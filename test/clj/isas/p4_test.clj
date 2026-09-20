@@ -188,6 +188,10 @@
              (ui/gantt-axis-bounds "weeks8")))
       (is (= {:start "2026-09-18T00:00" :end "2026-10-01T00:00" :range "month"}
              (ui/gantt-axis-bounds "month")))
+      (is (= {:start "2026-09-18T00:00" :end "2026-12-18T00:00" :range "months3"}
+             (ui/gantt-axis-bounds "months3")))
+      (is (= {:start "2026-09-18T00:00" :end "2027-03-18T00:00" :range "months6"}
+             (ui/gantt-axis-bounds "months6")))
       (is (= "day" (:range (ui/gantt-axis-bounds nil)))))
     (binding [time/*now-fn* (fn [] (Instant/parse "2026-12-15T00:00:00Z"))]
       (is (= {:start "2026-12-15T00:00" :end "2027-01-01T00:00" :range "month"}
@@ -198,13 +202,26 @@
       (is (= "week" (get-in r [:state :gantt-axis])))
       (is (re-find #"data-range=\"week\"" (ui/render (:state r))))
       (is (re-find #"data-select=\"gantt-axis\"" (ui/render (:state r))))
-      (is (re-find #"gantt-ticks" (ui/render (:state r)))))
+      (is (re-find #"gantt-ticks" (ui/render (:state r))))
+      (is (re-find #"gantt-grid" (ui/render (:state r)))))
     (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}]
                                  :gantt-titles [{:id 10 :name "題A"}] :gantt-title-selected 10)
                        [:submit {:act "set-gantt-axis" :form {:axis "weeks8"}}])]
       (is (= "weeks8" (get-in r [:state :gantt-axis])))
       (is (re-find #"data-range=\"weeks8\"" (ui/render (:state r))))
       (is (re-find #"8週|8 weeks" (ui/render (:state r)))))
+    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}]
+                                 :gantt-titles [{:id 10 :name "題A"}] :gantt-title-selected 10)
+                       [:submit {:act "set-gantt-axis" :form {:axis "months3"}}])]
+      (is (= "months3" (get-in r [:state :gantt-axis])))
+      (is (re-find #"data-range=\"months3\"" (ui/render (:state r))))
+      (is (re-find #"3ヶ月|3 months" (ui/render (:state r)))))
+    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}]
+                                 :gantt-titles [{:id 10 :name "題A"}] :gantt-title-selected 10)
+                       [:submit {:act "set-gantt-axis" :form {:axis "months6"}}])]
+      (is (= "months6" (get-in r [:state :gantt-axis])))
+      (is (re-find #"data-range=\"months6\"" (ui/render (:state r))))
+      (is (re-find #"6ヶ月|6 months" (ui/render (:state r)))))
     (let [r (ui/handle (assoc (ui/init-state) :page :gantt :fields [{:id 1}]
                                  :gantt-titles [{:id 10 :name "題A"}] :gantt-title-selected 10
                                  :gantt-orient "time-h")
