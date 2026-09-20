@@ -219,15 +219,19 @@
             (is (= 1 (count (:fields m))))
             (is (contains? (first (:fields m)) :status))
             (is (not (contains? (first (:fields m)) :percent)))))
-        (testing "P5-2.3-08〜11 他人"
+        (testing "P5-2.3-08〜11 / P5-7-05 他人。対象外の圃場は見えない"
           (tu/post-json app "/api/user/paints"
                         {:field_id id1 :work_name "田植え" :geojson tu/square-inner}
                         "user" usid)
           (let [of (tu/parse (tu/get-path app "/api/user/others/fields" "user" usid2))
                 wn (tu/parse (tu/get-path app "/api/user/others/work-names" "user" usid2))
                 op (tu/parse (tu/get-query app "/api/user/others/paints" {:work_name "田植え"} "user" usid2))
-                bad (tu/parse (tu/get-query app "/api/user/others/paints" {:work_name "秘密"} "user" usid2))]
+                bad (tu/parse (tu/get-query app "/api/user/others/paints" {:work_name "秘密"} "user" usid2))
+                names (set (map :name (:fields of)))]
             (is (= 1 (count (:fields of))))
+            (is (contains? names "北"))
+            (is (not (contains? names "南")))
+            (is (false? (db/field-visible-to-viewer? (:ds sys) uid2 id2)))
             (is (some #{"田植え"} (:work_names wn)))
             (is (= "partial" (:status (first (:fields op)))))
             (is (= "work_name_unrelated" (:code bad)))))

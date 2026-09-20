@@ -94,19 +94,21 @@
     (catch :default _
       nil)))
 
-(defn queue-form-draft! []
-  (reset! pending-form-draft (collect-form-draft)))
-
-(defn take-form-draft! []
-  (let [d @pending-form-draft]
-    (reset! pending-form-draft nil)
-    d))
-
 (defn current-path []
   (.-pathname js/location))
 
 (defn current-search []
   (.-search js/location))
+
+(defn queue-form-draft! []
+  (reset! pending-form-draft {:path (current-path)
+                              :draft (collect-form-draft)}))
+
+(defn take-form-draft! []
+  (let [p @pending-form-draft]
+    (reset! pending-form-draft nil)
+    (when (and p (= (:path p) (current-path)))
+      (:draft p))))
 
 (defn push-path! [path]
   (.pushState js/history nil "" path))
@@ -232,6 +234,7 @@
         a (.closest t "a[data-nav]")]
     (when a
       (.preventDefault ev)
+      (reset! pending-form-draft nil)
       (let [href (.getAttribute a "href")]
         (push-path! href)
         (dispatch! [:path {:path href :search ""}])))))
