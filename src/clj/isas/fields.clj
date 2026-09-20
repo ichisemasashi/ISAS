@@ -76,14 +76,74 @@
         from-any (some temp-embedded-base names)]
     (or keep-real any-real from-keep from-any keep-nm)))
 
+(defn- areas-from-geo [gj]
+  (let [m2 (or (geo/area-m2 gj) 0.0)]
+    {:area_m2 (geo/area-m2-int m2)
+     :area_ha (geo/area-ha m2)}))
+
 (defn- present-field [row]
   (let [gj (geo/parse-json (:geojson row))
-        m2 (or (geo/area-m2 gj) 0.0)]
+        computed (areas-from-geo gj)
+        m2 (if (nil? (:area_m2 row)) (:area_m2 computed) (:area_m2 row))
+        ha (if (nil? (:area_ha row)) (:area_ha computed) (:area_ha row))]
     {:id (:id row)
      :name (:name row)
-     :area_m2 (geo/area-m2-int m2)
-     :area_ha (geo/area-ha m2)
+     :area_m2 m2
+     :area_ha ha
+     :memo (str (:memo row))
      :geojson gj}))
+
+(defn- insert-shaped-field! [sys user-id nm gj]
+  (let [areas (areas-from-geo gj)]
+    (db/insert-field! (:ds sys) {:user-id user-id
+                                 :name nm
+                                 :geojson (geo/to-json gj)
+                                 :area-m2 (:area_m2 areas)
+                                 :area-ha (:area_ha areas)
+                                 :memo ""})))
+
+(defn- write-field-shape! [sys id nm gj memo]
+  (let [areas (areas-from-geo gj)]
+    (db/update-field! (:ds sys) id {:name nm
+                                    :geojson (geo/to-json gj)
+                                    :area-m2 (:area_m2 areas)
+                                    :area-ha (:area_ha areas)
+                                    :memo (str memo)})))
+
+(defn- normalize-memo [v]
+  (let [s (str v)]
+    (if (> (count s) 2000)
+      {:ok false :code "memo_too_long"}
+      {:ok true :memo s})))
+
+(defn- normalize-areas
+  "台帳の ha / ㎡。両方あればそのまま（ha は小数第2位）。片方だけなら他方を換算する。"
+  [body]
+  (let [has-m2 (contains? body :area_m2)
+        has-ha (contains? body :area_ha)
+        m2 (when has-m2 (geo/as-number (:area_m2 body)))
+        ha (when has-ha (geo/as-number (:area_ha body)))]
+    (cond
+      (and has-m2 has-ha)
+      (if (and (number? m2) (number? ha) (>= m2 0) (>= ha 0))
+        {:ok true
+         :area_m2 (long (Math/round (double m2)))
+         :area_ha (/ (Math/round (* (double ha) 100.0)) 100.0)}
+        {:ok false :code "area_invalid"})
+
+      has-m2
+      (if (and (number? m2) (>= m2 0))
+        {:ok true :area_m2 (geo/area-m2-int m2) :area_ha (geo/area-ha m2)}
+        {:ok false :code "area_invalid"})
+
+      has-ha
+      (if (and (number? ha) (>= ha 0))
+        (let [raw (* (double ha) 10000.0)]
+          {:ok true :area_m2 (geo/area-m2-int raw) :area_ha (geo/area-ha raw)})
+        {:ok false :code "area_invalid"})
+
+      :else
+      {:ok false :code "area_invalid"})))
 
 (defn- image-extent [row]
   (let [w (:image_west row)
@@ -276,7 +336,7 @@
                  (if (str/blank? s)
                    (first (next-temp-names (db/field-names (:ds sys) user-id) 1))
                    s))
-            row (db/insert-field! (:ds sys) {:user-id user-id :name nm :geojson (geo/to-json gj)})]
+            row (insert-shaped-field! sys user-id nm gj)]
         (log/info "圃場を作りました" :user-id user-id :id (:id row) :name nm)
         {:ok true :field (present-field row)}))))
 
@@ -294,12 +354,45 @@
                            (geo/parse-json (:geojson body))
                            (:geojson body))]
                    (if (geo/valid-shape? g) g :bad))
-                 (geo/parse-json (:geojson row)))]
-        (if (= gj :bad)
+                 (geo/parse-json (:geojson row)))
+            memo-r (if (contains? body :memo)
+                     (normalize-memo (:memo body))
+                     {:ok true :memo (str (:memo row))})
+            areas-r (cond
+                      (or (contains? body :area_m2) (contains? body :area_ha))
+                      (normalize-areas body)
+                      (contains? body :geojson)
+                      (if (= gj :bad)
+                        {:ok false :code "shape_not_area"}
+                        (merge {:ok true} (areas-from-geo gj)))
+                      :else
+                      {:ok true
+                       :area_m2 (:area_m2 row)
+                       :area_ha (:area_ha row)})]
+        (cond
+          (= gj :bad)
           (do
             (log/warn "圃場の形が面積を持てません" :user-id user-id :id fid)
             {:ok false :code "shape_not_area"})
-          (let [updated (db/update-field! (:ds sys) fid {:name nm :geojson (geo/to-json gj)})]
+
+          (not (:ok memo-r))
+          memo-r
+
+          (not (:ok areas-r))
+          areas-r
+
+          :else
+          (let [area-m2 (if (nil? (:area_m2 areas-r))
+                          (:area_m2 (areas-from-geo gj))
+                          (:area_m2 areas-r))
+                area-ha (if (nil? (:area_ha areas-r))
+                          (:area_ha (areas-from-geo gj))
+                          (:area_ha areas-r))
+                updated (db/update-field! (:ds sys) fid {:name nm
+                                                         :geojson (geo/to-json gj)
+                                                         :area-m2 area-m2
+                                                         :area-ha area-ha
+                                                         :memo (:memo memo-r)})]
             (when (contains? body :geojson)
               (paints/clip-paints-to-field! sys fid gj))
             (log/info "圃場を更新しました" :user-id user-id :id fid)
@@ -365,7 +458,7 @@
         (orders/remove-field-targets! sys fid)
         (db/delete-field! (:ds sys) fid)
         (let [created (mapv (fn [nm gj]
-                              (db/insert-field! (:ds sys) {:user-id user-id :name nm :geojson (geo/to-json gj)}))
+                              (insert-shaped-field! sys user-id nm gj))
                             names polys)]
           (log/info "圃場を分割しました" :user-id user-id :from fid :count (count created))
           {:ok true :fields (mapv present-field created)})))))
@@ -399,7 +492,7 @@
                 (if-not (geo/valid-shape? union)
                   {:ok false :code "shape_not_area"}
                   (do
-                    (db/update-field! (:ds sys) keep-id {:name merge-name :geojson (geo/to-json union)})
+                    (write-field-shape! sys keep-id merge-name union (str (:memo keep-row)))
                     (run! (fn [id]
                             (when (not= id keep-id)
                               (gantt/remove-field-targets! sys id)
@@ -434,9 +527,7 @@
                           (recur (rest ps) ts (conj acc (:name p)))
                           (recur (rest ps) (rest ts) (conj acc (first ts)))))))
             created (mapv (fn [nm p]
-                            (db/insert-field! (:ds sys) {:user-id user-id
-                                                         :name nm
-                                                         :geojson (geo/to-json (dissoc p :name))}))
+                            (insert-shaped-field! sys user-id nm (dissoc p :name)))
                           names polys)]
         (log/info "区画を取り込みました" :user-id user-id :count (count created))
         {:ok true :fields (mapv present-field created)}))))

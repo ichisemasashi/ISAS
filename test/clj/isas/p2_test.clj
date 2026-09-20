@@ -34,7 +34,11 @@
           (is (re-find #"圃場台帳" (html {:page :fields :fields []})))
           (is (re-find #"<th>名前</th>" (html {:page :fields :fields []})))
           (is (re-find #"<th>ha</th>" (html {:page :fields :fields []})))
-          (is (re-find #"削除" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000}]})))
+          (is (re-find #"<th>メモ</th>" (html {:page :fields :fields []})))
+          (is (re-find #"削除" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo ""}]})))
+          (is (re-find #"name=\"area_ha\"" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo "a"}]})))
+          (is (re-find #"name=\"area_m2\"" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo "a"}]})))
+          (is (re-find #"name=\"memo\"" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 1.2 :area_m2 12000 :memo "a"}]})))
           (is (= "/" (second (first (:fx (ui/guarded (assoc (ui/init-state) :page :fields :kind "user"))))))))
         (testing "P2-2.1-04〜06 地図経路"
           (is (= :map (:page (ui/route-for "/map"))))
@@ -97,8 +101,15 @@
                 id2 (get-in c2 [:field :id])
                 listed (:fields (tu/parse (tu/get-path app "/api/user/fields" "user" usid)))]
             (is (true? (:ok c1)))
-            (is (every? #(contains? (first listed) %) [:id :name :area_ha :area_m2 :geojson]))
-            (is (true? (:ok (tu/parse (tu/put-json app (str "/api/user/fields/" id) {:name "A2"} "user" usid)))))
+            (is (every? #(contains? (first listed) %) [:id :name :area_ha :area_m2 :memo :geojson]))
+            (is (true? (:ok (tu/parse (tu/put-json app (str "/api/user/fields/" id)
+                                                  {:name "A2" :area_ha 0.12 :area_m2 1200 :memo "台帳メモ"}
+                                                  "user" usid)))))
+            (let [f (first (filter #(= id (:id %))
+                                   (:fields (tu/parse (tu/get-path app "/api/user/fields" "user" usid)))))]
+              (is (= 0.12 (:area_ha f)))
+              (is (= 1200 (:area_m2 f)))
+              (is (= "台帳メモ" (:memo f))))
             (is (= "split_too_few" (:code (tu/parse (tu/post-json app (str "/api/user/fields/" id "/split")
                                                                 {:polygons []} "user" usid)))))
             (let [line-id (get-in (tu/parse (tu/post-json app "/api/user/fields" {:name "割線" :geojson tu/square} "user" usid)) [:field :id])
@@ -204,7 +215,8 @@
             (is (re-find #"42" h))
             (is (re-find #"<th>㎡</th>" h))
             (is (re-find #"href=\"/map\"" h))
-            (is (not (re-find #"面積を入力|作物|地番|所有者" h)))))
+            (is (re-find #"name=\"area_ha\"|name=\"memo\"" h))
+            (is (not (re-find #"作物|地番|所有者" h)))))
         (testing "P2-2.5-03 名前の重複を許す"
           (let [a (tu/parse (tu/post-json app "/api/user/fields" {:name "同名" :geojson tu/square} "user" usid))
                 b (tu/parse (tu/post-json app "/api/user/fields" {:name "同名" :geojson tu/square-east} "user" usid))]

@@ -64,6 +64,9 @@
       user_id INTEGER NOT NULL,
       name TEXT NOT NULL,
       geojson TEXT NOT NULL,
+      area_m2 INTEGER,
+      area_ha REAL,
+      memo TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id)
@@ -204,6 +207,9 @@
   (ensure-column! ds "admins" "ui_lang" "TEXT")
   (ensure-column! ds "gantt_rows" "deleted_at" "TEXT")
   (ensure-column! ds "gantt_rows" "title_id" "INTEGER")
+  (ensure-column! ds "fields" "area_m2" "INTEGER")
+  (ensure-column! ds "fields" "area_ha" "REAL")
+  (ensure-column! ds "fields" "memo" "TEXT")
   (migrate-gantt-titles! ds)
   (log/info "データベースの表を用意しました")
   ds)
@@ -381,11 +387,11 @@
   (delete-place! ds user-id)
   (delete-reset-tokens-for-account! ds "user" user-id))
 
-(defn insert-field! [ds {:keys [user-id name geojson]}]
+(defn insert-field! [ds {:keys [user-id name geojson area-m2 area-ha memo]}]
   (jdbc/execute-one! ds
-                     ["INSERT INTO fields (user_id, name, geojson, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?) RETURNING *"
-                      user-id name geojson (time/now-utc) (time/now-utc)]))
+                     ["INSERT INTO fields (user_id, name, geojson, area_m2, area_ha, memo, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+                      user-id name geojson area-m2 area-ha (or memo "") (time/now-utc) (time/now-utc)]))
 
 (defn find-field [ds user-id id]
   (jdbc/execute-one! ds ["SELECT * FROM fields WHERE id = ? AND user_id = ?" id user-id]))
@@ -393,10 +399,10 @@
 (defn list-fields [ds user-id]
   (jdbc/execute! ds ["SELECT * FROM fields WHERE user_id = ? ORDER BY id" user-id]))
 
-(defn update-field! [ds id {:keys [name geojson]}]
+(defn update-field! [ds id {:keys [name geojson area-m2 area-ha memo]}]
   (jdbc/execute-one! ds
-                     ["UPDATE fields SET name = ?, geojson = ?, updated_at = ? WHERE id = ? RETURNING *"
-                      name geojson (time/now-utc) id]))
+                     ["UPDATE fields SET name = ?, geojson = ?, area_m2 = ?, area_ha = ?, memo = ?, updated_at = ? WHERE id = ? RETURNING *"
+                      name geojson area-m2 area-ha (or memo "") (time/now-utc) id]))
 
 (defn delete-field! [ds id]
   (jdbc/execute-one! ds ["DELETE FROM fields WHERE id = ?" id]))

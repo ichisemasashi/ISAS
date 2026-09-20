@@ -112,6 +112,7 @@
    :gantt-work-add "作業を足す"
    :gantt-work-new-placeholder "新しい作業"
    :gantt-works-label "作業"
+   :gantt-title-of-work "所属の題名"
    :gantt-start "開始"
    :gantt-end "終了"
    :gantt-targets "対象圃場"
@@ -216,6 +217,7 @@
    :initial-password-label "初期パスワード"
    :brush "ブラシ"
    :name-label "名前"
+   :memo-label "メモ"
    :unit-ha "ha"
    :unit-m2 "㎡"
    :lang-ja "日本語"
@@ -227,8 +229,11 @@
    :email-a "メールアドレス A"
    :email-b "メールアドレス B"
    :btn-save-name "名前を保存"
+   :btn-save-field-row "保存"
    :btn-delete "削除"
    :to-map "地図へ"
+   :area-invalid "ha と ㎡ は0以上の数値にしてください"
+   :memo-too-long "メモは2000文字以内にしてください"
    :basemap-aerial "空中写真"
    :basemap-standard "標準地図"
    :basemap-satellite "衛星"
@@ -362,6 +367,7 @@
    :gantt-work-add "Add work"
    :gantt-work-new-placeholder "New work"
    :gantt-works-label "Works"
+   :gantt-title-of-work "Title"
    :gantt-start "Start"
    :gantt-end "End"
    :gantt-targets "Target fields"
@@ -466,6 +472,7 @@
    :initial-password-label "Initial password"
    :brush "Brush"
    :name-label "Name"
+   :memo-label "Memo"
    :unit-ha "ha"
    :unit-m2 "m²"
    :lang-ja "日本語"
@@ -477,8 +484,11 @@
    :email-a "Email A"
    :email-b "Email B"
    :btn-save-name "Save name"
+   :btn-save-field-row "Save"
    :btn-delete "Delete"
    :to-map "To map"
+   :area-invalid "ha and m² must be numbers 0 or greater"
+   :memo-too-long "Memo must be 2000 characters or fewer"
    :basemap-aerial "Aerial photo"
    :basemap-standard "Standard map"
    :basemap-satellite "Satellite"
@@ -592,6 +602,8 @@
     "emaff_busy" (m :emaff-busy)
     "emaff_empty" (m :emaff-unavailable)
     "shape_not_area" (m :shape-not-area)
+    "area_invalid" (m :area-invalid)
+    "memo_too_long" (m :memo-too-long)
     "basemap_kind" (m :basemap-kind)
     "basemap_missing" (m :basemap-missing)
     "field_not_found" (m :field-not-found)
@@ -1182,16 +1194,22 @@
           (str (nav-user state)
                (flash-html state)
                "<table><thead><tr><th>" (esc (m :name-label)) "</th><th>" (esc (m :unit-ha))
-               "</th><th>" (esc (m :unit-m2)) "</th><th></th></tr></thead><tbody>"
+               "</th><th>" (esc (m :unit-m2)) "</th><th>" (esc (m :memo-label))
+               "</th><th></th></tr></thead><tbody>"
                (apply str
                       (for [f (:fields state)]
-                        (str "<tr><td><form data-act=\"update-field\" method=\"post\">"
+                        (str "<tr><td colspan=\"5\"><form data-act=\"update-field\" method=\"post\" class=\"field-ledger-form\">"
                              "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
-                             "<input name=\"name\" value=\"" (esc (:name f)) "\">"
-                             "<button type=\"submit\">" (esc (m :btn-save-name)) "</button></form></td>"
-                             "<td>" (esc (:area_ha f)) "</td>"
-                             "<td>" (esc (:area_m2 f)) "</td>"
-                             "<td><form data-act=\"delete-field\" method=\"post\">"
+                             "<label>" (esc (m :name-label))
+                             "<input name=\"name\" value=\"" (esc (:name f)) "\"></label>"
+                             "<label>" (esc (m :unit-ha))
+                             "<input name=\"area_ha\" inputmode=\"decimal\" value=\"" (esc (:area_ha f)) "\"></label>"
+                             "<label>" (esc (m :unit-m2))
+                             "<input name=\"area_m2\" inputmode=\"numeric\" value=\"" (esc (:area_m2 f)) "\"></label>"
+                             "<label>" (esc (m :memo-label))
+                             "<textarea name=\"memo\" rows=\"2\">" (esc (or (:memo f) "")) "</textarea></label>"
+                             "<button type=\"submit\">" (esc (m :btn-save-field-row)) "</button></form>"
+                             "<form data-act=\"delete-field\" method=\"post\">"
                              "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
                              "<button type=\"submit\">" (esc (m :btn-delete)) "</button></form></td></tr>")))
                "</tbody></table>"
@@ -1688,7 +1706,14 @@
                            (str
                             "<form data-act=\"save-gantt-row\" method=\"post\" id=\"gantt-save-form\">"
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
-                            "<input type=\"hidden\" name=\"title_id\" value=\"" (esc (:id title-sel)) "\">"
+                            "<label>" (esc (m :gantt-title-of-work))
+                            "<select name=\"title_id\" id=\"gantt-row-title-id\" required>"
+                            (apply str
+                                   (for [t titles]
+                                     (str "<option value=\"" (esc (:id t)) "\""
+                                          (when (same-gantt-id? (:id t) (:title_id sel)) " selected")
+                                          ">" (esc (:name t)) "</option>")))
+                            "</select></label>"
                             "<label>" (esc (m :gantt-title-label))
                             "<input name=\"title\" value=\"" (esc (:title sel)) "\" required></label>"
                             "<label>" (esc (m :gantt-start))
@@ -2561,6 +2586,9 @@
           "update-field" {:state state :fx [[:api "PUT" (str "/api/user/fields/" (:id form))
                                             (cond-> {}
                                               (contains? form :name) (assoc :name (:name form))
+                                              (contains? form :area_ha) (assoc :area_ha (:area_ha form))
+                                              (contains? form :area_m2) (assoc :area_m2 (:area_m2 form))
+                                              (contains? form :memo) (assoc :memo (:memo form))
                                               (not (str/blank? (str (:geojson form))))
                                               (assoc :geojson (read-json-str (:geojson form))))
                                             :field-save-result]]}

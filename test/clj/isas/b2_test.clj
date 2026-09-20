@@ -82,7 +82,8 @@
               (is (true? (:ok mg)))
               (is (= "北" (get-in mg [:field :name])))
               (is (true? (:ok (fields/delete-field sys uid a))))))
-          (is (re-find #"名前を保存" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 0.1 :area_m2 1000}]})))
+          (is (re-find #"保存" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 0.1 :area_m2 1000 :memo "メモ1"}]})))
+          (is (re-find #"メモ" (html {:page :fields :fields [{:id 1 :name "北" :area_ha 0.1 :area_m2 1000 :memo "メモ1"}]})))
           (is (not (re-find #"作物|地番" (html {:page :fields :fields []})))))
         (testing "B2-4.3-06 工程2は塗りの有無を見ない"
           (let [c (fields/create-field sys uid {:name "割" :geojson tu/square})

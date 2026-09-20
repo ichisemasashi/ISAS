@@ -83,6 +83,8 @@
       (is (re-find #"終了" h))
       (is (re-find #"作業名" h))
       (is (re-find #"対象圃場" h))
+      (is (re-find #"所属の題名" h))
+      (is (re-find #"id=\"gantt-row-title-id\"" h))
       (is (re-find #"作業を足す" h))
       (is (re-find #"id=\"gantt-delete-btn\"" h))
       (is (re-find #"id=\"gantt-review-btn\"" h))

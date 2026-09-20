@@ -1,6 +1,7 @@
 (ns isas.fields-test
   (:require [clojure.java.io :as io]
             [clojure.test :refer [deftest is]]
+            [next.jdbc :as jdbc]
             [isas.accounts :as accounts]
             [isas.db :as db]
             [isas.fields :as fields]
@@ -168,6 +169,17 @@
             (is (true? (:ok (fields/update-field sys uid id {:name "北2"}))))
             (is (= "shape_not_area" (:code (fields/update-field sys uid id {:geojson {:type "Point" :coordinates [1 1]}}))))
             (is (true? (:ok (fields/update-field sys uid id {:geojson (geo/to-json square)}))))
+            (is (= "area_invalid" (:code (fields/update-field sys uid id {:area_m2 "x"}))))
+            (is (= "area_invalid" (:code (fields/update-field sys uid id {:area_ha -1}))))
+            (is (= "area_invalid" (:code (fields/update-field sys uid id {:area_m2 -1 :area_ha 1}))))
+            (is (= "memo_too_long" (:code (fields/update-field sys uid id {:memo (apply str (repeat 2001 "あ"))}))))
+            (let [u1 (fields/update-field sys uid id {:area_m2 5000 :area_ha 0.5 :memo "北メモ"})]
+              (is (true? (:ok u1)))
+              (is (= 5000 (get-in u1 [:field :area_m2])))
+              (is (= 0.5 (get-in u1 [:field :area_ha])))
+              (is (= "北メモ" (get-in u1 [:field :memo]))))
+            (is (= 10000 (get-in (fields/update-field sys uid id {:area_m2 10000}) [:field :area_m2])))
+            (is (= 0.25 (get-in (fields/update-field sys uid id {:area_ha 0.25}) [:field :area_ha])))
             (is (= "field_not_found" (:code (fields/delete-field sys uid 99999))))
             (is (= "field_not_found" (:code (fields/split-field sys uid 99999 {:polygons [square square-east]}))))
             (is (= "split_too_few" (:code (fields/split-field sys uid id {}))))
@@ -219,7 +231,24 @@
               (is (true? (:ok r))))
             (let [r (fields/import-geojson sys uid {:bytes (.getBytes (geo/to-json square-east) "UTF-8")})]
               (is (true? (:ok r))))
+            (is (= "area_invalid" (:code (#'fields/normalize-areas {}))))
+            (is (= "area_invalid" (:code (#'fields/normalize-areas {:area_m2 1 :area_ha "x"}))))
+            (is (= "area_invalid" (:code (#'fields/normalize-areas {:area_m2 "x" :area_ha 1}))))
+            (is (= "area_invalid" (:code (#'fields/normalize-areas {:area_ha nil}))))
+            (is (= {:ok true :memo ""} (#'fields/normalize-memo nil)))
+            (is (= "memo_too_long" (:code (#'fields/normalize-memo (apply str (repeat 2001 "x"))))))
             (db/insert-field! (:ds sys) {:user-id uid :name "壊" :geojson "{"})
             (let [broken (first (filter #(= "壊" (:name %)) (:fields (fields/list-fields sys uid))))]
               (is (= 0 (:area_m2 broken)))
-              (is (= 0.0 (:area_ha broken))))))))))
+              (is (= 0.0 (:area_ha broken)))
+              (jdbc/execute! (:ds sys) ["UPDATE fields SET area_m2 = NULL, area_ha = NULL, memo = NULL WHERE id = ?"
+                                        (:id broken)])
+              (is (= "" (:memo (first (filter #(= (:id broken) (:id %))
+                                              (:fields (fields/list-fields sys uid)))))))
+              (let [fixed (fields/update-field sys uid (:id broken) {:name "壊2"})]
+                (is (true? (:ok fixed)))
+                (is (= "壊2" (get-in fixed [:field :name])))
+                (is (number? (get-in fixed [:field :area_m2])))
+                (is (number? (get-in fixed [:field :area_ha]))))
+              (#'fields/write-field-shape! sys (:id broken) "壊形" square nil)
+              (is (= "壊形" (:name (db/find-field (:ds sys) uid (:id broken))))))))))))

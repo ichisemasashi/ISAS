@@ -68,6 +68,8 @@
   (is (re-find #"自動取込ができませんでした" (ui/code-message "emaff_empty")))
   (is (re-find #"作業場所の範囲が正しく" (ui/code-message "place_invalid")))
   (is (re-find #"閉じた形" (ui/code-message "shape_not_area")))
+  (is (re-find #"0以上" (ui/code-message "area_invalid")))
+  (is (re-find #"2000文字" (ui/code-message "memo_too_long")))
   (is (re-find #"下地の種類" (ui/code-message "basemap_kind")))
   (is (re-find #"その下地" (ui/code-message "basemap_missing")))
   (is (re-find #"その圃場" (ui/code-message "field_not_found")))
@@ -152,8 +154,8 @@
     (is (re-find #"今のパスワード" (ui/render (assoc base :page :password :kind "admin" :session {:email "a"}))))
     (is (re-find #"ホーム" (ui/render (assoc base :page :invite :kind "user" :session {:email "a"} :initial-password nil))))
     (is (re-find #"圃場台帳" (ui/render (assoc base :page :fields :kind "user" :fields []))))
-    (is (re-find #"名前を保存" (ui/render (assoc base :page :fields :kind "user"
-                                                :fields [{:id 1 :name "北" :area_ha 0.1 :area_m2 1000}]))))
+    (is (re-find #"保存" (ui/render (assoc base :page :fields :kind "user"
+                                                :fields [{:id 1 :name "北" :area_ha 0.1 :area_m2 1000 :memo ""}]))))
     (is (re-find #"<th>㎡</th>" (ui/render (assoc base :page :fields :kind "user"
                                                  :fields [{:id 1 :name "北" :area_ha 0 :area_m2 42}]))))
     (is (re-find #"42" (ui/render (assoc base :page :fields :kind "user"
@@ -487,6 +489,8 @@
     (is (= :api (fx-op s [:submit {:act "create-field" :form {:name "n" :geojson "{\"type\":\"Polygon\"}"}}])))
     (is (= :api (fx-op s [:submit {:act "update-field" :form {:id "1" :name "n" :geojson "{\"type\":\"Polygon\"}"}}])))
     (is (= :api (fx-op s [:submit {:act "update-field" :form {:id "1"}}])))
+    (is (= :api (fx-op s [:submit {:act "update-field"
+                                   :form {:id "1" :name "n" :area_ha "0.1" :area_m2 "1000" :memo "m"}}])))
     (is (= :api (fx-op s [:submit {:act "delete-field" :form {:id "1"}}])))
     (is (= :html (fx-op (assoc s :page :fields :narrow? true) [:session-loaded {:ok true :email "a"}])))
     (is (= :nav (fx-op (assoc (ui/init-state) :page :map :kind "user") [:session-loaded {:ok false}])))
