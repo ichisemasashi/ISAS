@@ -416,6 +416,13 @@
       (let [r (gantt/list-rows sys uid)]
         (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
 
+(defn gantt-daily-get [sys req]
+  (with-farm sys req
+    (fn [uid]
+      (let [q (query-params req)
+            r (gantt/list-daily sys uid {:range (:range q) :statuses (:statuses q)})]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
 (defn gantt-post [sys req]
   (with-farm sys req
     (fn [uid]
@@ -622,6 +629,7 @@
    [:post "/api/user/paints"] [:paints-post]
    [:get "/api/user/gantt"] [:gantt-get]
    [:post "/api/user/gantt"] [:gantt-post]
+   [:get "/api/user/gantt/daily"] [:gantt-daily-get]
    [:get "/api/user/gantt/titles"] [:gantt-titles-get]
    [:post "/api/user/gantt/titles"] [:gantt-titles-post]
    [:get "/api/user/orders"] [:orders-get]
@@ -720,6 +728,7 @@
         :field-paints-delete (field-paints-delete sys req (second spec))
         :paint-delete (paint-delete sys req (second spec))
         :gantt-get (gantt-get sys req)
+        :gantt-daily-get (gantt-daily-get sys req)
         :gantt-post (gantt-post sys req)
         :gantt-put (gantt-put sys req (second spec))
         :gantt-delete (gantt-delete sys req (second spec))

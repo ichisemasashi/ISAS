@@ -119,6 +119,22 @@
    :phone-works "作業の編集はパソコンで開いてください"
    :works-no-fields "圃場が1枚以上あるときだけ、作業を管理できます"
    :works-empty "まだ作業がありません"
+   :daily-title "日次一覧"
+   :nav-daily "日次"
+   :phone-daily "日次一覧はパソコンで開いてください"
+   :daily-no-fields "圃場が1枚以上あるときだけ、日次一覧を使えます"
+   :daily-today "今日"
+   :daily-week "今週"
+   :daily-range-label "期間"
+   :daily-filter-empty "状態フィルタを1つ以上オンにしてください"
+   :daily-empty "該当する作業はありません"
+   :execution-status "実行状態"
+   :exec-not-started "未着手"
+   :exec-in-progress "着手中"
+   :exec-done "完了"
+   :execution-status-invalid "実行状態が正しくありません"
+   :range-invalid "期間の指定が正しくありません"
+   :statuses-invalid "状態フィルタが正しくありません"
    :gantt-start "開始"
    :gantt-end "終了"
    :gantt-targets "対象圃場"
@@ -382,6 +398,22 @@
    :phone-works "Edit works on a computer"
    :works-no-fields "Work management is available only when you have at least one field"
    :works-empty "No works yet"
+   :daily-title "Daily list"
+   :nav-daily "Daily"
+   :phone-daily "Open the daily list on a computer"
+   :daily-no-fields "Daily list is available only when you have at least one field"
+   :daily-today "Today"
+   :daily-week "This week"
+   :daily-range-label "Range"
+   :daily-filter-empty "Turn on at least one status filter"
+   :daily-empty "No matching works"
+   :execution-status "Execution status"
+   :exec-not-started "Not started"
+   :exec-in-progress "In progress"
+   :exec-done "Done"
+   :execution-status-invalid "Invalid execution status"
+   :range-invalid "Invalid range"
+   :statuses-invalid "Invalid status filter"
    :gantt-start "Start"
    :gantt-end "End"
    :gantt-targets "Target fields"
@@ -640,6 +672,9 @@
     "title_too_long" (m :title-too-long)
     "time_invalid" (m :time-invalid)
     "time_order" (m :gantt-time-order)
+    "execution_status_invalid" (m :execution-status-invalid)
+    "range_invalid" (m :range-invalid)
+    "statuses_invalid" (m :statuses-invalid)
     "order_not_found" (m :order-not-found)
     "order_closed" (m :order-closed)
     "order_not_issuer" (m :order-not-issuer)
@@ -752,6 +787,7 @@
           "/map/place" {:page :map-place :kind "user"}
           "/works" {:page :works :kind "user"}
           "/gantt" {:page :gantt :kind "user"}
+          "/daily" {:page :daily :kind "user"}
           "/orders" {:page :orders :kind "user"}
           "/orders/new" {:page :orders-new :kind "user"}
           "/others" {:page :others :kind "user"}
@@ -779,7 +815,7 @@
   (if (= kind "admin") "/admin/home" "/home"))
 
 (defn needs-auth? [page]
-  (contains? #{:home :invite :password :users :fields :map :map-place :works :gantt
+  (contains? #{:home :invite :password :users :fields :map :map-place :works :gantt :daily
                :orders :orders-new :order :others :relations :gantt-progress} page))
 
 (defn init-state []
@@ -812,6 +848,9 @@
    :gantt-axis "day"
    :gantt-orient "time-h"
    :gantt-finalize-result nil
+   :daily-range "today"
+   :daily-statuses ["not_started" "in_progress"]
+   :daily-rows []
    :orders-sent []
    :orders-received []
    :order nil
@@ -938,7 +977,8 @@
                  (flash-html state)
                  "<p>" (esc (get-in state [:session :email])) "</p>"
                  (when (and (not admin?) (seq (:fields state)))
-                   (str "<p><a data-nav href=\"/works\">" (esc (m :works-title)) "</a></p>"
+                   (str "<p><a data-nav href=\"/daily\">" (esc (m :daily-title)) "</a></p>"
+                        "<p><a data-nav href=\"/works\">" (esc (m :works-title)) "</a></p>"
                         "<p><a data-nav href=\"/gantt\">" (esc (m :gantt-title)) "</a></p>"
                         "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
                  (when (not admin?)
@@ -1002,6 +1042,10 @@
     (= :works (:page state))
     (layout (m :works-title)
             (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-works)) "</p>"))
+
+    (= :daily (:page state))
+    (layout (m :daily-title)
+            (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-daily)) "</p>"))
 
     :else
     (layout (m :map-title)
@@ -1630,11 +1674,30 @@
       (str/blank? (str v)) []
       :else [(str/trim (str v))])))
 
+(defn- form-status-list [form]
+  (let [v (:status form)]
+    (cond
+      (nil? v) []
+      (vector? v) (->> v (map str) (map str/trim) (remove str/blank?) vec)
+      (sequential? v) (->> v (map str) (map str/trim) (remove str/blank?) vec)
+      (str/blank? (str v)) []
+      :else [(str/trim (str v))])))
+
+(defn- daily-row-put-body [row status]
+  {:title (str (:title row))
+   :title_id (:title_id row)
+   :start_at (:start_at row)
+   :end_at (:end_at row)
+   :work_name (:work_name row)
+   :field_ids (or (:field_ids row) [])
+   :execution_status status})
+
 (defn- gantt-body-from-form [form title-id]
   (let [title (str/trim (as-text (:title form)))
         start (str/trim (as-text (:start_at form)))
         end (str/trim (as-text (:end_at form)))
         wn (str/trim (as-text (:work_name form)))
+        st (str/trim (as-text (:execution_status form)))
         fids (form-field-ids form)
         tid (str/trim (as-text (if (nil? (:title_id form)) title-id (:title_id form))))]
     (cond-> {:title title
@@ -1643,7 +1706,41 @@
              :field_ids fids
              :title_id tid}
       (not (str/blank? wn)) (assoc :work_name wn)
-      (str/blank? wn) (assoc :work_name nil))))
+      (str/blank? wn) (assoc :work_name nil)
+      (not (str/blank? st)) (assoc :execution_status st))))
+
+(defn- execution-status-label [status]
+  (case (str status)
+    "in_progress" (m :exec-in-progress)
+    "done" (m :exec-done)
+    (m :exec-not-started)))
+
+(defn- execution-status-select-html [selected select-id]
+  (let [cur (let [s (str (or selected "not_started"))]
+              (if (#{"not_started" "in_progress" "done"} s) s "not_started"))]
+    (str "<select name=\"execution_status\""
+         (when-not (str/blank? (str select-id))
+           (str " id=\"" (esc select-id) "\""))
+         ">"
+         (apply str
+                (for [[v lab] [["not_started" (m :exec-not-started)]
+                               ["in_progress" (m :exec-in-progress)]
+                               ["done" (m :exec-done)]]]
+                  (str "<option value=\"" v "\""
+                       (when (= v cur) " selected")
+                       ">" (esc lab) "</option>")))
+         "</select>")))
+
+(defn- daily-status-on? [state status]
+  (boolean (some #(= (str %) (str status)) (into [] (:daily-statuses state)))))
+
+(defn- daily-query-path [state]
+  (let [range (let [raw (:daily-range state)
+                    r (str (if (nil? raw) "today" raw))]
+                (if (#{"today" "week"} r) r "today"))
+        statuses (into [] (:daily-statuses state))]
+    (str "/api/user/gantt/daily?range=" (encode-q range)
+         "&statuses=" (encode-q (str/join "," statuses)))))
 
 (defn- gantt-title-select-html [titles selected-id include-none? select-id]
   (str "<select name=\"title_id\""
@@ -1701,7 +1798,9 @@
                                         "<button type=\"submit\" id=\"work-btn-" (esc (:id r)) "\">"
                                         (esc (:title r))
                                         " / " (esc (work-related-title-label state (:title_id r)))
-                                        " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")</button></form>")))))
+                                        " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")"
+                                        " [" (esc (execution-status-label (:execution_status r))) "]"
+                                        "</button></form>")))))
                       "</section>"
                       "<form data-act=\"add-gantt-row\" method=\"post\" id=\"works-add-form\">"
                       "<label>" (esc (m :gantt-title-of-work))
@@ -1713,6 +1812,7 @@
                       "<input id=\"works-new-start\" name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                       "<label>" (esc (m :gantt-end))
                       "<input id=\"works-new-end\" name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<p>" (esc (m :execution-status)) ": " (esc (m :exec-not-started)) "</p>"
                       "<button type=\"submit\" id=\"works-add-btn\">"
                       (esc (m :gantt-work-add)) "</button></form>"
                       (when sel
@@ -1727,6 +1827,9 @@
                          "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
                          "<label>" (esc (m :gantt-end))
                          "<input name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
+                         "<label>" (esc (m :execution-status))
+                         (execution-status-select-html (:execution_status sel) "works-execution-status")
+                         "</label>"
                          "<label>" (esc (m :work-name))
                          "<input name=\"work_name\" list=\"works-work-name-list\" value=\""
                          (esc (or (:work_name sel) "")) "\">"
@@ -1742,6 +1845,56 @@
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                          "<button type=\"submit\" id=\"works-delete-btn\">"
                          (esc (m :gantt-delete)) "</button></form>")))))))))
+
+(defn daily-view [state]
+  (let [fields (:fields state)
+        range (let [raw (:daily-range state)
+                    r (str (if (nil? raw) "today" raw))]
+                (if (#{"today" "week"} r) r "today"))
+        statuses (into [] (:daily-statuses state))
+        rows (into [] (:daily-rows state))]
+    (layout (m :daily-title)
+            (str (nav-user state)
+                 (flash-html state)
+                 (if (empty? fields)
+                   (str "<p>" (esc (m :daily-no-fields)) "</p>")
+                   (str
+                    "<div class=\"toolbar\" id=\"daily-range-form\">"
+                    (select-switch (m :daily-range-label) "daily-range" range
+                                   [["today" (m :daily-today)]
+                                    ["week" (m :daily-week)]])
+                    "</div>"
+                    "<form data-act=\"set-daily-statuses\" method=\"post\" id=\"daily-status-filter\">"
+                    "<fieldset><legend>" (esc (m :execution-status)) "</legend>"
+                    (apply str
+                           (for [[v lab] [["not_started" (m :exec-not-started)]
+                                          ["in_progress" (m :exec-in-progress)]
+                                          ["done" (m :exec-done)]]]
+                             (str "<label><input type=\"checkbox\" name=\"status\" value=\"" v "\""
+                                  (when (daily-status-on? state v) " checked")
+                                  "> " (esc lab) "</label>")))
+                    "<button type=\"submit\" id=\"daily-filter-btn\">" (esc (m :btn-save)) "</button>"
+                    "</fieldset></form>"
+                    (if (empty? statuses)
+                      (str "<p id=\"daily-filter-hint\">" (esc (m :daily-filter-empty)) "</p>")
+                      (str "<section class=\"daily-list\" id=\"daily-list\">"
+                           (if (empty? rows)
+                             (str "<p>" (esc (m :daily-empty)) "</p>")
+                             (apply str
+                                    (for [r rows]
+                                      (str "<div class=\"daily-item\" id=\"daily-item-" (esc (:id r)) "\">"
+                                           "<span class=\"daily-item-title\">" (esc (:title r)) "</span>"
+                                           " <span class=\"daily-item-time\">"
+                                           (esc (:start_at r)) "〜" (esc (:end_at r)) "</span>"
+                                           "<form data-act=\"set-daily-row-status\" method=\"post\" class=\"daily-status-form\">"
+                                           "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
+                                           "<label>" (esc (m :execution-status))
+                                           (execution-status-select-html (:execution_status r)
+                                                                         (str "daily-status-" (:id r)))
+                                           "</label>"
+                                           "<button type=\"submit\">" (esc (m :btn-save)) "</button>"
+                                           "</form></div>"))))
+                           "</section>"))))))))
 
 (defn gantt-view [state]
   (let [fields (:fields state)]
@@ -1870,6 +2023,9 @@
                             "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
                             "<label>" (esc (m :gantt-end))
                             "<input name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
+                            "<label>" (esc (m :execution-status))
+                            (execution-status-select-html (:execution_status sel) "gantt-execution-status")
+                            "</label>"
                             "<label>" (esc (m :work-name))
                             "<input name=\"work_name\" list=\"gantt-work-name-list\" value=\""
                             (esc (or (:work_name sel) "")) "\">"
@@ -1928,7 +2084,7 @@
 (defn render [state]
   (with-ui-lang state
     (fn []
-      (if (and (:narrow? state) (contains? #{:fields :map :map-place :works :gantt :orders-new :others} (:page state)))
+      (if (and (:narrow? state) (contains? #{:fields :map :map-place :works :gantt :daily :orders-new :others} (:page state)))
         (phone-view state)
         (case (:page state)
           :login (login-view state)
@@ -1943,6 +2099,7 @@
           :map-place (map-place-view state)
           :works (works-view state)
           :gantt (gantt-view state)
+          :daily (daily-view state)
           :orders (orders-view state)
           :orders-new (orders-new-view state)
           :order (order-view state)
@@ -2004,6 +2161,11 @@
       (and (= :works (:page s)) (:session s) (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
 
+      (= :daily (:page s))
+      (if (and (:session s) (not (:narrow? s)))
+        {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
+        (guarded s))
+
       (and (= :orders (:page s)) (:session s))
       {:state s :fx [[:api "GET" "/api/user/orders" nil :orders-loaded]
                      [:api "GET" "/api/user/fields" nil :home-fields-loaded]]}
@@ -2062,10 +2224,20 @@
       (and (= :works (:page s)) (empty? (:fields s)))
       (guarded s)
 
+      (and (= :daily (:page s)) (empty? (:fields s)))
+      (guarded (assoc s :daily-rows []))
+
       (= :works (:page s))
       {:state s
        :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
             [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]}
+
+      (= :daily (:page s))
+      (let [statuses (into [] (:daily-statuses s))]
+        (if (empty? statuses)
+          (guarded (assoc s :daily-rows []))
+          {:state s
+           :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]]}))
 
       (= :orders-new (:page s))
       (let [defaults #?(:clj {:work_date (time/today-work-date)
@@ -2176,6 +2348,23 @@
                  (m :gantt-work-needed)
                  (code-message code))
           s (assoc state :flash {:error? true :text text})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn daily-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :daily-rows (or (:rows body) []) :flash nil))
+    (let [s (assoc state :daily-rows []
+                   :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn daily-status-save-result [state body]
+  (if (:ok body)
+    (let [statuses (into [] (:daily-statuses state))]
+      (if (empty? statuses)
+        (guarded (assoc state :daily-rows [] :flash nil))
+        {:state (assoc state :flash nil)
+         :fx [[:api "GET" (daily-query-path state) nil :daily-loaded]]}))
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn gantt-delete-result [state body]
@@ -2606,6 +2795,38 @@
                  (not (str/blank? email)) (assoc :email email))]
       {:state (assoc state :form {:day day :email email} :gantt-finalize-result nil :flash nil)
        :fx [[:api "POST" "/api/admin/gantt/progress/finalize" body :gantt-finalize-result]]})
+    "set-daily-range"
+    (let [range (str/trim (as-text (:range form)))
+          range' (if (#{"today" "week"} range) range "today")
+          s (assoc state :daily-range range' :flash nil)
+          statuses (into [] (:daily-statuses s))]
+      (if (empty? statuses)
+        (guarded (assoc s :daily-rows []))
+        {:state s
+         :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]]}))
+    "set-daily-statuses"
+    (let [statuses (form-status-list form)
+          allowed #{"not_started" "in_progress" "done"}
+          statuses' (vec (filter allowed statuses))
+          s (assoc state :daily-statuses statuses' :flash nil)]
+      (if (empty? statuses')
+        (guarded (assoc s :daily-rows []))
+        {:state s
+         :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]]}))
+    "set-daily-row-status"
+    (let [id (str/trim (as-text (:id form)))
+          status (str/trim (as-text (:execution_status form)))
+          row (gantt-row-by-id (assoc state :gantt-rows (:daily-rows state)) id)]
+      (cond
+        (or (str/blank? id) (nil? row))
+        (flash-html-state state (m :gantt-not-found))
+        (not (#{"not_started" "in_progress" "done"} status))
+        (flash-html-state state (m :execution-status-invalid))
+        :else
+        {:state (assoc state :flash nil)
+         :fx [[:api "PUT" (str "/api/user/gantt/" id)
+               (daily-row-put-body row status)
+               :daily-status-save-result]]}))
     nil))
 
 (defn handle [state msg]
@@ -2625,6 +2846,8 @@
       :gantt-loaded (gantt-loaded state arg)
       :gantt-save-result (gantt-save-result state arg)
       :gantt-delete-result (gantt-delete-result state arg)
+      :daily-loaded (daily-loaded state arg)
+      :daily-status-save-result (daily-status-save-result state arg)
       :gantt-title-save-result (gantt-title-save-result state arg)
       :gantt-title-delete-result (gantt-title-delete-result state arg)
       :gantt-progress-loaded (gantt-progress-loaded state arg)
@@ -2671,6 +2894,11 @@
                 (assoc s :gantt-selected nil :gantt-title-selected nil
                        :gantt-progress nil :gantt-progress-days nil
                        :gantt-axis "day" :gantt-orient "time-h" :form {} :paint-data nil)
+
+                (= :daily (:page s))
+                (assoc s :daily-range "today"
+                       :daily-statuses ["not_started" "in_progress"]
+                       :daily-rows [] :flash nil)
 
                 (= :gantt-progress (:page s))
                 (assoc s :gantt-finalize-result nil :form {})
@@ -2856,7 +3084,8 @@
           "upload-basemap" {:state state :fx [[:upload "PUT" (str "/api/user/basemaps/" (:kind form)) form :basemap-upload-result]]}
           ("set-gantt-axis" "set-gantt-orient" "select-gantt-title" "add-gantt-title"
            "save-gantt-title" "delete-gantt-title" "select-gantt-row" "add-gantt-row"
-           "save-gantt-row" "delete-gantt-row" "review-gantt-row" "finalize-gantt-progress")
+           "save-gantt-row" "delete-gantt-row" "review-gantt-row" "finalize-gantt-progress"
+           "set-daily-range" "set-daily-statuses" "set-daily-row-status")
           (submit-gantt-act state form act)
           "create-order"
           (let [emails (parse-recipient-emails (:recipient_emails form))

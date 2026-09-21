@@ -96,6 +96,7 @@
       start_at TEXT NOT NULL,
       end_at TEXT NOT NULL,
       work_name TEXT,
+      execution_status TEXT NOT NULL DEFAULT 'not_started',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       deleted_at TEXT,
@@ -207,6 +208,10 @@
   (ensure-column! ds "admins" "ui_lang" "TEXT")
   (ensure-column! ds "gantt_rows" "deleted_at" "TEXT")
   (ensure-column! ds "gantt_rows" "title_id" "INTEGER")
+  (ensure-column! ds "gantt_rows" "execution_status" "TEXT NOT NULL DEFAULT 'not_started'")
+  (jdbc/execute! ds ["UPDATE gantt_rows SET execution_status = 'not_started'
+                      WHERE execution_status IS NULL OR TRIM(execution_status) = ''
+                         OR execution_status NOT IN ('not_started', 'in_progress', 'done')"])
   (ensure-column! ds "fields" "area_m2" "INTEGER")
   (ensure-column! ds "fields" "area_ha" "REAL")
   (ensure-column! ds "fields" "memo" "TEXT")
@@ -485,17 +490,20 @@
                        WHERE title_id = ? AND deleted_at IS NULL"
                       (time/now-utc) (time/now-utc) title-id]))
 
-(defn insert-gantt-row! [ds {:keys [user-id title-id title start-at end-at work-name]}]
+(defn insert-gantt-row! [ds {:keys [user-id title-id title start-at end-at work-name execution-status]}]
   (jdbc/execute-one! ds
-                     ["INSERT INTO gantt_rows (user_id, title_id, title, start_at, end_at, work_name, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
-                      user-id title-id title start-at end-at work-name (time/now-utc) (time/now-utc)]))
+                     ["INSERT INTO gantt_rows (user_id, title_id, title, start_at, end_at, work_name, execution_status, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+                      user-id title-id title start-at end-at work-name
+                      (or execution-status "not_started")
+                      (time/now-utc) (time/now-utc)]))
 
-(defn update-gantt-row! [ds id {:keys [title-id title start-at end-at work-name]}]
+(defn update-gantt-row! [ds id {:keys [title-id title start-at end-at work-name execution-status]}]
   (jdbc/execute-one! ds
-                     ["UPDATE gantt_rows SET title_id = ?, title = ?, start_at = ?, end_at = ?, work_name = ?, updated_at = ?
+                     ["UPDATE gantt_rows SET title_id = ?, title = ?, start_at = ?, end_at = ?, work_name = ?,
+                        execution_status = ?, updated_at = ?
                        WHERE id = ? RETURNING *"
-                      title-id title start-at end-at work-name (time/now-utc) id]))
+                      title-id title start-at end-at work-name execution-status (time/now-utc) id]))
 
 (defn find-gantt-row [ds user-id id]
   (jdbc/execute-one! ds ["SELECT * FROM gantt_rows WHERE id = ? AND user_id = ?" id user-id]))

@@ -253,6 +253,8 @@
                          (dispatch! [:submit {:act "set-gantt-axis" :form {:axis v}}]))
         "gantt-orient" (do (queue-form-draft!)
                            (dispatch! [:submit {:act "set-gantt-orient" :form {:orient v}}]))
+        "daily-range" (do (queue-form-draft!)
+                          (dispatch! [:submit {:act "set-daily-range" :form {:range v}}]))
         "map-mode" (when-not (str/blank? v)
                      (queue-form-draft!)
                      (dispatch! [:submit {:act "set-map-mode" :form {:mode v}}]))

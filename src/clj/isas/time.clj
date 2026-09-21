@@ -71,6 +71,24 @@
         end (.plusMonths (.withDayOfMonth d 1) 1)]
     (format-local-minute (.atStartOfDay end))))
 
+(defn tokyo-today-window
+  "Asia/Tokyo の今日 [0:00, 翌日0:00)。終端は含まない。local-minute 文字列の組。"
+  []
+  (let [d (today-tokyo)
+        start (.atStartOfDay d)
+        end (.atStartOfDay (.plusDays d 1))]
+    [(format-local-minute start) (format-local-minute end)]))
+
+(defn tokyo-week-window
+  "Asia/Tokyo の今週（月曜始まり）[月曜0:00, 翌月曜0:00)。終端は含まない。"
+  []
+  (let [d (today-tokyo)
+        dow (.getValue (.getDayOfWeek d))
+        monday (.minusDays d (long (dec dow)))
+        start (.atStartOfDay monday)
+        end (.atStartOfDay (.plusDays monday 7))]
+    [(format-local-minute start) (format-local-minute end)]))
+
 (def work-date-fmt (DateTimeFormatter/ofPattern "yyyy-MM-dd"))
 
 (def clock-time-fmt (DateTimeFormatter/ofPattern "HH:mm"))

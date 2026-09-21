@@ -68,7 +68,43 @@
    :start_at (:start_at row)
    :end_at (:end_at row)
    :work_name (:work_name row)
+   :execution_status (:execution_status row)
    :field_ids (db/list-gantt-targets ds (:id row))})
+
+(def ^:private execution-statuses #{"not_started" "in_progress" "done"})
+
+(defn- normalize-execution-status [s]
+  (let [t (str/trim (str (or s "")))]
+    (if (contains? execution-statuses t)
+      {:ok true :execution-status t}
+      (do
+        (log/warn "実行状態が不正です" :value s)
+        {:ok false :code "execution_status_invalid"}))))
+
+(defn- parse-daily-statuses [raw]
+  (if (nil? raw)
+    {:ok true :statuses ["not_started" "in_progress"]}
+    (let [parts (->> (str/split (str raw) #",")
+                     (map str/trim)
+                     (remove str/blank?)
+                     vec)]
+      (if (every? #(contains? execution-statuses %) parts)
+        {:ok true :statuses (vec (distinct parts))}
+        (do
+          (log/warn "日次の状態フィルタが不正です" :statuses raw)
+          {:ok false :code "statuses_invalid"})))))
+
+(defn- daily-window [range-key]
+  (case (str range-key)
+    "today" {:ok true :window (time/tokyo-today-window)}
+    "week" {:ok true :window (time/tokyo-week-window)}
+    (do
+      (log/warn "日次の期間が不正です" :range range-key)
+      {:ok false :code "range_invalid"})))
+
+(defn- overlaps-window? [row window-start window-end]
+  (and (pos? (compare window-end (str (:start_at row))))
+       (pos? (compare (str (:end_at row)) window-start))))
 
 (defn- active-row? [row]
   (nil? (:deleted_at row)))
@@ -190,11 +226,13 @@
                                                      :title (:title v)
                                                      :start-at (:start-at v)
                                                      :end-at (:end-at v)
-                                                     :work-name (:work-name v)})]
+                                                     :work-name (:work-name v)
+                                                     :execution-status "not_started"})]
             (db/replace-gantt-targets! (:ds sys) (:id row) (:field-ids v))
             (log/info "ガント作業を足しました"
                       :user-id user-id :gantt-id (:id row) :title-id (:title-id v)
-                      :title (:title v) :fields (count (:field-ids v)))
+                      :title (:title v) :fields (count (:field-ids v))
+                      :execution-status "not_started")
             {:ok true :row (present-row (:ds sys) row)}))))))
 
 (defn update-row [sys user-id id body]
@@ -208,20 +246,45 @@
         (log/warn "ガント作業が見つかりません" :user-id user-id :gantt-id id)
         {:ok false :code "gantt_not_found"})
       :else
-      (let [v (validate-body sys user-id body)]
-        (if-not (:ok v)
-          v
-          (do
+      (let [v (validate-body sys user-id body)
+            st (when (contains? body :execution_status)
+                 (normalize-execution-status (:execution_status body)))]
+        (cond
+          (not (:ok v)) v
+          (and st (not (:ok st))) st
+          :else
+          (let [status (if st (:execution-status st) (:execution_status row))]
             (db/update-gantt-row! (:ds sys) gid {:title-id (:title-id v)
                                                  :title (:title v)
                                                  :start-at (:start-at v)
                                                  :end-at (:end-at v)
-                                                 :work-name (:work-name v)})
+                                                 :work-name (:work-name v)
+                                                 :execution-status status})
             (db/replace-gantt-targets! (:ds sys) gid (:field-ids v))
             (log/info "ガント作業を直しました"
                       :user-id user-id :gantt-id gid :title-id (:title-id v)
-                      :title (:title v) :fields (count (:field-ids v)))
+                      :title (:title v) :fields (count (:field-ids v))
+                      :execution-status status)
             {:ok true :row (present-row (:ds sys) (db/find-gantt-row (:ds sys) user-id gid))}))))))
+
+(defn list-daily [sys user-id {:keys [range statuses]}]
+  (let [gate (require-fields sys user-id)
+        win (daily-window range)
+        st (parse-daily-statuses statuses)]
+    (cond
+      (not (:ok gate)) gate
+      (not (:ok win)) win
+      (not (:ok st)) st
+      :else
+      (let [[w0 w1] (:window win)
+            status-set (set (:statuses st))
+            rows (->> (db/list-gantt-rows (:ds sys) user-id)
+                      (filter #(overlaps-window? % w0 w1))
+                      (filter #(contains? status-set (:execution_status %)))
+                      (mapv #(present-row (:ds sys) %)))]
+        (log/info "日次一覧を返しました"
+                  :user-id user-id :range (str range) :statuses (:statuses st) :count (count rows))
+        {:ok true :rows rows}))))
 
 (defn progress-percent [numerator denominator all-done?]
   (let [n (double (or numerator 0.0))
@@ -409,4 +472,5 @@
    :start_at (time/gantt-default-start)
    :end_at (time/gantt-default-end)
    :work_name nil
+   :execution_status "not_started"
    :field_ids []})

@@ -86,8 +86,10 @@
           (db/replace-gantt-targets! ds (:id gr) [(:id f) (:id f2)])
           (is (= [(:id f) (:id f2)] (db/list-gantt-targets ds (:id gr))))
           (db/update-gantt-row! ds (:id gr) {:title "直" :start-at "2026-09-18T09:00"
-                                             :end-at "2026-09-18T18:00" :work-name "候補"})
+                                             :end-at "2026-09-18T18:00" :work-name "候補"
+                                             :execution-status "in_progress"})
           (is (= "直" (:title (db/find-gantt-row ds (:id u) (:id gr)))))
+          (is (= "in_progress" (:execution_status (db/find-gantt-row ds (:id u) (:id gr)))))
           (is (= ["候補"] (db/list-gantt-work-names ds (:id u))))
           (is (= ["候補"] (db/list-work-name-candidates ds (:id u))))
           (db/delete-gantt-targets-for-field! ds (:id f2))
