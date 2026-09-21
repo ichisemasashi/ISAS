@@ -255,6 +255,10 @@
                            (dispatch! [:submit {:act "set-gantt-orient" :form {:orient v}}]))
         "daily-range" (do (queue-form-draft!)
                           (dispatch! [:submit {:act "set-daily-range" :form {:range v}}]))
+        "checklist-status" (when-let [form (.closest t "form[data-act]")]
+                             (queue-form-draft!)
+                             (dispatch! [:submit {:act (.getAttribute form "data-act")
+                                                  :form (form->map form)}]))
         "map-mode" (when-not (str/blank? v)
                      (queue-form-draft!)
                      (dispatch! [:submit {:act "set-map-mode" :form {:mode v}}]))

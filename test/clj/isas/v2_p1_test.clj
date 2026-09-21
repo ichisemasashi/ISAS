@@ -366,9 +366,9 @@
                         :daily-rows [] :daily-total 3})))
     (is (re-find #"作業タイトル"
                  (html {:page :works :fields [{:id 1}] :gantt-rows [] :gantt-titles []})))
-    (is (re-find #"新しい作業を追加"
+    (is (re-find #"新しい作業を登録"
                  (html {:page :works :fields [{:id 1}] :gantt-rows [] :gantt-titles []})))
-    (is (re-find #"題名ごとに作業を時間軸で見ます"
+    (is (re-find #"手順: ①題名を選ぶ"
                  (html {:page :gantt :fields [{:id 1}] :gantt-titles [] :gantt-rows []})))
     (is (re-find #"状態フィルタを1つ以上"
                  (html {:page :daily :fields [{:id 1}]
@@ -410,7 +410,7 @@
       (is (= 9 (get-in ctx-fail [:state :daily-total])))
       (is (zero? (get-in ctx-fail-nil [:state :daily-total])))
       (is (re-find #"題名のない作業はガントに出ません" orphan))
-      (is (re-find #"題名ごとに作業を時間軸で見ます" orphan-nil-rows)))
+      (is (re-find #"手順: ①題名を選ぶ" orphan-nil-rows)))
     (let [no-sess (ui/session-loaded (assoc (ui/init-state) :page :daily :kind "user"
                                             :narrow? false)
                                      {:ok false})

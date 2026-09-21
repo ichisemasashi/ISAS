@@ -62,7 +62,7 @@
       width: 100%; min-height: 14rem; line-height: 1.5; font-size: 1rem;
       box-sizing: border-box; padding: 0.4rem;
     }
-    .page-lead { margin: 0.5rem 0 1rem; color: #333; max-width: 40rem; line-height: 1.45; }
+    .page-lead { margin: 0.5rem 0 1rem; color: #333; max-width: 42rem; line-height: 1.45; }
     .section-title { margin: 1.25rem 0 0.35rem; font-size: 1.1rem; }
     .section-lead { margin: 0 0 0.75rem; color: #555; font-size: 0.95rem; }
     .field-hint { margin: 0.25rem 0 0; font-size: 0.85rem; color: #555; }
@@ -72,10 +72,25 @@
     .daily-item { margin: 0.75rem 0; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
     .daily-item-title { font-weight: 600; }
     .daily-item-time { color: #555; font-size: 0.9rem; }
-    .works-list form { margin: 0.35rem 0; }
-    .works-list .selected button { font-weight: bold; }
+    .works-list form.work-item { margin: 0.5rem 0; padding: 0.55rem 0.65rem; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
+    .works-list form.work-item.selected { border-color: #1565c0; background: #eef5fc; }
+    .works-list .work-open-btn { margin-top: 0; font-weight: 600; }
+    .work-item-meta { margin: 0.35rem 0 0; color: #555; font-size: 0.9rem; }
+    .pick-hint { margin: 1rem 0; padding: 0.85rem 1rem; background: #fff8e6; border: 1px solid #e6d39a; border-radius: 4px; max-width: 40rem; }
+    .pick-hint p { margin: 0; line-height: 1.45; }
+    .editing-banner { margin: 0 0 0.75rem; padding: 0.55rem 0.75rem; background: #eef5fc; border-left: 4px solid #1565c0; font-weight: 600; }
+    .editing-panel { background: #fcfcfc; padding: 0.75rem; border-radius: 4px; }
+    .gantt-children { margin: 1.25rem 0; padding: 0.85rem; border: 1px solid #c5d6ea; border-radius: 4px; background: #f7fbff; }
+    .child-panel { margin: 1rem 0; }
+    .child-add { margin: 0.75rem 0; padding: 0.75rem; background: #fff; border: 1px dashed #8aa7c7; border-radius: 4px; }
+    .child-add h4, .child-list h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+    .child-list { margin-top: 0.75rem; }
+    .work-time-item, .checklist-item { margin: 0.65rem 0; padding: 0.55rem 0; border-top: 1px solid #e3eaf2; }
+    .btn-primary { background: #1565c0; color: #fff; border: 1px solid #0d47a1; }
+    .danger-zone { margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid #e0cfcf; }
     .gantt-title-list form { display: inline-block; margin: 0.25rem 0.35rem 0.25rem 0; }
     .gantt-title-item.selected button { font-weight: bold; }
+    .gantt-row.selected button { font-weight: bold; }
   </style>
 </head>
 <body>

@@ -99,13 +99,15 @@
    :gantt-title "ガント"
    :phone-gantt "ガントの編集はパソコンで開いてください"
    :gantt-no-fields "圃場が1枚以上あるときだけ、ガントを使えます"
-   :gantt-lead "題名ごとに作業を時間軸で見ます。棒を選ぶと編集・進捗％・地図を確認できます"
+   :gantt-lead "手順: ①題名を選ぶ → ②棒または一覧から作業を選ぶ → ③基本情報・作業時間・チェックを直す"
    :gantt-orphan-hint "題名のない作業はガントに出ません。作業画面で題名を付けるか、そのまま管理できます"
    :gantt-section-titles "1. 題名を選ぶ"
-   :gantt-section-chart "2. 時間軸の作業"
-   :gantt-section-add "この題名に作業を足す"
-   :gantt-section-edit "選んだ作業を編集"
+   :gantt-section-chart "2. 作業を選ぶ（棒またはボタン）"
+   :gantt-section-add "この題名に作業を登録"
+   :gantt-section-edit "3. 基本情報を直す"
    :gantt-section-map "進捗と地図"
+   :gantt-pick-hint "棒または下の作業名を押すと、編集欄と作業時間・チェック項目が出ます"
+   :gantt-open-prefix "編集する: "
    :gantt-work-needed "対象圃場がある行は、作業名を入れてください"
    :gantt-time-order "終了は開始より後にしてください"
    :gantt-add "予定を足す"
@@ -123,15 +125,24 @@
    :gantt-title-of-work "関連する題名"
    :gantt-title-none "（なし）"
    :works-title "作業"
-   :works-lead "予定の追加・変更と実行状態の管理をします。日次一覧やガントからも同じ作業を扱えます"
-   :works-section-list "登録済みの作業"
-   :works-section-add "新しい作業を追加"
-   :works-section-edit "選んだ作業を編集"
+   :works-lead "手順: ①一覧から作業を選ぶ → ②基本情報を直す → ③作業時間・チェック項目を足す。新しい作業は一番下から登録します"
+   :works-section-list "1. 作業を選ぶ"
+   :works-section-add "新しい作業を登録"
+   :works-section-edit "2. 基本情報を直す"
+   :works-section-children "3. 作業時間とチェック項目"
+   :works-children-lead "この作業に紐づく明細です。上の一覧で作業を選んだあとに足せます"
+   :works-pick-hint "上の一覧で作業名のボタンを押すと、ここに編集欄と「作業時間・チェック項目」が出ます"
+   :works-editing-prefix "編集中: "
+   :works-open-prefix "編集する: "
+   :works-open-selected "（いま編集中）"
+   :works-basics-lead "題名・時刻・実行状態・作業名・対象圃場を直し「基本情報を保存」を押します"
+   :works-basics-save "基本情報を保存"
+   :works-delete-lead "この作業そのものを一覧から消します（作業時間・チェックも一緒に見えなくなります）"
    :nav-works "作業"
    :nav-gantt "ガント"
    :phone-works "作業の編集はパソコンで開いてください"
    :works-no-fields "圃場が1枚以上あるときだけ、作業を管理できます"
-   :works-empty "まだ作業がありません。下の「新しい作業を追加」から登録できます"
+   :works-empty "まだ作業がありません。下の「新しい作業を登録」から作れます"
    :daily-title "日次一覧"
    :daily-lead "今日・直近7日・すべての予定を、未着手／着手中／完了で回す一覧です"
    :nav-daily "日次"
@@ -163,16 +174,28 @@
    :range-invalid "期間の指定が正しくありません"
    :statuses-invalid "状態フィルタが正しくありません"
    :work-times "作業時間"
-   :work-time-add "作業時間を足す"
+   :work-times-lead "実際に働いた時間帯です。親の予定の外や重なりも登録できます"
+   :work-time-add "この時間を追加"
+   :work-time-add-heading "新しい作業時間を追加"
+   :work-time-list-heading "登録済みの作業時間"
+   :work-time-save "この時間を保存"
    :checklist-items "チェック項目"
-   :checklist-add "項目を足す"
+   :checklist-lead "やることリストです。状態を変えるとすぐ保存されます"
+   :checklist-label "項目名"
+   :checklist-add "この項目を追加"
+   :checklist-add-heading "新しいチェック項目を追加"
+   :checklist-list-heading "登録済みのチェック項目"
+   :checklist-save "項目名を保存"
    :checklist-done "やった"
    :checklist-pending "まだ"
-   :work-time-none "作業時間なし"
+   :checklist-status "状態"
+   :work-time-none "まだ作業時間がありません。上の欄から追加してください"
    :work-time-count-prefix "作業時間 "
    :work-time-count-suffix " 件"
    :checklist-summary-prefix "チェック "
-   :checklist-none "チェックなし"
+   :checklist-none "まだチェック項目がありません。上の欄から追加してください"
+   :daily-work-time-none "作業時間なし"
+   :daily-checklist-none "チェックなし"
    :label-required "項目名を入れてください"
    :label-too-long "項目名は200文字以内にしてください"
    :work-time-not-found "その作業時間はありません"
@@ -427,13 +450,15 @@
    :gantt-title "Gantt"
    :phone-gantt "Edit the Gantt on a computer"
    :gantt-no-fields "Gantt is available only when you have at least one field"
-   :gantt-lead "View works on a time axis under each title. Select a bar to edit, see progress %, and the map"
+   :gantt-lead "Steps: ① choose a title → ② select a work (bar or button) → ③ edit basics, work times, and checklist"
    :gantt-orphan-hint "Works without a title do not appear on the Gantt. Open Works to assign a title or manage them there"
    :gantt-section-titles "1. Choose a title"
-   :gantt-section-chart "2. Works on the time axis"
+   :gantt-section-chart "2. Choose a work (bar or button)"
    :gantt-section-add "Add a work under this title"
-   :gantt-section-edit "Edit the selected work"
+   :gantt-section-edit "3. Edit basics"
    :gantt-section-map "Progress and map"
+   :gantt-pick-hint "Click a bar or work name to open editing, work times, and checklist"
+   :gantt-open-prefix "Edit: "
    :gantt-work-needed "Rows with target fields need a work name"
    :gantt-time-order "End must be after start"
    :gantt-add "Add schedule"
@@ -451,15 +476,24 @@
    :gantt-title-of-work "Related title"
    :gantt-title-none "(none)"
    :works-title "Works"
-   :works-lead "Add and edit schedules and execution status. The same works appear on Daily and Gantt"
-   :works-section-list "Registered works"
-   :works-section-add "Add a new work"
-   :works-section-edit "Edit the selected work"
+   :works-lead "Steps: ① pick a work → ② edit basics → ③ add work times and checklist items. Register new works at the bottom"
+   :works-section-list "1. Choose a work"
+   :works-section-add "Register a new work"
+   :works-section-edit "2. Edit basics"
+   :works-section-children "3. Work times and checklist"
+   :works-children-lead "Details for this work. Available after you pick a work above"
+   :works-pick-hint "Press a work name above to open editing and “work times / checklist” here"
+   :works-editing-prefix "Editing: "
+   :works-open-prefix "Edit: "
+   :works-open-selected " (editing now)"
+   :works-basics-lead "Change title, times, status, work name, and fields, then press “Save basics”"
+   :works-basics-save "Save basics"
+   :works-delete-lead "Removes this work from the list (its work times and checklist also disappear from normal views)"
    :nav-works "Works"
    :nav-gantt "Gantt"
    :phone-works "Edit works on a computer"
    :works-no-fields "Work management is available only when you have at least one field"
-   :works-empty "No works yet. Use “Add a new work” below"
+   :works-empty "No works yet. Use “Register a new work” below"
    :daily-title "Daily list"
    :daily-lead "Run plans for today, the last 7 days, or all, with Not started / In progress / Done"
    :nav-daily "Daily"
@@ -491,16 +525,28 @@
    :range-invalid "Invalid range"
    :statuses-invalid "Invalid status filter"
    :work-times "Work times"
-   :work-time-add "Add work time"
+   :work-times-lead "Actual time worked. May fall outside or overlap the parent schedule"
+   :work-time-add "Add this time"
+   :work-time-add-heading "Add a work time"
+   :work-time-list-heading "Saved work times"
+   :work-time-save "Save this time"
    :checklist-items "Checklist"
-   :checklist-add "Add item"
+   :checklist-lead "To-do items. Changing status saves immediately"
+   :checklist-label "Item name"
+   :checklist-add "Add this item"
+   :checklist-add-heading "Add a checklist item"
+   :checklist-list-heading "Saved checklist items"
+   :checklist-save "Save item name"
    :checklist-done "Done"
    :checklist-pending "Pending"
-   :work-time-none "No work times"
+   :checklist-status "Status"
+   :work-time-none "No work times yet. Add one above"
    :work-time-count-prefix "Work times: "
    :work-time-count-suffix ""
    :checklist-summary-prefix "Checklist "
-   :checklist-none "No checklist"
+   :checklist-none "No checklist items yet. Add one above"
+   :daily-work-time-none "No work times"
+   :daily-checklist-none "No checklist"
    :label-required "Enter an item name"
    :label-too-long "Item name must be 200 characters or fewer"
    :work-time-not-found "That work time does not exist"
@@ -1904,7 +1950,7 @@
 (defn- checklist-status-select-html [selected select-id]
   (let [cur (let [s (str (or selected "pending"))]
               (if (#{"pending" "done"} s) s "pending"))]
-    (str "<select name=\"status\""
+    (str "<select name=\"status\" data-select=\"checklist-status\""
          (when-not (str/blank? (str select-id))
            (str " id=\"" (esc select-id) "\""))
          ">"
@@ -1920,14 +1966,14 @@
   (let [c (or n 0)]
     (if (pos? c)
       (str (m :work-time-count-prefix) c (m :work-time-count-suffix))
-      (m :work-time-none))))
+      (m :daily-work-time-none))))
 
 (defn- daily-checklist-summary [done total]
   (let [t (or total 0)
         d (or done 0)]
     (if (pos? t)
       (str (m :checklist-summary-prefix) d "/" t)
-      (m :checklist-none))))
+      (m :daily-checklist-none))))
 
 (defn- gantt-children-edit-html [state gid prefix]
   (let [id (str gid)
@@ -1935,8 +1981,23 @@
         items (or (:gantt-checklist-items state) [])]
     (str
      "<div class=\"gantt-children\" id=\"" (esc prefix) "-children\">"
-     "<section class=\"form-section\" id=\"" (esc prefix) "-work-times\">"
+     "<h2 class=\"section-title\">" (esc (m :works-section-children)) "</h2>"
+     "<p class=\"section-lead\">" (esc (m :works-children-lead)) "</p>"
+     "<section class=\"child-panel\" id=\"" (esc prefix) "-work-times\">"
      "<h3>" (esc (m :work-times)) "</h3>"
+     "<p class=\"section-lead\">" (esc (m :work-times-lead)) "</p>"
+     "<div class=\"child-add\" id=\"" (esc prefix) "-work-time-add-box\">"
+     "<h4>" (esc (m :work-time-add-heading)) "</h4>"
+     "<form data-act=\"add-work-time\" method=\"post\" id=\"" (esc prefix) "-work-time-add\">"
+     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+     "<label>" (esc (m :gantt-start))
+     "<input name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
+     "<label>" (esc (m :gantt-end))
+     "<input name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
+     "<button type=\"submit\" class=\"btn-primary\">" (esc (m :work-time-add)) "</button></form>"
+     "</div>"
+     "<div class=\"child-list\">"
+     "<h4>" (esc (m :work-time-list-heading)) "</h4>"
      (if (empty? times)
        (str "<p class=\"empty-hint\">" (esc (m :work-time-none)) "</p>")
        (apply str
@@ -1951,48 +2012,54 @@
                        "<label>" (esc (m :gantt-end))
                        "<input name=\"end_at\" value=\"" (esc (:end_at t)) "\" required></label>"
                        (when dur (str "<span class=\"work-time-duration\">" (esc dur) "</span>"))
-                       "<button type=\"submit\">" (esc (m :btn-save)) "</button></form>"
-                       "<form data-act=\"delete-work-time\" method=\"post\""
+                       "<button type=\"submit\">" (esc (m :work-time-save)) "</button></form>"
+                       "<form data-act=\"delete-work-time\" method=\"post\" class=\"inline\""
                        " data-confirm=\"" (esc (m :work-time-delete-confirm)) "\">"
                        "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
                        "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id t)) "\">"
                        "<button type=\"submit\">" (esc (m :gantt-delete)) "</button></form>"
                        "</div>")))))
-     "<form data-act=\"add-work-time\" method=\"post\" id=\"" (esc prefix) "-work-time-add\">"
-     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
-     "<label>" (esc (m :gantt-start))
-     "<input name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
-     "<label>" (esc (m :gantt-end))
-     "<input name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
-     "<button type=\"submit\">" (esc (m :work-time-add)) "</button></form>"
+     "</div>"
      "</section>"
-     "<section class=\"form-section\" id=\"" (esc prefix) "-checklist\">"
+     "<section class=\"child-panel\" id=\"" (esc prefix) "-checklist\">"
      "<h3>" (esc (m :checklist-items)) "</h3>"
+     "<p class=\"section-lead\">" (esc (m :checklist-lead)) "</p>"
+     "<div class=\"child-add\" id=\"" (esc prefix) "-checklist-add-box\">"
+     "<h4>" (esc (m :checklist-add-heading)) "</h4>"
+     "<form data-act=\"add-checklist-item\" method=\"post\" id=\"" (esc prefix) "-checklist-add\">"
+     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+     "<label>" (esc (m :checklist-label))
+     "<input name=\"label\" required></label>"
+     "<button type=\"submit\" class=\"btn-primary\">" (esc (m :checklist-add)) "</button></form>"
+     "</div>"
+     "<div class=\"child-list\">"
+     "<h4>" (esc (m :checklist-list-heading)) "</h4>"
      (if (empty? items)
        (str "<p class=\"empty-hint\">" (esc (m :checklist-none)) "</p>")
        (apply str
               (for [c items]
                 (str "<div class=\"checklist-item\" id=\"" (esc prefix) "-ci-" (esc (:id c)) "\">"
+                     "<form data-act=\"save-checklist-item\" method=\"post\" class=\"checklist-status-form\">"
+                     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+                     "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id c)) "\">"
+                     "<input type=\"hidden\" name=\"label\" value=\"" (esc (:label c)) "\">"
+                     "<label>" (esc (m :checklist-status))
+                     (checklist-status-select-html (:status c) (str prefix "-ci-status-" (:id c)))
+                     "</label></form>"
                      "<form data-act=\"save-checklist-item\" method=\"post\">"
                      "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
                      "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id c)) "\">"
-                     "<label>" (esc (m :checklist-items))
+                     "<input type=\"hidden\" name=\"status\" value=\"" (esc (:status c)) "\">"
+                     "<label>" (esc (m :checklist-label))
                      "<input name=\"label\" value=\"" (esc (:label c)) "\" required></label>"
-                     "<label>" (esc (m :checklist-done)) "/" (esc (m :checklist-pending))
-                     (checklist-status-select-html (:status c) (str prefix "-ci-status-" (:id c)))
-                     "</label>"
-                     "<button type=\"submit\">" (esc (m :btn-save)) "</button></form>"
-                     "<form data-act=\"delete-checklist-item\" method=\"post\""
+                     "<button type=\"submit\">" (esc (m :checklist-save)) "</button></form>"
+                     "<form data-act=\"delete-checklist-item\" method=\"post\" class=\"inline\""
                      " data-confirm=\"" (esc (m :checklist-delete-confirm)) "\">"
                      "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
                      "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id c)) "\">"
                      "<button type=\"submit\">" (esc (m :gantt-delete)) "</button></form>"
                      "</div>"))))
-     "<form data-act=\"add-checklist-item\" method=\"post\" id=\"" (esc prefix) "-checklist-add\">"
-     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
-     "<label>" (esc (m :checklist-items))
-     "<input name=\"label\" required></label>"
-     "<button type=\"submit\">" (esc (m :checklist-add)) "</button></form>"
+     "</div>"
      "</section>"
      "</div>")))
 
@@ -2068,38 +2135,30 @@
                                    (str "<form class=\"work-item" (when selected? " selected")
                                         "\" data-act=\"select-gantt-row\" method=\"post\">"
                                         "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
-                                        "<button type=\"submit\" id=\"work-btn-" (esc (:id r)) "\">"
-                                        (esc (:title r))
-                                        " / " (esc (work-related-title-label state (:title_id r)))
-                                        " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")"
-                                        " [" (esc (execution-status-label (:execution_status r))) "]"
-                                        "</button></form>")))))
+                                        "<button type=\"submit\" class=\"work-open-btn\" id=\"work-btn-"
+                                        (esc (:id r)) "\">"
+                                        (esc (m :works-open-prefix)) (esc (:title r))
+                                        (when selected? (esc (m :works-open-selected)))
+                                        "</button>"
+                                        "<p class=\"work-item-meta\">"
+                                        (esc (work-related-title-label state (:title_id r)))
+                                        " · " (esc (:start_at r)) "〜" (esc (:end_at r))
+                                        " · " (esc (execution-status-label (:execution_status r)))
+                                        "</p></form>")))))
                       "</section>"
-                      "<section class=\"form-section\" id=\"works-add-section\">"
-                      (section-title-html :works-section-add)
-                      "<p class=\"section-lead\">" (esc (m :works-lead)) "</p>"
-                      "<form data-act=\"add-gantt-row\" method=\"post\" id=\"works-add-form\">"
-                      "<label>" (esc (m :gantt-title-of-work))
-                      (gantt-title-select-html titles nil true "works-add-title-id") "</label>"
-                      "<label>" (esc (m :gantt-title-label))
-                      "<input id=\"works-new-title\" name=\"title\" value=\"" (esc (:title defs))
-                      "\" placeholder=\"" (esc (m :gantt-work-new-placeholder)) "\">"
-                      (field-hint (m :gantt-title-hint)) "</label>"
-                      "<label>" (esc (m :gantt-start))
-                      "<input id=\"works-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
-                      "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
-                      "<label>" (esc (m :gantt-end))
-                      "<input id=\"works-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
-                      "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
-                      "<p class=\"field-hint\">" (esc (m :execution-status)) ": "
-                      (esc (m :exec-not-started)) "</p>"
-                      "<button type=\"submit\" id=\"works-add-btn\">"
-                      (esc (m :gantt-work-add)) "</button></form>"
-                      "</section>"
-                      (when sel
+                      (cond
+                        (nil? sel)
+                        (when (seq rows)
+                          (str "<aside class=\"pick-hint\" id=\"works-pick-hint\">"
+                               "<p>" (esc (m :works-pick-hint)) "</p></aside>"))
+
+                        :else
                         (str
-                         "<section class=\"form-section\" id=\"works-edit-section\">"
+                         "<section class=\"form-section editing-panel\" id=\"works-edit-section\">"
+                         "<p class=\"editing-banner\" id=\"works-editing-banner\">"
+                         (esc (m :works-editing-prefix)) (esc (:title sel)) "</p>"
                          (section-title-html :works-section-edit)
+                         "<p class=\"section-lead\">" (esc (m :works-basics-lead)) "</p>"
                          "<form data-act=\"save-gantt-row\" method=\"post\" id=\"works-save-form\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                          "<label>" (esc (m :gantt-title-of-work))
@@ -2123,15 +2182,38 @@
                          "</datalist>"
                          (field-hint (m :work-name-hint)) "</label>"
                          (work-targets-fieldset fields (:field_ids sel))
-                         "<button type=\"submit\" id=\"works-save-btn\">"
-                         (esc (m :btn-save)) "</button></form>"
+                         "<button type=\"submit\" id=\"works-save-btn\" class=\"btn-primary\">"
+                         (esc (m :works-basics-save)) "</button></form>"
                          (gantt-children-edit-html state (:id sel) "works")
+                         "<div class=\"danger-zone\">"
+                         "<p class=\"section-lead\">" (esc (m :works-delete-lead)) "</p>"
                          "<form data-act=\"delete-gantt-row\" method=\"post\" id=\"works-delete-form\""
                          " data-confirm=\"" (esc (m :gantt-delete-confirm)) "\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                          "<button type=\"submit\" id=\"works-delete-btn\">"
                          (esc (m :gantt-delete)) "</button></form>"
-                         "</section>")))))))))
+                         "</div>"
+                         "</section>"))
+                      "<section class=\"form-section\" id=\"works-add-section\">"
+                      (section-title-html :works-section-add)
+                      "<form data-act=\"add-gantt-row\" method=\"post\" id=\"works-add-form\">"
+                      "<label>" (esc (m :gantt-title-of-work))
+                      (gantt-title-select-html titles nil true "works-add-title-id") "</label>"
+                      "<label>" (esc (m :gantt-title-label))
+                      "<input id=\"works-new-title\" name=\"title\" value=\"" (esc (:title defs))
+                      "\" placeholder=\"" (esc (m :gantt-work-new-placeholder)) "\">"
+                      (field-hint (m :gantt-title-hint)) "</label>"
+                      "<label>" (esc (m :gantt-start))
+                      "<input id=\"works-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
+                      "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<label>" (esc (m :gantt-end))
+                      "<input id=\"works-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
+                      "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<p class=\"field-hint\">" (esc (m :execution-status)) ": "
+                      (esc (m :exec-not-started)) "</p>"
+                      "<button type=\"submit\" id=\"works-add-btn\" class=\"btn-primary\">"
+                      (esc (m :gantt-work-add)) "</button></form>"
+                      "</section>")))))))
 
 (defn daily-view [state]
   (let [fields (:fields state)
@@ -2307,35 +2389,29 @@
                                            " data-start=\"" (esc (:start_at r)) "\" data-end=\"" (esc (:end_at r)) "\""
                                            " data-id=\"" (esc (:id r)) "\">"
                                            "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
-                                           "<button type=\"submit\">" (esc (:title r))
-                                           " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")"
+                                           "<button type=\"submit\">"
+                                           (esc (m :gantt-open-prefix)) (esc (:title r))
+                                           (when selected? (esc (m :works-open-selected)))
+                                           "<span class=\"work-item-meta\"> ("
+                                           (esc (:start_at r)) "〜" (esc (:end_at r)) ")"
                                            " [" (esc (execution-status-label (:execution_status r))) "]"
-                                           "</button>"
+                                           "</span></button>"
                                            "<div class=\"gantt-bar\"></div></form>")))))
                          "</div>"
                          "</div>"
                          "</div>"
-                         "<section class=\"form-section\" id=\"gantt-add-section\">"
-                         (section-title-html :gantt-section-add)
-                         "<form data-act=\"add-gantt-row\" method=\"post\" id=\"gantt-add-form\">"
-                         "<input type=\"hidden\" name=\"title_id\" value=\"" (esc (:id title-sel)) "\">"
-                         "<label>" (esc (m :gantt-title-label))
-                         "<input id=\"gantt-new-title\" name=\"title\" value=\"" (esc (:title defs))
-                         "\" placeholder=\"" (esc (m :gantt-work-new-placeholder)) "\">"
-                         (field-hint (m :gantt-title-hint)) "</label>"
-                         "<label>" (esc (m :gantt-start))
-                         "<input id=\"gantt-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
-                         "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
-                         "<label>" (esc (m :gantt-end))
-                         "<input id=\"gantt-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
-                         "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
-                         "<button type=\"submit\" id=\"gantt-add-btn\">"
-                         (esc (m :gantt-work-add)) "</button></form>"
-                         "</section>"
+                         (when (and (seq title-rows)
+                                    (or (nil? sel)
+                                        (not (same-gantt-id? (:title_id sel) (:id title-sel)))))
+                           (str "<aside class=\"pick-hint\" id=\"gantt-pick-hint\">"
+                                "<p>" (esc (m :gantt-pick-hint)) "</p></aside>"))
                          (when (and sel (same-gantt-id? (:title_id sel) (:id title-sel)))
                            (str
-                            "<section class=\"form-section\" id=\"gantt-edit-section\">"
+                            "<section class=\"form-section editing-panel\" id=\"gantt-edit-section\">"
+                            "<p class=\"editing-banner\" id=\"gantt-editing-banner\">"
+                            (esc (m :works-editing-prefix)) (esc (:title sel)) "</p>"
                             (section-title-html :gantt-section-edit)
+                            "<p class=\"section-lead\">" (esc (m :works-basics-lead)) "</p>"
                             "<form data-act=\"save-gantt-row\" method=\"post\" id=\"gantt-save-form\">"
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                             "<label>" (esc (m :gantt-title-of-work))
@@ -2373,9 +2449,11 @@
                                             (when checked? " checked") "> "
                                             (esc (:name f)) "</label>"))))
                             "</fieldset>"
-                            "<button type=\"submit\" id=\"gantt-save-btn\">"
-                            (esc (m :btn-save)) "</button></form>"
+                            "<button type=\"submit\" id=\"gantt-save-btn\" class=\"btn-primary\">"
+                            (esc (m :works-basics-save)) "</button></form>"
                             (gantt-children-edit-html state (:id sel) "gantt")
+                            "<div class=\"danger-zone\">"
+                            "<p class=\"section-lead\">" (esc (m :works-delete-lead)) "</p>"
                             "<form data-act=\"delete-gantt-row\" method=\"post\" id=\"gantt-delete-form\""
                             " data-confirm=\"" (esc (m :gantt-delete-confirm)) "\">"
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
@@ -2385,6 +2463,7 @@
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                             "<button type=\"submit\" id=\"gantt-review-btn\">"
                             (esc (m :gantt-review)) "</button></form>"
+                            "</div>"
                             (when-let [days (:gantt-progress-days state)]
                               (str "<div id=\"gantt-review-list\" class=\"gantt-review\">"
                                    "<h3>" (esc (m :gantt-review)) "</h3>"
@@ -2402,6 +2481,23 @@
                                           "</tbody></table>"))
                                    "</div>"))
                             "</section>"))
+                         "<section class=\"form-section\" id=\"gantt-add-section\">"
+                         (section-title-html :gantt-section-add)
+                         "<form data-act=\"add-gantt-row\" method=\"post\" id=\"gantt-add-form\">"
+                         "<input type=\"hidden\" name=\"title_id\" value=\"" (esc (:id title-sel)) "\">"
+                         "<label>" (esc (m :gantt-title-label))
+                         "<input id=\"gantt-new-title\" name=\"title\" value=\"" (esc (:title defs))
+                         "\" placeholder=\"" (esc (m :gantt-work-new-placeholder)) "\">"
+                         (field-hint (m :gantt-title-hint)) "</label>"
+                         "<label>" (esc (m :gantt-start))
+                         "<input id=\"gantt-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
+                         "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                         "<label>" (esc (m :gantt-end))
+                         "<input id=\"gantt-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
+                         "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                         "<button type=\"submit\" id=\"gantt-add-btn\" class=\"btn-primary\">"
+                         (esc (m :gantt-work-add)) "</button></form>"
+                         "</section>"
                          "<section class=\"form-section\" id=\"gantt-map-section\">"
                          (section-title-html :gantt-section-map)
                          "<div id=\"gantt-circle\" class=\"gantt-circle\""

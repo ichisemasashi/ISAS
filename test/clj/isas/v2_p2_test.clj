@@ -46,11 +46,24 @@
                    :gantt-checklist-items [{:id 2 :gantt_id 10 :label "油量" :status "pending"}]})]
       (is (re-find #"works-work-times|作業時間" h))
       (is (re-find #"works-checklist|チェック項目" h))
-      (is (re-find #"作業時間を足す" h))
-      (is (re-find #"項目を足す" h))
+      (is (re-find #"この時間を追加" h))
+      (is (re-find #"この項目を追加" h))
+      (is (re-find #"編集中:" h))
+      (is (re-find #"基本情報を保存" h))
       (is (re-find #"1時間30分" h))
       (is (re-find #"data-confirm=.*作業時間を消します" h))
-      (is (re-find #"data-confirm=.*チェック項目を消します" h))))
+      (is (re-find #"data-confirm=.*チェック項目を消します" h))
+      (is (re-find #"data-select=\"checklist-status\"" h))))
+  (testing "V2P2-2.1-01b 未選択時は案内だけ"
+    (let [h (html {:page :works :fields [{:id 1 :name "北"}]
+                   :gantt-rows [{:id 10 :title "作業A" :title_id 1
+                                 :start_at "2026-09-21T08:00" :end_at "2026-09-21T17:00"
+                                 :execution_status "not_started" :field_ids []}]
+                   :gantt-titles [{:id 1 :name "題A"}]})]
+      (is (re-find #"編集する:" h))
+      (is (re-find #"works-pick-hint" h))
+      (is (re-find #"作業名のボタンを押すと" h))
+      (is (nil? (re-find #"works-children" h)))))
   (testing "V2P2-2.1-02 /gantt 行編集"
     (let [h (html {:page :gantt :fields [{:id 1 :name "北"}]
                    :gantt-titles [{:id 1 :name "題A"}]
@@ -464,7 +477,7 @@
     (is (re-find #"pending"
                  (ui/with-ui-lang {:ui-lang "ja"}
                    #(#'ui/checklist-status-select-html nil nil))))
-    (is (re-find #"作業時間なし"
+    (is (re-find #"まだ作業時間がありません"
                  (ui/with-ui-lang {:ui-lang "ja"}
                    #(#'ui/gantt-children-edit-html
                      {:gantt-work-times nil :gantt-checklist-items nil} 1 "works"))))
