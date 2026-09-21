@@ -229,7 +229,7 @@
             (is (re-find #"手描き|修正|分割|合筆" h))
             (is (re-find #"data-select=\"map-mode\"" h))
             (is (not (re-find #"圃場を保存|合筆する|分割を保存" h)))
-            (is (not (re-find #"ガント|指示" h)))
+            (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"|指示" h)))
             (is (re-find #"圃場を保存" (html {:page :map :place place :map-mode "draw"})))
             (is (re-find #"やめる" (html {:page :map :place place :map-mode "draw"})))))
         (testing "P2-2.6-06 取込は Polygon ごと。点は飛ばす"

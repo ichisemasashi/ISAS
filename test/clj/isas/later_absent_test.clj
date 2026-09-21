@@ -21,7 +21,7 @@
             admin-home (html {:page :home :kind "admin"})]
         (testing "B3-2-04 / P3-2.1-08 指示は地図に出さない。ガント表はある"
           (is (not (re-find #"指示" map-html)))
-          (is (not (re-find #"ガント" map-html)))
+          (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"" map-html)))
           (is (contains? names "paints"))
           (is (contains? names "gantt_rows")))
         (testing "B3-2-03 / B3-5.4-01 狭い画面に塗りは持たない"
@@ -31,7 +31,7 @@
           (is (= [:gantt-delete "1"] (http/match-api :delete "/api/user/gantt/1")))
           (is (nil? (http/match-api :get "/api/user/gantt/percent")))
           (is (= :gantt (:page (ui/route-for "/gantt"))))
-          (is (not (re-find #"href=\"/gantt\"" home))))
+          (is (re-find #"href=\"/gantt\"" home)))
         (testing "P5 指示・日誌・切断はある"
           (is (= [:orders-post] (http/match-api :post "/api/user/orders")))
           (is (= [:relations-cut] (http/match-api :post "/api/admin/relations/cut")))

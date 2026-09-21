@@ -100,7 +100,7 @@
       (is (not= :api (ffirst (:fx r))))))
   (testing "P3-2.1-08 / P3-6-01 ガント・％・指示は出さない"
     (let [h (map-html [{:id 1 :name "北"}])]
-      (is (not (re-find #"ガント|パーセントサークル|指示" h)))))
+      (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"|パーセントサークル|指示" h)))))
   (testing "P3-2.4-01 / P3-2.4-05 未選択は進捗色なし。下地は工程2のまま"
     (let [h (html {:page :map
                    :place {:west 139 :south 35 :east 141 :north 37}

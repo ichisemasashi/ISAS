@@ -629,7 +629,7 @@
       (is (= :html (tu/fx-op s [:gantt-title-save-result {:ok false :code "title_required"}])))
       (is (= :api (tu/fx-op s [:gantt-title-delete-result {:ok true}])))
       (is (= :html (tu/fx-op s [:gantt-title-delete-result {:ok false :code "title_not_found"}])))
-      (is (= "題名を選んでください" (ui/code-message "title_not_found")))
+      (is (= "先に題名を選ぶか、下で題名を足してください" (ui/code-message "title_not_found")))
       (is (re-find #"題名を足す|gantt-title-add" (ui/render s)))
       (is (re-find #"作業を足す" (ui/render s)))
       (is (re-find #"gantt-titles" (ui/render (dissoc s :gantt-titles))))

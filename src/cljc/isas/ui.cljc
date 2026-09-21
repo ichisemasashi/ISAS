@@ -99,14 +99,22 @@
    :gantt-title "ガント"
    :phone-gantt "ガントの編集はパソコンで開いてください"
    :gantt-no-fields "圃場が1枚以上あるときだけ、ガントを使えます"
+   :gantt-lead "題名ごとに作業を時間軸で見ます。棒を選ぶと編集・進捗％・地図を確認できます"
+   :gantt-orphan-hint "題名のない作業はガントに出ません。作業画面で題名を付けるか、そのまま管理できます"
+   :gantt-section-titles "1. 題名を選ぶ"
+   :gantt-section-chart "2. 時間軸の作業"
+   :gantt-section-add "この題名に作業を足す"
+   :gantt-section-edit "選んだ作業を編集"
+   :gantt-section-map "進捗と地図"
    :gantt-work-needed "対象圃場がある行は、作業名を入れてください"
    :gantt-time-order "終了は開始より後にしてください"
    :gantt-add "予定を足す"
-   :gantt-title-label "表示名"
+   :gantt-title-label "作業タイトル"
+   :gantt-title-hint "一覧やガントの棒に出る名前です。題名（グループ）や塗り用の作業名とは別です"
    :gantt-titles-label "題名"
    :gantt-title-add "題名を足す"
    :gantt-title-new-placeholder "新しい題名"
-   :gantt-title-select "題名を選んでください"
+   :gantt-title-select "先に題名を選ぶか、下で題名を足してください"
    :gantt-title-deleted "題名を消しました"
    :gantt-title-delete-confirm "この題名と中の作業を一覧から消します。よろしいですか？"
    :gantt-work-add "作業を足す"
@@ -115,19 +123,37 @@
    :gantt-title-of-work "関連する題名"
    :gantt-title-none "（なし）"
    :works-title "作業"
+   :works-lead "予定の追加・変更と実行状態の管理をします。日次一覧やガントからも同じ作業を扱えます"
+   :works-section-list "登録済みの作業"
+   :works-section-add "新しい作業を追加"
+   :works-section-edit "選んだ作業を編集"
    :nav-works "作業"
+   :nav-gantt "ガント"
    :phone-works "作業の編集はパソコンで開いてください"
    :works-no-fields "圃場が1枚以上あるときだけ、作業を管理できます"
-   :works-empty "まだ作業がありません"
+   :works-empty "まだ作業がありません。下の「新しい作業を追加」から登録できます"
    :daily-title "日次一覧"
+   :daily-lead "今日や今週の予定を、未着手／着手中／完了で回す一覧です"
    :nav-daily "日次"
    :phone-daily "日次一覧はパソコンで開いてください"
    :daily-no-fields "圃場が1枚以上あるときだけ、日次一覧を使えます"
    :daily-today "今日"
    :daily-week "今週"
    :daily-range-label "期間"
+   :daily-filter-apply "絞り込む"
    :daily-filter-empty "状態フィルタを1つ以上オンにしてください"
    :daily-empty "該当する作業はありません"
+   :daily-empty-filtered "選んだ期間・状態に重なる作業がありません。期間を変えるか、作業画面で開始・終了を確認してください"
+   :daily-link-works "作業画面を開く"
+   :daily-section-list "一覧"
+   :daily-section-filter "期間と状態"
+   :home-link-daily "今日・今週の予定を実行状態で回す"
+   :home-link-works "予定の追加・編集"
+   :home-link-gantt "題名ごとの時間軸・進捗・地図"
+   :fields-lead "圃場の名前・面積・メモを直します。新しい圃場は地図画面で作ります"
+   :invite-lead "相手のメールアドレスを入れると、初期パスワード付きで招待できます"
+   :password-lead "今のパスワードを確認してから、新しいパスワードに換えます"
+   :work-name-hint "地図の塗りや進捗％と結びつける名前です。無くてもかまいません"
    :execution-status "実行状態"
    :exec-not-started "未着手"
    :exec-in-progress "着手中"
@@ -175,6 +201,7 @@
    :others-title "他人の対象圃場"
    :relations-title "関係を切る"
    :order-no-fields "圃場が1枚以上あるときだけ、指示を出せます"
+   :orders-new-lead "相手・日付・時間・作業名・対象圃場を入れて指示を出します"
    :recipient-not-user "このメールアドレスの利用者には出せません"
    :recipient-self "自分は受け手に含められません"
    :relation-busy "進行中の指示がある二人は関係を切れません"
@@ -378,14 +405,22 @@
    :gantt-title "Gantt"
    :phone-gantt "Edit the Gantt on a computer"
    :gantt-no-fields "Gantt is available only when you have at least one field"
+   :gantt-lead "View works on a time axis under each title. Select a bar to edit, see progress %, and the map"
+   :gantt-orphan-hint "Works without a title do not appear on the Gantt. Open Works to assign a title or manage them there"
+   :gantt-section-titles "1. Choose a title"
+   :gantt-section-chart "2. Works on the time axis"
+   :gantt-section-add "Add a work under this title"
+   :gantt-section-edit "Edit the selected work"
+   :gantt-section-map "Progress and map"
    :gantt-work-needed "Rows with target fields need a work name"
    :gantt-time-order "End must be after start"
    :gantt-add "Add schedule"
-   :gantt-title-label "Label"
+   :gantt-title-label "Work title"
+   :gantt-title-hint "Shown on lists and Gantt bars. Different from the group title and the paint work name"
    :gantt-titles-label "Title"
    :gantt-title-add "Add title"
    :gantt-title-new-placeholder "New title"
-   :gantt-title-select "Select a title"
+   :gantt-title-select "Select a title above, or add one below"
    :gantt-title-deleted "Title removed"
    :gantt-title-delete-confirm "Remove this title and its works from the list?"
    :gantt-work-add "Add work"
@@ -394,19 +429,37 @@
    :gantt-title-of-work "Related title"
    :gantt-title-none "(none)"
    :works-title "Works"
+   :works-lead "Add and edit schedules and execution status. The same works appear on Daily and Gantt"
+   :works-section-list "Registered works"
+   :works-section-add "Add a new work"
+   :works-section-edit "Edit the selected work"
    :nav-works "Works"
+   :nav-gantt "Gantt"
    :phone-works "Edit works on a computer"
    :works-no-fields "Work management is available only when you have at least one field"
-   :works-empty "No works yet"
+   :works-empty "No works yet. Use “Add a new work” below"
    :daily-title "Daily list"
+   :daily-lead "Run today’s or this week’s plans with Not started / In progress / Done"
    :nav-daily "Daily"
    :phone-daily "Open the daily list on a computer"
    :daily-no-fields "Daily list is available only when you have at least one field"
    :daily-today "Today"
    :daily-week "This week"
    :daily-range-label "Range"
+   :daily-filter-apply "Apply filters"
    :daily-filter-empty "Turn on at least one status filter"
    :daily-empty "No matching works"
+   :daily-empty-filtered "No works overlap the selected range and statuses. Change the range or check start/end on Works"
+   :daily-link-works "Open Works"
+   :daily-section-list "List"
+   :daily-section-filter "Range and status"
+   :home-link-daily "Run plans for today or this week by status"
+   :home-link-works "Add and edit schedules"
+   :home-link-gantt "Time axis, progress, and map by title"
+   :fields-lead "Edit field names, areas, and memos. Create new fields on the map"
+   :invite-lead "Enter the counterpart’s email to invite them with an initial password"
+   :password-lead "Confirm your current password, then set a new one"
+   :work-name-hint "Links to map paint and progress %. Optional"
    :execution-status "Execution status"
    :exec-not-started "Not started"
    :exec-in-progress "In progress"
@@ -454,6 +507,7 @@
    :others-title "Others' target fields"
    :relations-title "Cut relation"
    :order-no-fields "Orders can be created only when you have at least one field"
+   :orders-new-lead "Enter recipients, date, time, work name, and target fields to create an order"
    :recipient-not-user "Cannot send to a user with this email address"
    :recipient-self "You cannot include yourself as a recipient"
    :relation-busy "Cannot cut a relation while the two have an open order"
@@ -848,9 +902,10 @@
    :gantt-axis "day"
    :gantt-orient "time-h"
    :gantt-finalize-result nil
-   :daily-range "today"
+   :daily-range "week"
    :daily-statuses ["not_started" "in_progress"]
    :daily-rows []
+   :daily-total nil
    :orders-sent []
    :orders-received []
    :order nil
@@ -916,9 +971,11 @@
   (str "<nav>"
        (lang-switcher state)
        "<a data-nav href=\"/home\">" (esc (m :nav-home)) "</a>"
+       "<a data-nav href=\"/daily\">" (esc (m :nav-daily)) "</a>"
+       "<a data-nav href=\"/works\">" (esc (m :nav-works)) "</a>"
+       "<a data-nav href=\"/gantt\">" (esc (m :nav-gantt)) "</a>"
        "<a data-nav href=\"/fields\">" (esc (m :nav-fields)) "</a>"
        "<a data-nav href=\"/map\">" (esc (m :nav-map)) "</a>"
-       "<a data-nav href=\"/works\">" (esc (m :nav-works)) "</a>"
        "<a data-nav href=\"/invite\">" (esc (m :nav-invite)) "</a>"
        "<a data-nav href=\"/password\">" (esc (m :nav-password)) "</a>"
        "<form data-act=\"logout\" method=\"post\"><button type=\"submit\">"
@@ -977,9 +1034,12 @@
                  (flash-html state)
                  "<p>" (esc (get-in state [:session :email])) "</p>"
                  (when (and (not admin?) (seq (:fields state)))
-                   (str "<p><a data-nav href=\"/daily\">" (esc (m :daily-title)) "</a></p>"
-                        "<p><a data-nav href=\"/works\">" (esc (m :works-title)) "</a></p>"
-                        "<p><a data-nav href=\"/gantt\">" (esc (m :gantt-title)) "</a></p>"
+                   (str "<p><a data-nav href=\"/daily\">" (esc (m :daily-title)) "</a>"
+                        " — " (esc (m :home-link-daily)) "</p>"
+                        "<p><a data-nav href=\"/works\">" (esc (m :works-title)) "</a>"
+                        " — " (esc (m :home-link-works)) "</p>"
+                        "<p><a data-nav href=\"/gantt\">" (esc (m :gantt-title)) "</a>"
+                        " — " (esc (m :home-link-gantt)) "</p>"
                         "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
                  (when (not admin?)
                    (str "<p><a data-nav href=\"/orders\">" (esc (m :orders-title)) "</a></p>"
@@ -989,22 +1049,30 @@
   (layout (m :invite-title)
           (str (if (= "admin" (:kind state)) (nav-admin state) (nav-user state))
                (flash-html state)
+               "<p class=\"page-lead\">" (esc (m :invite-lead)) "</p>"
                (when-let [pw (:initial-password state)]
                  (str "<p>" (esc (m :invite-ok)) "</p><p>" (esc (m :initial-password-label))
                       ": <code>" (esc pw) "</code></p>"))
+               "<section class=\"form-section\" id=\"invite-form-section\">"
+               "<h2 class=\"section-title\">" (esc (m :invite-title)) "</h2>"
                "<form data-act=\"invite\" method=\"post\">"
                "<label>" (esc (m :label-counterpart-email)) "<input name=\"email\" type=\"email\" required></label>"
-               "<button type=\"submit\">" (esc (m :btn-invite)) "</button></form>")))
+               "<button type=\"submit\">" (esc (m :btn-invite)) "</button></form>"
+               "</section>")))
 
 (defn password-view [state]
   (layout (m :password-title)
           (str (if (= "admin" (:kind state)) (nav-admin state) (nav-user state))
                (flash-html state)
+               "<p class=\"page-lead\">" (esc (m :password-lead)) "</p>"
+               "<section class=\"form-section\" id=\"password-form-section\">"
+               "<h2 class=\"section-title\">" (esc (m :password-title)) "</h2>"
                "<form data-act=\"password\" method=\"post\">"
                "<label>" (esc (m :label-current-password)) "<input name=\"current_password\" type=\"password\" required></label>"
                "<label>" (esc (m :label-new-password)) "<input name=\"password\" type=\"password\" required></label>"
                "<label>" (esc (m :label-password-confirm)) "<input name=\"password_confirm\" type=\"password\" required></label>"
-               "<button type=\"submit\">" (esc (m :btn-change-password)) "</button></form>")))
+               "<button type=\"submit\">" (esc (m :btn-change-password)) "</button></form>"
+               "</section>")))
 
 (defn users-view [state]
   (layout (m :users-title)
@@ -1084,6 +1152,9 @@
       (layout (m :orders-create)
               (str (nav-user state)
                    (flash-html state)
+                   "<p class=\"page-lead\">" (esc (m :orders-new-lead)) "</p>"
+                   "<section class=\"form-section\" id=\"orders-new-section\">"
+                   "<h2 class=\"section-title\">" (esc (m :orders-create)) "</h2>"
                    "<form data-act=\"create-order\" method=\"post\">"
                    "<label>" (esc (m :order-work-date))
                    "<input name=\"work_date\" value=\"" (esc (:work_date form)) "\"></label>"
@@ -1096,7 +1167,8 @@
                    "<datalist id=\"work-name-list\">"
                    (apply str (for [n (:work-names state)]
                                 (str "<option value=\"" (esc n) "\">")))
-                   "</datalist></label>"
+                   "</datalist>"
+                   "<p class=\"field-hint\">" (esc (m :work-name-hint)) "</p></label>"
                    "<label>" (esc (m :order-body))
                    "<textarea name=\"body\">" (esc (:body form)) "</textarea></label>"
                    "<label>" (esc (m :order-recipients))
@@ -1109,7 +1181,8 @@
                                    " checked")
                                  ">" (esc (:name f)) "</label>")))
                    "</fieldset>"
-                   "<button type=\"submit\">" (esc (m :order-save)) "</button></form>")))))
+                   "<button type=\"submit\">" (esc (m :order-save)) "</button></form>"
+                   "</section>")))))
 
 (defn- order-map-html [state]
   (let [omap (:order-map state)
@@ -1260,6 +1333,9 @@
   (layout (m :fields-title)
           (str (nav-user state)
                (flash-html state)
+               "<p class=\"page-lead\">" (esc (m :fields-lead)) "</p>"
+               "<section class=\"form-section\" id=\"fields-list\">"
+               "<h2 class=\"section-title\">" (esc (m :fields-title)) "</h2>"
                "<table><thead><tr><th>" (esc (m :name-label)) "</th><th>" (esc (m :unit-ha))
                "</th><th>" (esc (m :unit-m2)) "</th><th>" (esc (m :memo-label))
                "</th><th></th></tr></thead><tbody>"
@@ -1281,6 +1357,7 @@
                              "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id f)) "\">"
                              "<button type=\"submit\">" (esc (m :btn-delete)) "</button></form></td></tr>")))
                "</tbody></table>"
+               "</section>"
                "<p><a data-nav href=\"/map\">" (esc (m :to-map)) "</a></p>")))
 (defn- basemap-ready? [state kind]
   (boolean (some (fn [b] (and (= kind (:kind b)) (:ready b))) (:basemaps state))))
@@ -1643,6 +1720,15 @@
 (defn- as-text [v]
   (if (nil? v) "" (str v)))
 
+(defn- gantt-new-defaults []
+  (let [[yy mm dd] (tokyo-ymd)]
+    {:title (m :gantt-work-new-placeholder)
+     :start (ymd-minute yy mm dd 8 0)
+     :end (ymd-minute yy mm dd 17 0)}))
+
+(defn- field-hint [text]
+  (str "<p class=\"field-hint\">" (esc text) "</p>"))
+
 (defn- same-gantt-id? [a b]
   (cond
     (nil? a) false
@@ -1736,11 +1822,17 @@
 
 (defn- daily-query-path [state]
   (let [range (let [raw (:daily-range state)
-                    r (str (if (nil? raw) "today" raw))]
-                (if (#{"today" "week"} r) r "today"))
+                    r (str (if (nil? raw) "week" raw))]
+                (if (#{"today" "week"} r) r "week"))
         statuses (into [] (:daily-statuses state))]
     (str "/api/user/gantt/daily?range=" (encode-q range)
          "&statuses=" (encode-q (str/join "," statuses)))))
+
+(defn- page-lead-html [key]
+  (str "<p class=\"page-lead\">" (esc (m key)) "</p>"))
+
+(defn- section-title-html [key]
+  (str "<h2 class=\"section-title\">" (esc (m key)) "</h2>"))
 
 (defn- gantt-title-select-html [titles selected-id include-none? select-id]
   (str "<select name=\"title_id\""
@@ -1775,7 +1867,8 @@
        "</fieldset>"))
 
 (defn works-view [state]
-  (let [fields (:fields state)]
+  (let [fields (:fields state)
+        defs (gantt-new-defaults)]
     (layout (m :works-title)
             (str (nav-user state)
                  (flash-html state)
@@ -1785,10 +1878,11 @@
                          rows (or (:gantt-rows state) [])
                          sel (gantt-row-by-id state (:gantt-selected state))]
                      (str
-                      "<section class=\"works-list\" id=\"works-list\">"
-                      "<h2>" (esc (m :gantt-works-label)) "</h2>"
+                      (page-lead-html :works-lead)
+                      "<section class=\"works-list form-section\" id=\"works-list\">"
+                      (section-title-html :works-section-list)
                       (if (empty? rows)
-                        (str "<p>" (esc (m :works-empty)) "</p>")
+                        (str "<p class=\"empty-hint\">" (esc (m :works-empty)) "</p>")
                         (apply str
                                (for [r rows]
                                  (let [selected? (same-gantt-id? (:id r) (:gantt-selected state))]
@@ -1802,27 +1896,38 @@
                                         " [" (esc (execution-status-label (:execution_status r))) "]"
                                         "</button></form>")))))
                       "</section>"
+                      "<section class=\"form-section\" id=\"works-add-section\">"
+                      (section-title-html :works-section-add)
+                      "<p class=\"section-lead\">" (esc (m :works-lead)) "</p>"
                       "<form data-act=\"add-gantt-row\" method=\"post\" id=\"works-add-form\">"
                       "<label>" (esc (m :gantt-title-of-work))
                       (gantt-title-select-html titles nil true "works-add-title-id") "</label>"
                       "<label>" (esc (m :gantt-title-label))
-                      "<input id=\"works-new-title\" name=\"title\" placeholder=\""
-                      (esc (m :gantt-work-new-placeholder)) "\"></label>"
+                      "<input id=\"works-new-title\" name=\"title\" value=\"" (esc (:title defs))
+                      "\" placeholder=\"" (esc (m :gantt-work-new-placeholder)) "\">"
+                      (field-hint (m :gantt-title-hint)) "</label>"
                       "<label>" (esc (m :gantt-start))
-                      "<input id=\"works-new-start\" name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<input id=\"works-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
+                      "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                       "<label>" (esc (m :gantt-end))
-                      "<input id=\"works-new-end\" name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
-                      "<p>" (esc (m :execution-status)) ": " (esc (m :exec-not-started)) "</p>"
+                      "<input id=\"works-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
+                      "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<p class=\"field-hint\">" (esc (m :execution-status)) ": "
+                      (esc (m :exec-not-started)) "</p>"
                       "<button type=\"submit\" id=\"works-add-btn\">"
                       (esc (m :gantt-work-add)) "</button></form>"
+                      "</section>"
                       (when sel
                         (str
+                         "<section class=\"form-section\" id=\"works-edit-section\">"
+                         (section-title-html :works-section-edit)
                          "<form data-act=\"save-gantt-row\" method=\"post\" id=\"works-save-form\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                          "<label>" (esc (m :gantt-title-of-work))
                          (gantt-title-select-html titles (:title_id sel) true "works-save-title-id") "</label>"
                          "<label>" (esc (m :gantt-title-label))
-                         "<input name=\"title\" value=\"" (esc (:title sel)) "\" required></label>"
+                         "<input name=\"title\" value=\"" (esc (:title sel)) "\" required>"
+                         (field-hint (m :gantt-title-hint)) "</label>"
                          "<label>" (esc (m :gantt-start))
                          "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
                          "<label>" (esc (m :gantt-end))
@@ -1836,7 +1941,8 @@
                          "<datalist id=\"works-work-name-list\">"
                          (apply str (for [nm (:work-names state)]
                                       (str "<option value=\"" (esc nm) "\">")))
-                         "</datalist></label>"
+                         "</datalist>"
+                         (field-hint (m :work-name-hint)) "</label>"
                          (work-targets-fieldset fields (:field_ids sel))
                          "<button type=\"submit\" id=\"works-save-btn\">"
                          (esc (m :btn-save)) "</button></form>"
@@ -1844,21 +1950,26 @@
                          " data-confirm=\"" (esc (m :gantt-delete-confirm)) "\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                          "<button type=\"submit\" id=\"works-delete-btn\">"
-                         (esc (m :gantt-delete)) "</button></form>")))))))))
+                         (esc (m :gantt-delete)) "</button></form>"
+                         "</section>")))))))))
 
 (defn daily-view [state]
   (let [fields (:fields state)
         range (let [raw (:daily-range state)
-                    r (str (if (nil? raw) "today" raw))]
-                (if (#{"today" "week"} r) r "today"))
+                    r (str (if (nil? raw) "week" raw))]
+                (if (#{"today" "week"} r) r "week"))
         statuses (into [] (:daily-statuses state))
-        rows (into [] (:daily-rows state))]
+        rows (into [] (:daily-rows state))
+        total (or (:daily-total state) 0)]
     (layout (m :daily-title)
             (str (nav-user state)
                  (flash-html state)
                  (if (empty? fields)
                    (str "<p>" (esc (m :daily-no-fields)) "</p>")
                    (str
+                    (page-lead-html :daily-lead)
+                    "<section class=\"form-section\" id=\"daily-filter-section\">"
+                    (section-title-html :daily-section-filter)
                     "<div class=\"toolbar\" id=\"daily-range-form\">"
                     (select-switch (m :daily-range-label) "daily-range" range
                                    [["today" (m :daily-today)]
@@ -1873,13 +1984,20 @@
                              (str "<label><input type=\"checkbox\" name=\"status\" value=\"" v "\""
                                   (when (daily-status-on? state v) " checked")
                                   "> " (esc lab) "</label>")))
-                    "<button type=\"submit\" id=\"daily-filter-btn\">" (esc (m :btn-save)) "</button>"
+                    "<button type=\"submit\" id=\"daily-filter-btn\">"
+                    (esc (m :daily-filter-apply)) "</button>"
                     "</fieldset></form>"
+                    "</section>"
                     (if (empty? statuses)
                       (str "<p id=\"daily-filter-hint\">" (esc (m :daily-filter-empty)) "</p>")
-                      (str "<section class=\"daily-list\" id=\"daily-list\">"
+                      (str "<section class=\"daily-list form-section\" id=\"daily-list\">"
+                           (section-title-html :daily-section-list)
                            (if (empty? rows)
-                             (str "<p>" (esc (m :daily-empty)) "</p>")
+                             (if (pos? total)
+                               (str "<p class=\"empty-hint\">" (esc (m :daily-empty-filtered)) "</p>"
+                                    "<p><a data-nav href=\"/works\">" (esc (m :daily-link-works)) "</a></p>")
+                               (str "<p class=\"empty-hint\">" (esc (m :daily-empty)) "</p>"
+                                    "<p><a data-nav href=\"/works\">" (esc (m :daily-link-works)) "</a></p>"))
                              (apply str
                                     (for [r rows]
                                       (str "<div class=\"daily-item\" id=\"daily-item-" (esc (:id r)) "\">"
@@ -1909,8 +2027,13 @@
                          titles (if (nil? (:gantt-titles state)) [] (:gantt-titles state))
                          title-sel (gantt-title-by-id state (:gantt-title-selected state))
                          title-rows (gantt-rows-for-title state (:gantt-title-selected state))
+                         all-rows (or (:gantt-rows state) [])
+                         orphan-n (count (filter #(or (nil? (:title_id %))
+                                                      (str/blank? (str (:title_id %))))
+                                                 all-rows))
                          sel (gantt-row-by-id state (:gantt-selected state))
                          progress (:gantt-progress state)
+                         defs (gantt-new-defaults)
                          applicable? (cond
                                         (nil? sel) false
                                         (not (gantt-row-applicable? sel)) false
@@ -1920,11 +2043,15 @@
                          work-name (when applicable? (str (:work_name sel)))
                          time-v? (= "time-v" orient)]
                      (str
-                      "<section class=\"gantt-titles\" id=\"gantt-titles\">"
-                      "<h2>" (esc (m :gantt-titles-label)) "</h2>"
+                      (page-lead-html :gantt-lead)
+                      (when (pos? orphan-n)
+                        (str "<p class=\"empty-hint\">" (esc (m :gantt-orphan-hint))
+                             " <a data-nav href=\"/works\">" (esc (m :daily-link-works)) "</a></p>"))
+                      "<section class=\"gantt-titles form-section\" id=\"gantt-titles\">"
+                      (section-title-html :gantt-section-titles)
                       "<div class=\"gantt-title-list\">"
                       (if (empty? titles)
-                        (str "<p>" (esc (m :gantt-title-select)) "</p>")
+                        (str "<p class=\"empty-hint\">" (esc (m :gantt-title-select)) "</p>")
                         (apply str
                                (for [t titles]
                                  (let [selected? (same-gantt-id? (:id t) (:gantt-title-selected state))]
@@ -1956,8 +2083,9 @@
                       "</section>"
                       (when title-sel
                         (str
-                         "<section class=\"gantt-works\" id=\"gantt-works\">"
-                         "<h2>" (esc (m :gantt-works-label)) " — " (esc (:name title-sel)) "</h2>"
+                         "<section class=\"gantt-works form-section\" id=\"gantt-works\">"
+                         (section-title-html :gantt-section-chart)
+                         "<p class=\"section-lead\">" (esc (:name title-sel)) "</p>"
                          "<div class=\"toolbar\">"
                          (select-switch (m :gantt-axis-label) "gantt-axis" axis
                                         [["day" (m :gantt-axis-day)]
@@ -1980,33 +2108,45 @@
                          "<div class=\"gantt-plot\">"
                          "<div id=\"gantt-grid\" class=\"gantt-grid\" aria-hidden=\"true\"></div>"
                          "<div class=\"gantt-rows\">"
-                         (apply str
-                                (for [r title-rows]
-                                  (let [selected? (same-gantt-id? (:id r) (:gantt-selected state))]
-                                    (str "<form class=\"gantt-row" (when selected? " selected")
-                                         "\" data-act=\"select-gantt-row\" method=\"post\""
-                                         " data-start=\"" (esc (:start_at r)) "\" data-end=\"" (esc (:end_at r)) "\""
-                                         " data-id=\"" (esc (:id r)) "\">"
-                                         "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
-                                         "<button type=\"submit\">" (esc (:title r))
-                                         " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")</button>"
-                                         "<div class=\"gantt-bar\"></div></form>"))))
+                         (if (empty? title-rows)
+                           (str "<p class=\"empty-hint\">" (esc (m :works-empty)) "</p>")
+                           (apply str
+                                  (for [r title-rows]
+                                    (let [selected? (same-gantt-id? (:id r) (:gantt-selected state))]
+                                      (str "<form class=\"gantt-row" (when selected? " selected")
+                                           "\" data-act=\"select-gantt-row\" method=\"post\""
+                                           " data-start=\"" (esc (:start_at r)) "\" data-end=\"" (esc (:end_at r)) "\""
+                                           " data-id=\"" (esc (:id r)) "\">"
+                                           "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
+                                           "<button type=\"submit\">" (esc (:title r))
+                                           " (" (esc (:start_at r)) "〜" (esc (:end_at r)) ")"
+                                           " [" (esc (execution-status-label (:execution_status r))) "]"
+                                           "</button>"
+                                           "<div class=\"gantt-bar\"></div></form>")))))
                          "</div>"
                          "</div>"
                          "</div>"
+                         "<section class=\"form-section\" id=\"gantt-add-section\">"
+                         (section-title-html :gantt-section-add)
                          "<form data-act=\"add-gantt-row\" method=\"post\" id=\"gantt-add-form\">"
                          "<input type=\"hidden\" name=\"title_id\" value=\"" (esc (:id title-sel)) "\">"
                          "<label>" (esc (m :gantt-title-label))
-                         "<input id=\"gantt-new-title\" name=\"title\" placeholder=\""
-                         (esc (m :gantt-work-new-placeholder)) "\"></label>"
+                         "<input id=\"gantt-new-title\" name=\"title\" value=\"" (esc (:title defs))
+                         "\" placeholder=\"" (esc (m :gantt-work-new-placeholder)) "\">"
+                         (field-hint (m :gantt-title-hint)) "</label>"
                          "<label>" (esc (m :gantt-start))
-                         "<input id=\"gantt-new-start\" name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                         "<input id=\"gantt-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
+                         "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                          "<label>" (esc (m :gantt-end))
-                         "<input id=\"gantt-new-end\" name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                         "<input id=\"gantt-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
+                         "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                          "<button type=\"submit\" id=\"gantt-add-btn\">"
                          (esc (m :gantt-work-add)) "</button></form>"
+                         "</section>"
                          (when (and sel (same-gantt-id? (:title_id sel) (:id title-sel)))
                            (str
+                            "<section class=\"form-section\" id=\"gantt-edit-section\">"
+                            (section-title-html :gantt-section-edit)
                             "<form data-act=\"save-gantt-row\" method=\"post\" id=\"gantt-save-form\">"
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                             "<label>" (esc (m :gantt-title-of-work))
@@ -2018,7 +2158,8 @@
                                           ">" (esc (:name t)) "</option>")))
                             "</select></label>"
                             "<label>" (esc (m :gantt-title-label))
-                            "<input name=\"title\" value=\"" (esc (:title sel)) "\" required></label>"
+                            "<input name=\"title\" value=\"" (esc (:title sel)) "\" required>"
+                            (field-hint (m :gantt-title-hint)) "</label>"
                             "<label>" (esc (m :gantt-start))
                             "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
                             "<label>" (esc (m :gantt-end))
@@ -2032,7 +2173,8 @@
                             "<datalist id=\"gantt-work-name-list\">"
                             (apply str (for [nm (:work-names state)]
                                          (str "<option value=\"" (esc nm) "\">")))
-                            "</datalist></label>"
+                            "</datalist>"
+                            (field-hint (m :work-name-hint)) "</label>"
                             "<fieldset><legend>" (esc (m :gantt-targets)) "</legend>"
                             (apply str
                                    (for [f fields]
@@ -2068,7 +2210,10 @@
                                                                (m :gantt-progress-na)))
                                                         "</td></tr>")))
                                           "</tbody></table>"))
-                                   "</div>"))))
+                                   "</div>"))
+                            "</section>"))
+                         "<section class=\"form-section\" id=\"gantt-map-section\">"
+                         (section-title-html :gantt-section-map)
                          "<div id=\"gantt-circle\" class=\"gantt-circle\""
                          " data-percent-unit=\"" (esc (m :gantt-percent-unit)) "\""
                          (when applicable?
@@ -2079,6 +2224,7 @@
                            (str " data-target-ids=\"" (esc (str/join "," target-ids)) "\""
                                 " data-work-name=\"" (esc work-name) "\""))
                           "></div>"
+                          "</section>"
                           "</section>")))))))))
 
 (defn render [state]
@@ -2235,9 +2381,10 @@
       (= :daily (:page s))
       (let [statuses (into [] (:daily-statuses s))]
         (if (empty? statuses)
-          (guarded (assoc s :daily-rows []))
+          (guarded (assoc s :daily-rows [] :daily-total nil))
           {:state s
-           :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]]}))
+           :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]
+                [:api "GET" "/api/user/gantt" nil :daily-context-loaded]]}))
 
       (= :orders-new (:page s))
       (let [defaults #?(:clj {:work_date (time/today-work-date)
@@ -2356,6 +2503,13 @@
     (let [s (assoc state :daily-rows []
                    :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
+
+(defn daily-context-loaded [state body]
+  (let [total (if (:ok body)
+                (count (or (:rows body) []))
+                (or (:daily-total state) 0))
+        s (assoc state :daily-total total)]
+    (guarded s)))
 
 (defn daily-status-save-result [state body]
   (if (:ok body)
@@ -2847,6 +3001,7 @@
       :gantt-save-result (gantt-save-result state arg)
       :gantt-delete-result (gantt-delete-result state arg)
       :daily-loaded (daily-loaded state arg)
+      :daily-context-loaded (daily-context-loaded state arg)
       :daily-status-save-result (daily-status-save-result state arg)
       :gantt-title-save-result (gantt-title-save-result state arg)
       :gantt-title-delete-result (gantt-title-delete-result state arg)
@@ -2896,9 +3051,9 @@
                        :gantt-axis "day" :gantt-orient "time-h" :form {} :paint-data nil)
 
                 (= :daily (:page s))
-                (assoc s :daily-range "today"
+                (assoc s :daily-range "week"
                        :daily-statuses ["not_started" "in_progress"]
-                       :daily-rows [] :flash nil)
+                       :daily-rows [] :daily-total nil :flash nil)
 
                 (= :gantt-progress (:page s))
                 (assoc s :gantt-finalize-result nil :form {})

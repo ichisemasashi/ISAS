@@ -92,7 +92,7 @@
         (testing "B2-5.3 / B2-5.4"
           (is (re-find #"空中写真|標準地図|衛星" (html {:page :map :place place
                                                       :basemaps [{:kind "aerial" :ready true}]})))
-          (is (not (re-find #"ガント" (html {:page :map :place place}))))
+          (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"" (html {:page :map :place place}))))
           (is (not (re-find #"下地を取り込む" (html {:page :map :narrow? true})))))
         (testing "B2-6 データ単位"
           (let [p (db/find-place (:ds sys) uid)

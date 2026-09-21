@@ -302,7 +302,7 @@
       (is (= :html (ffirst (:fx fields-off))))
       (is (= :api (ffirst (:fx sess))))
       (is (= :daily (get-in path [:state :page])))
-      (is (= "today" (get-in path [:state :daily-range])))))
+      (is (= "week" (get-in path [:state :daily-range])))))
   (testing "code-message と gantt body"
     (is (= (:execution-status-invalid ui/messages)
            (ui/with-ui-lang {:ui-lang "ja"} #(ui/code-message "execution_status_invalid"))))
@@ -343,18 +343,60 @@
                  (ui/with-ui-lang {:ui-lang "ja"}
                    #(#'ui/execution-status-select-html "weird" nil))))
     (is (false? (#'ui/daily-status-on? {:daily-statuses nil} "done")))
-    (is (re-find #"range=today" (#'ui/daily-query-path {:daily-range "nope" :daily-statuses nil})))
+    (is (re-find #"range=week" (#'ui/daily-query-path {:daily-range "nope" :daily-statuses nil})))
     (is (re-find #"該当する作業はありません"
                  (html {:page :daily :fields [{:id 1}]
                         :daily-range "nope" :daily-statuses ["not_started"] :daily-rows nil})))
+    (is (re-find #"選んだ期間・状態に重なる作業がありません"
+                 (html {:page :daily :fields [{:id 1}]
+                        :daily-range "week" :daily-statuses ["not_started"]
+                        :daily-rows [] :daily-total 3})))
+    (is (re-find #"作業タイトル"
+                 (html {:page :works :fields [{:id 1}] :gantt-rows [] :gantt-titles []})))
+    (is (re-find #"新しい作業を追加"
+                 (html {:page :works :fields [{:id 1}] :gantt-rows [] :gantt-titles []})))
+    (is (re-find #"題名ごとに作業を時間軸で見ます"
+                 (html {:page :gantt :fields [{:id 1}] :gantt-titles [] :gantt-rows []})))
     (is (re-find #"状態フィルタを1つ以上"
                  (html {:page :daily :fields [{:id 1}]
                         :daily-range nil :daily-statuses nil :daily-rows nil})))
-    (is (re-find #"range=today" (#'ui/daily-query-path {})))
-    (is (re-find #"range=today" (#'ui/daily-query-path {:daily-range nil})))
+    (is (re-find #"range=week" (#'ui/daily-query-path {})))
+    (is (re-find #"range=week" (#'ui/daily-query-path {:daily-range nil})))
     (is (re-find #"range=week" (#'ui/daily-query-path {:daily-range "week" :daily-statuses ["done"]})))
-    (is (re-find #"今日"
+    (is (re-find #"今週"
                  (html {:page :daily :fields [{:id 1}]})))
+    (let [          ctx-ok (ui/handle (assoc (ui/init-state) :page :daily :session {:email "a"}
+                                   :kind "user" :fields [{:id 1}]
+                                   :daily-rows [])
+                            [:daily-context-loaded {:ok true :rows [{:id 1} {:id 2}]}])
+          ctx-nil-rows (ui/handle (assoc (ui/init-state) :page :daily :session {:email "a"}
+                                         :kind "user" :fields [{:id 1}]
+                                         :daily-rows [])
+                                  [:daily-context-loaded {:ok true}])
+          ctx-fail (ui/handle (assoc (ui/init-state) :page :daily :session {:email "a"}
+                                     :kind "user" :fields [{:id 1}]
+                                     :daily-total 9 :daily-rows [])
+                              [:daily-context-loaded {:ok false :code "no_fields"}])
+          ctx-fail-nil (ui/handle (assoc (ui/init-state) :page :daily :session {:email "a"}
+                                         :kind "user" :fields [{:id 1}]
+                                         :daily-rows [])
+                                  [:daily-context-loaded {:ok false}])
+          orphan (html {:page :gantt :fields [{:id 1}]
+                        :gantt-titles [{:id 10 :name "題A"}]
+                        :gantt-rows [{:id 1 :title_id nil :title "孤児"
+                                      :start_at "2026-09-21T08:00" :end_at "2026-09-21T09:00"
+                                      :execution_status "not_started" :field_ids []}]})
+          orphan-nil-rows (html {:page :gantt :fields [{:id 1}]
+                                 :gantt-titles [{:id 10 :name "題A"}]
+                                 :gantt-title-selected 10
+                                 :gantt-rows nil})]
+      (is (= 2 (get-in ctx-ok [:state :daily-total])))
+      (is (= :html (ffirst (:fx ctx-ok))))
+      (is (zero? (get-in ctx-nil-rows [:state :daily-total])))
+      (is (= 9 (get-in ctx-fail [:state :daily-total])))
+      (is (zero? (get-in ctx-fail-nil [:state :daily-total])))
+      (is (re-find #"題名のない作業はガントに出ません" orphan))
+      (is (re-find #"題名ごとに作業を時間軸で見ます" orphan-nil-rows)))
     (let [no-sess (ui/session-loaded (assoc (ui/init-state) :page :daily :kind "user"
                                             :narrow? false)
                                      {:ok false})

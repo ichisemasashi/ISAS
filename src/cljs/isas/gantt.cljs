@@ -67,15 +67,23 @@
 
 (defn- fill-new-defaults! []
   (let [[y m d] (tokyo-ymd)
-        title (.getElementById js/document "gantt-new-title")
-        start (.getElementById js/document "gantt-new-start")
-        end (.getElementById js/document "gantt-new-end")]
-    (when (and title (str/blank? (.-value title)))
-      (set! (.-value title) "新しい作業"))
-    (when (and start (str/blank? (.-value start)))
-      (set! (.-value start) (ymd-minute y m d 8 0)))
-    (when (and end (str/blank? (.-value end)))
-      (set! (.-value end) (ymd-minute y m d 17 0)))))
+        default-title "新しい作業"
+        default-start (ymd-minute y m d 8 0)
+        default-end (ymd-minute y m d 17 0)
+        fill! (fn [id title? start? end?]
+                (when-let [el (.getElementById js/document id)]
+                  (when (str/blank? (.-value el))
+                    (set! (.-value el)
+                          (cond title? default-title
+                                start? default-start
+                                end? default-end
+                                :else "")))))]
+    (fill! "gantt-new-title" true false false)
+    (fill! "gantt-new-start" false true false)
+    (fill! "gantt-new-end" false false true)
+    (fill! "works-new-title" true false false)
+    (fill! "works-new-start" false true false)
+    (fill! "works-new-end" false false true)))
 
 (defn- append-axis-mark! [^js host t t0 span time-v? class-name label?]
   (let [pct (* 100 (/ (- t t0) span))
