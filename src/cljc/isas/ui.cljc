@@ -162,6 +162,27 @@
    :execution-status-invalid "実行状態が正しくありません"
    :range-invalid "期間の指定が正しくありません"
    :statuses-invalid "状態フィルタが正しくありません"
+   :work-times "作業時間"
+   :work-time-add "作業時間を足す"
+   :checklist-items "チェック項目"
+   :checklist-add "項目を足す"
+   :checklist-done "やった"
+   :checklist-pending "まだ"
+   :work-time-none "作業時間なし"
+   :work-time-count-prefix "作業時間 "
+   :work-time-count-suffix " 件"
+   :checklist-summary-prefix "チェック "
+   :checklist-none "チェックなし"
+   :label-required "項目名を入れてください"
+   :label-too-long "項目名は200文字以内にしてください"
+   :work-time-not-found "その作業時間はありません"
+   :checklist-item-not-found "そのチェック項目はありません"
+   :checklist-status-invalid "チェックの状態が正しくありません"
+   :work-time-delete-confirm "この作業時間を消します。よろしいですか？"
+   :checklist-delete-confirm "このチェック項目を消します。よろしいですか？"
+   :work-time-deleted "作業時間を消しました"
+   :checklist-deleted "チェック項目を消しました"
+   :daily-link-edit-work "作業を開く"
    :gantt-start "開始"
    :gantt-end "終了"
    :gantt-targets "対象圃場"
@@ -469,6 +490,27 @@
    :execution-status-invalid "Invalid execution status"
    :range-invalid "Invalid range"
    :statuses-invalid "Invalid status filter"
+   :work-times "Work times"
+   :work-time-add "Add work time"
+   :checklist-items "Checklist"
+   :checklist-add "Add item"
+   :checklist-done "Done"
+   :checklist-pending "Pending"
+   :work-time-none "No work times"
+   :work-time-count-prefix "Work times: "
+   :work-time-count-suffix ""
+   :checklist-summary-prefix "Checklist "
+   :checklist-none "No checklist"
+   :label-required "Enter an item name"
+   :label-too-long "Item name must be 200 characters or fewer"
+   :work-time-not-found "That work time does not exist"
+   :checklist-item-not-found "That checklist item does not exist"
+   :checklist-status-invalid "Invalid checklist status"
+   :work-time-delete-confirm "Remove this work time?"
+   :checklist-delete-confirm "Remove this checklist item?"
+   :work-time-deleted "Work time removed"
+   :checklist-deleted "Checklist item removed"
+   :daily-link-edit-work "Open work"
    :gantt-start "Start"
    :gantt-end "End"
    :gantt-targets "Target fields"
@@ -731,6 +773,11 @@
     "execution_status_invalid" (m :execution-status-invalid)
     "range_invalid" (m :range-invalid)
     "statuses_invalid" (m :statuses-invalid)
+    "work_time_not_found" (m :work-time-not-found)
+    "checklist_item_not_found" (m :checklist-item-not-found)
+    "label_required" (m :label-required)
+    "label_too_long" (m :label-too-long)
+    "checklist_status_invalid" (m :checklist-status-invalid)
     "order_not_found" (m :order-not-found)
     "order_closed" (m :order-closed)
     "order_not_issuer" (m :order-not-issuer)
@@ -901,6 +948,8 @@
    :gantt-selected nil
    :gantt-progress nil
    :gantt-progress-days nil
+   :gantt-work-times []
+   :gantt-checklist-items []
    :gantt-axis "day"
    :gantt-orient "time-h"
    :gantt-finalize-result nil
@@ -1819,6 +1868,134 @@
                        ">" (esc lab) "</option>")))
          "</select>")))
 
+(defn- gantt-children-load-fx [gid]
+  (let [id (str gid)]
+    [[:api "GET" (str "/api/user/gantt/" id "/work-times") nil :work-times-loaded]
+     [:api "GET" (str "/api/user/gantt/" id "/checklist-items") nil :checklist-items-loaded]]))
+
+(defn- work-duration-minutes [start end]
+  #?(:clj
+     (try
+       (let [a (time/parse-local-minute start)
+             b (time/parse-local-minute end)]
+         (.toMinutes (java.time.Duration/between a b)))
+       (catch Exception _ nil))
+     :cljs
+     (let [a (.getTime (js/Date. (str start ":00+09:00")))
+           b (.getTime (js/Date. (str end ":00+09:00")))]
+       (when (and (js/isFinite a) (js/isFinite b) (> b a))
+         (js/Math.round (/ (- b a) 60000.0))))))
+
+(defn- work-duration-label [start end]
+  (when-let [mins (work-duration-minutes start end)]
+    (when (pos? mins)
+      (let [h (quot mins 60)
+            m (mod mins 60)]
+        (if (en-ui?)
+          (cond
+            (and (pos? h) (pos? m)) (str h "h " m "m")
+            (pos? h) (str h "h")
+            :else (str m "m"))
+          (cond
+            (and (pos? h) (pos? m)) (str h "時間" m "分")
+            (pos? h) (str h "時間")
+            :else (str m "分")))))))
+
+(defn- checklist-status-select-html [selected select-id]
+  (let [cur (let [s (str (or selected "pending"))]
+              (if (#{"pending" "done"} s) s "pending"))]
+    (str "<select name=\"status\""
+         (when-not (str/blank? (str select-id))
+           (str " id=\"" (esc select-id) "\""))
+         ">"
+         (apply str
+                (for [[v lab] [["pending" (m :checklist-pending)]
+                               ["done" (m :checklist-done)]]]
+                  (str "<option value=\"" v "\""
+                       (when (= v cur) " selected")
+                       ">" (esc lab) "</option>")))
+         "</select>")))
+
+(defn- daily-work-time-summary [n]
+  (let [c (or n 0)]
+    (if (pos? c)
+      (str (m :work-time-count-prefix) c (m :work-time-count-suffix))
+      (m :work-time-none))))
+
+(defn- daily-checklist-summary [done total]
+  (let [t (or total 0)
+        d (or done 0)]
+    (if (pos? t)
+      (str (m :checklist-summary-prefix) d "/" t)
+      (m :checklist-none))))
+
+(defn- gantt-children-edit-html [state gid prefix]
+  (let [id (str gid)
+        times (or (:gantt-work-times state) [])
+        items (or (:gantt-checklist-items state) [])]
+    (str
+     "<div class=\"gantt-children\" id=\"" (esc prefix) "-children\">"
+     "<section class=\"form-section\" id=\"" (esc prefix) "-work-times\">"
+     "<h3>" (esc (m :work-times)) "</h3>"
+     (if (empty? times)
+       (str "<p class=\"empty-hint\">" (esc (m :work-time-none)) "</p>")
+       (apply str
+              (for [t times]
+                (let [dur (work-duration-label (:start_at t) (:end_at t))]
+                  (str "<div class=\"work-time-item\" id=\"" (esc prefix) "-wt-" (esc (:id t)) "\">"
+                       "<form data-act=\"save-work-time\" method=\"post\">"
+                       "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+                       "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id t)) "\">"
+                       "<label>" (esc (m :gantt-start))
+                       "<input name=\"start_at\" value=\"" (esc (:start_at t)) "\" required></label>"
+                       "<label>" (esc (m :gantt-end))
+                       "<input name=\"end_at\" value=\"" (esc (:end_at t)) "\" required></label>"
+                       (when dur (str "<span class=\"work-time-duration\">" (esc dur) "</span>"))
+                       "<button type=\"submit\">" (esc (m :btn-save)) "</button></form>"
+                       "<form data-act=\"delete-work-time\" method=\"post\""
+                       " data-confirm=\"" (esc (m :work-time-delete-confirm)) "\">"
+                       "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+                       "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id t)) "\">"
+                       "<button type=\"submit\">" (esc (m :gantt-delete)) "</button></form>"
+                       "</div>")))))
+     "<form data-act=\"add-work-time\" method=\"post\" id=\"" (esc prefix) "-work-time-add\">"
+     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+     "<label>" (esc (m :gantt-start))
+     "<input name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
+     "<label>" (esc (m :gantt-end))
+     "<input name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
+     "<button type=\"submit\">" (esc (m :work-time-add)) "</button></form>"
+     "</section>"
+     "<section class=\"form-section\" id=\"" (esc prefix) "-checklist\">"
+     "<h3>" (esc (m :checklist-items)) "</h3>"
+     (if (empty? items)
+       (str "<p class=\"empty-hint\">" (esc (m :checklist-none)) "</p>")
+       (apply str
+              (for [c items]
+                (str "<div class=\"checklist-item\" id=\"" (esc prefix) "-ci-" (esc (:id c)) "\">"
+                     "<form data-act=\"save-checklist-item\" method=\"post\">"
+                     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+                     "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id c)) "\">"
+                     "<label>" (esc (m :checklist-items))
+                     "<input name=\"label\" value=\"" (esc (:label c)) "\" required></label>"
+                     "<label>" (esc (m :checklist-done)) "/" (esc (m :checklist-pending))
+                     (checklist-status-select-html (:status c) (str prefix "-ci-status-" (:id c)))
+                     "</label>"
+                     "<button type=\"submit\">" (esc (m :btn-save)) "</button></form>"
+                     "<form data-act=\"delete-checklist-item\" method=\"post\""
+                     " data-confirm=\"" (esc (m :checklist-delete-confirm)) "\">"
+                     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+                     "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id c)) "\">"
+                     "<button type=\"submit\">" (esc (m :gantt-delete)) "</button></form>"
+                     "</div>"))))
+     "<form data-act=\"add-checklist-item\" method=\"post\" id=\"" (esc prefix) "-checklist-add\">"
+     "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
+     "<label>" (esc (m :checklist-items))
+     "<input name=\"label\" required></label>"
+     "<button type=\"submit\">" (esc (m :checklist-add)) "</button></form>"
+     "</section>"
+     "</div>")))
+
 (defn- daily-status-on? [state status]
   (boolean (some #(= (str %) (str status)) (into [] (:daily-statuses state)))))
 
@@ -1948,6 +2125,7 @@
                          (work-targets-fieldset fields (:field_ids sel))
                          "<button type=\"submit\" id=\"works-save-btn\">"
                          (esc (m :btn-save)) "</button></form>"
+                         (gantt-children-edit-html state (:id sel) "works")
                          "<form data-act=\"delete-gantt-row\" method=\"post\" id=\"works-delete-form\""
                          " data-confirm=\"" (esc (m :gantt-delete-confirm)) "\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
@@ -2007,6 +2185,14 @@
                                            "<span class=\"daily-item-title\">" (esc (:title r)) "</span>"
                                            " <span class=\"daily-item-time\">"
                                            (esc (:start_at r)) "〜" (esc (:end_at r)) "</span>"
+                                           "<p class=\"daily-item-summary\">"
+                                           "<span>" (esc (daily-work-time-summary (:work_time_count r))) "</span>"
+                                           " / "
+                                           "<span>" (esc (daily-checklist-summary (:checklist_done r)
+                                                                                  (:checklist_total r)))
+                                           "</span>"
+                                           " · <a data-nav href=\"/works\">"
+                                           (esc (m :daily-link-edit-work)) "</a></p>"
                                            "<form data-act=\"set-daily-row-status\" method=\"post\" class=\"daily-status-form\">"
                                            "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
                                            "<label>" (esc (m :execution-status))
@@ -2189,6 +2375,7 @@
                             "</fieldset>"
                             "<button type=\"submit\" id=\"gantt-save-btn\">"
                             (esc (m :btn-save)) "</button></form>"
+                            (gantt-children-edit-html state (:id sel) "gantt")
                             "<form data-act=\"delete-gantt-row\" method=\"post\" id=\"gantt-delete-form\""
                             " data-confirm=\"" (esc (m :gantt-delete-confirm)) "\">"
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
@@ -2463,6 +2650,7 @@
     (let [s (assoc state :gantt-rows [] :gantt-titles [] :gantt-title-selected nil
                    :gantt-selected nil :gantt-progress nil
                    :gantt-progress-days nil
+                   :gantt-work-times [] :gantt-checklist-items []
                    :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})
     (let [rows (if (nil? (:rows body)) [] (:rows body))
@@ -2473,15 +2661,28 @@
                   (when (seq titles)
                     (:id (first titles))))
           sel (:gantt-selected state)
-          sel' (when (and sel tsel' (gantt-row-under-title? rows sel tsel'))
-                 sel)
+          works? (= :works (:page state))
+          sel' (cond
+                 (nil? sel) nil
+                 works? (when (some #(same-gantt-id? (:id %) sel) rows) sel)
+                 (and tsel' (gantt-row-under-title? rows sel tsel')) sel
+                 :else nil)
           row (when sel' (gantt-row-by-id (assoc state :gantt-rows rows) sel'))
           s (assoc state :gantt-rows rows :gantt-titles titles
-                   :gantt-title-selected tsel' :gantt-selected sel' :flash nil
-                   :gantt-progress-days (when sel' (:gantt-progress-days state)))]
-      (if (gantt-row-applicable? row)
+                   :gantt-title-selected (if works? (or (:title_id row) tsel') tsel')
+                   :gantt-selected sel' :flash nil
+                   :gantt-progress-days (when sel' (:gantt-progress-days state))
+                   :gantt-work-times (if sel' (:gantt-work-times state) [])
+                   :gantt-checklist-items (if sel' (:gantt-checklist-items state) []))
+          child-fx (when sel' (gantt-children-load-fx (:id row)))]
+      (cond
+        (gantt-row-applicable? row)
         {:state (assoc s :gantt-progress nil)
-         :fx [[:api "GET" (str "/api/user/gantt/" (:id row) "/progress") nil :gantt-progress-loaded]]}
+         :fx (into [[:api "GET" (str "/api/user/gantt/" (:id row) "/progress") nil :gantt-progress-loaded]]
+                   child-fx)}
+        (seq child-fx)
+        {:state (assoc s :gantt-progress nil) :fx (vec child-fx)}
+        :else
         (guarded (assoc s :gantt-progress nil))))))
 
 (defn gantt-save-result [state body]
@@ -2527,9 +2728,54 @@
 (defn gantt-delete-result [state body]
   (if (:ok body)
     {:state (assoc state :gantt-selected nil :gantt-progress nil :gantt-progress-days nil
+                   :gantt-work-times [] :gantt-checklist-items []
                    :flash {:error? false :text (m :gantt-deleted)})
      :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
           [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn work-times-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :gantt-work-times (or (:work_times body) []) :flash nil))
+    (let [s (assoc state :gantt-work-times []
+                   :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn checklist-items-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :gantt-checklist-items (or (:checklist_items body) []) :flash nil))
+    (let [s (assoc state :gantt-checklist-items []
+                   :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn work-time-save-result [state body]
+  (if (:ok body)
+    (let [gid (or (get-in body [:work_time :gantt_id]) (:gantt-selected state))]
+      {:state (assoc state :flash nil)
+       :fx (gantt-children-load-fx gid)})
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn work-time-delete-result [state body]
+  (if (:ok body)
+    {:state (assoc state :flash {:error? false :text (m :work-time-deleted)})
+     :fx (gantt-children-load-fx (:gantt-selected state))}
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn checklist-item-save-result [state body]
+  (if (:ok body)
+    (let [gid (or (get-in body [:checklist_item :gantt_id]) (:gantt-selected state))]
+      {:state (assoc state :flash nil)
+       :fx (gantt-children-load-fx gid)})
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn checklist-item-delete-result [state body]
+  (if (:ok body)
+    {:state (assoc state :flash {:error? false :text (m :checklist-deleted)})
+     :fx (gantt-children-load-fx (:gantt-selected state))}
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
       {:state s :fx [[:html (render s)]]})))
 
@@ -2544,6 +2790,7 @@
 (defn gantt-title-delete-result [state body]
   (if (:ok body)
     {:state (assoc state :gantt-title-selected nil :gantt-selected nil
+                   :gantt-work-times [] :gantt-checklist-items []
                    :gantt-progress nil :gantt-progress-days nil
                    :flash {:error? false :text (m :gantt-title-deleted)})
      :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]]}
@@ -2884,11 +3131,19 @@
           row (gantt-row-by-id state id)
           s (assoc state :gantt-selected (when-not (str/blank? id) id)
                    :gantt-title-selected (or (:title_id row) (:gantt-title-selected state))
-                   :gantt-progress-days nil :flash nil)]
+                   :gantt-progress-days nil
+                   :gantt-work-times []
+                   :gantt-checklist-items []
+                   :flash nil)
+          child-fx (when (and row (not (str/blank? id)))
+                     (gantt-children-load-fx (:id row)))]
       (if (gantt-row-applicable? row)
         {:state (assoc s :gantt-progress nil)
-         :fx [[:api "GET" (str "/api/user/gantt/" (:id row) "/progress") nil :gantt-progress-loaded]]}
-        (guarded (assoc s :gantt-progress nil))))
+         :fx (into [[:api "GET" (str "/api/user/gantt/" (:id row) "/progress") nil :gantt-progress-loaded]]
+                   child-fx)}
+        (if (seq child-fx)
+          {:state (assoc s :gantt-progress nil) :fx (vec child-fx)}
+          (guarded (assoc s :gantt-progress nil)))))
     "add-gantt-row"
     (let [tid (str/trim (as-text (if (nil? (:title_id form))
                                    (:gantt-title-selected state)
@@ -2984,6 +3239,72 @@
          :fx [[:api "PUT" (str "/api/user/gantt/" id)
                (daily-row-put-body row status)
                :daily-status-save-result]]}))
+    "add-work-time"
+    (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
+          start (str/trim (as-text (:start_at form)))
+          end (str/trim (as-text (:end_at form)))]
+      (cond
+        (str/blank? gid) (flash-html-state state (m :gantt-not-found))
+        (or (str/blank? start) (str/blank? end)) (flash-html-state state (m :time-invalid))
+        :else
+        {:state state
+         :fx [[:api "POST" (str "/api/user/gantt/" gid "/work-times")
+               {:start_at start :end_at end}
+               :work-time-save-result]]}))
+    "save-work-time"
+    (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
+          tid (str/trim (as-text (:id form)))
+          start (str/trim (as-text (:start_at form)))
+          end (str/trim (as-text (:end_at form)))]
+      (cond
+        (or (str/blank? gid) (str/blank? tid)) (flash-html-state state (m :work-time-not-found))
+        (or (str/blank? start) (str/blank? end)) (flash-html-state state (m :time-invalid))
+        :else
+        {:state state
+         :fx [[:api "PUT" (str "/api/user/gantt/" gid "/work-times/" tid)
+               {:start_at start :end_at end}
+               :work-time-save-result]]}))
+    "delete-work-time"
+    (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
+          tid (str/trim (as-text (:id form)))]
+      (if (or (str/blank? gid) (str/blank? tid))
+        (flash-html-state state (m :work-time-not-found))
+        {:state state
+         :fx [[:api "DELETE" (str "/api/user/gantt/" gid "/work-times/" tid) nil
+               :work-time-delete-result]]}))
+    "add-checklist-item"
+    (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
+          label (str/trim (as-text (:label form)))]
+      (cond
+        (str/blank? gid) (flash-html-state state (m :gantt-not-found))
+        (str/blank? label) (flash-html-state state (m :label-required))
+        :else
+        {:state state
+         :fx [[:api "POST" (str "/api/user/gantt/" gid "/checklist-items")
+               {:label label}
+               :checklist-item-save-result]]}))
+    "save-checklist-item"
+    (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
+          cid (str/trim (as-text (:id form)))
+          label (str/trim (as-text (:label form)))
+          status (str/trim (as-text (:status form)))]
+      (cond
+        (or (str/blank? gid) (str/blank? cid)) (flash-html-state state (m :checklist-item-not-found))
+        (str/blank? label) (flash-html-state state (m :label-required))
+        (not (#{"pending" "done"} status)) (flash-html-state state (m :checklist-status-invalid))
+        :else
+        {:state state
+         :fx [[:api "PUT" (str "/api/user/gantt/" gid "/checklist-items/" cid)
+               {:label label :status status}
+               :checklist-item-save-result]]}))
+    "delete-checklist-item"
+    (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
+          cid (str/trim (as-text (:id form)))]
+      (if (or (str/blank? gid) (str/blank? cid))
+        (flash-html-state state (m :checklist-item-not-found))
+        {:state state
+         :fx [[:api "DELETE" (str "/api/user/gantt/" gid "/checklist-items/" cid) nil
+               :checklist-item-delete-result]]}))
     nil))
 
 (defn handle [state msg]
@@ -3011,6 +3332,12 @@
       :gantt-progress-loaded (gantt-progress-loaded state arg)
       :gantt-progress-days-loaded (gantt-progress-days-loaded state arg)
       :gantt-finalize-result (gantt-finalize-result state arg)
+      :work-times-loaded (work-times-loaded state arg)
+      :checklist-items-loaded (checklist-items-loaded state arg)
+      :work-time-save-result (work-time-save-result state arg)
+      :work-time-delete-result (work-time-delete-result state arg)
+      :checklist-item-save-result (checklist-item-save-result state arg)
+      :checklist-item-delete-result (checklist-item-delete-result state arg)
       :orders-loaded (orders-loaded state arg)
       :order-loaded (order-loaded state arg)
       :order-map-loaded (order-map-loaded state arg)
@@ -3051,7 +3378,12 @@
                 (= :gantt (:page s))
                 (assoc s :gantt-selected nil :gantt-title-selected nil
                        :gantt-progress nil :gantt-progress-days nil
+                       :gantt-work-times [] :gantt-checklist-items []
                        :gantt-axis "day" :gantt-orient "time-h" :form {} :paint-data nil)
+
+                (= :works (:page s))
+                (assoc s :gantt-selected nil :gantt-work-times [] :gantt-checklist-items []
+                       :gantt-progress nil :gantt-progress-days nil)
 
                 (= :daily (:page s))
                 (assoc s :daily-range "days7"
@@ -3243,7 +3575,9 @@
           ("set-gantt-axis" "set-gantt-orient" "select-gantt-title" "add-gantt-title"
            "save-gantt-title" "delete-gantt-title" "select-gantt-row" "add-gantt-row"
            "save-gantt-row" "delete-gantt-row" "review-gantt-row" "finalize-gantt-progress"
-           "set-daily-range" "set-daily-statuses" "set-daily-row-status")
+           "set-daily-range" "set-daily-statuses" "set-daily-row-status"
+           "add-work-time" "save-work-time" "delete-work-time"
+           "add-checklist-item" "save-checklist-item" "delete-checklist-item")
           (submit-gantt-act state form act)
           "create-order"
           (let [emails (parse-recipient-emails (:recipient_emails form))

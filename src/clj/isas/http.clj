@@ -493,6 +493,70 @@
       (let [r (gantt/soft-delete-row sys uid id)]
         (if (:ok r) (ok {}) (fail (:code r)))))))
 
+(defn gantt-work-times-get [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/list-work-times sys uid id)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn gantt-work-times-post [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/create-work-time sys uid id (read-body req))]
+          (if (:ok r) (ok {:work_time (:work_time r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "作業時間の追加を読めませんでした" :error (.getMessage e))
+          (fail "time_invalid"))))))
+
+(defn gantt-work-time-put [sys req gid tid]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/update-work-time sys uid gid tid (read-body req))]
+          (if (:ok r) (ok {:work_time (:work_time r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "作業時間の更新を読めませんでした" :error (.getMessage e))
+          (fail "time_invalid"))))))
+
+(defn gantt-work-time-delete [sys req gid tid]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/soft-delete-work-time sys uid gid tid)]
+        (if (:ok r) (ok {}) (fail (:code r)))))))
+
+(defn gantt-checklist-items-get [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/list-checklist-items sys uid id)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+
+(defn gantt-checklist-items-post [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/create-checklist-item sys uid id (read-body req))]
+          (if (:ok r) (ok {:checklist_item (:checklist_item r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "チェック項目の追加を読めませんでした" :error (.getMessage e))
+          (fail "label_required"))))))
+
+(defn gantt-checklist-item-put [sys req gid cid]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/update-checklist-item sys uid gid cid (read-body req))]
+          (if (:ok r) (ok {:checklist_item (:checklist_item r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "チェック項目の更新を読めませんでした" :error (.getMessage e))
+          (fail "label_required"))))))
+
+(defn gantt-checklist-item-delete [sys req gid cid]
+  (with-farm sys req
+    (fn [uid]
+      (let [r (gantt/soft-delete-checklist-item sys uid gid cid)]
+        (if (:ok r) (ok {}) (fail (:code r)))))))
+
 (defn work-name-candidates-get [sys req]
   (with-farm sys req
     (fn [uid]
@@ -662,6 +726,26 @@
         (when (= method :get) [:gantt-progress-days id]))
       (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)/progress" (str uri))]
         (when (= method :get) [:gantt-progress id]))
+      (when-let [[_ gid tid] (re-matches #"/api/user/gantt/(\d+)/work-times/(\d+)" (str uri))]
+        (cond
+          (= method :put) [:gantt-work-time-put gid tid]
+          (= method :delete) [:gantt-work-time-delete gid tid]
+          :else nil))
+      (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)/work-times" (str uri))]
+        (cond
+          (= method :get) [:gantt-work-times-get id]
+          (= method :post) [:gantt-work-times-post id]
+          :else nil))
+      (when-let [[_ gid cid] (re-matches #"/api/user/gantt/(\d+)/checklist-items/(\d+)" (str uri))]
+        (cond
+          (= method :put) [:gantt-checklist-item-put gid cid]
+          (= method :delete) [:gantt-checklist-item-delete gid cid]
+          :else nil))
+      (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)/checklist-items" (str uri))]
+        (cond
+          (= method :get) [:gantt-checklist-items-get id]
+          (= method :post) [:gantt-checklist-items-post id]
+          :else nil))
       (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)" (str uri))]
         (cond
           (= method :put) [:gantt-put id]
@@ -738,6 +822,14 @@
         :gantt-titles-delete (gantt-titles-delete sys req (second spec))
         :gantt-progress (gantt-progress sys req (second spec))
         :gantt-progress-days (gantt-progress-days sys req (second spec))
+        :gantt-work-times-get (gantt-work-times-get sys req (second spec))
+        :gantt-work-times-post (gantt-work-times-post sys req (second spec))
+        :gantt-work-time-put (gantt-work-time-put sys req (second spec) (nth spec 2))
+        :gantt-work-time-delete (gantt-work-time-delete sys req (second spec) (nth spec 2))
+        :gantt-checklist-items-get (gantt-checklist-items-get sys req (second spec))
+        :gantt-checklist-items-post (gantt-checklist-items-post sys req (second spec))
+        :gantt-checklist-item-put (gantt-checklist-item-put sys req (second spec) (nth spec 2))
+        :gantt-checklist-item-delete (gantt-checklist-item-delete sys req (second spec) (nth spec 2))
         :orders-get (orders-get sys req)
         :orders-post (orders-post sys req)
         :order-get (order-get sys req (second spec))

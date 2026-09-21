@@ -120,6 +120,26 @@
       PRIMARY KEY (gantt_id, day),
       FOREIGN KEY (gantt_id) REFERENCES gantt_rows(id)
     )"
+   "CREATE TABLE IF NOT EXISTS gantt_work_times (
+      id INTEGER PRIMARY KEY,
+      gantt_id INTEGER NOT NULL,
+      start_at TEXT NOT NULL,
+      end_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      FOREIGN KEY (gantt_id) REFERENCES gantt_rows(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS gantt_checklist_items (
+      id INTEGER PRIMARY KEY,
+      gantt_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      FOREIGN KEY (gantt_id) REFERENCES gantt_rows(id)
+    )"
    "CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY,
       issuer_id INTEGER NOT NULL,
@@ -528,6 +548,103 @@
                      ["UPDATE gantt_rows SET deleted_at = ?, updated_at = ?
                        WHERE id = ? AND deleted_at IS NULL RETURNING *"
                       (time/now-utc) (time/now-utc) id]))
+
+(defn insert-gantt-work-time! [ds {:keys [gantt-id start-at end-at]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO gantt_work_times (gantt_id, start_at, end_at, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?) RETURNING *"
+                      gantt-id start-at end-at (time/now-utc) (time/now-utc)]))
+
+(defn update-gantt-work-time! [ds id {:keys [start-at end-at]}]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_work_times SET start_at = ?, end_at = ?, updated_at = ?
+                       WHERE id = ? AND deleted_at IS NULL RETURNING *"
+                      start-at end-at (time/now-utc) id]))
+
+(defn find-gantt-work-time [ds id]
+  (jdbc/execute-one! ds ["SELECT * FROM gantt_work_times WHERE id = ?" id]))
+
+(defn list-gantt-work-times [ds gantt-id]
+  (jdbc/execute! ds ["SELECT * FROM gantt_work_times
+                      WHERE gantt_id = ? AND deleted_at IS NULL
+                      ORDER BY start_at, id"
+                     gantt-id]))
+
+(defn soft-delete-gantt-work-time! [ds id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_work_times SET deleted_at = ?, updated_at = ?
+                       WHERE id = ? AND deleted_at IS NULL RETURNING *"
+                      (time/now-utc) (time/now-utc) id]))
+
+(defn soft-delete-gantt-work-times-for-gantt! [ds gantt-id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_work_times SET deleted_at = ?, updated_at = ?
+                       WHERE gantt_id = ? AND deleted_at IS NULL"
+                      (time/now-utc) (time/now-utc) gantt-id]))
+
+(defn soft-delete-gantt-work-times-for-title! [ds title-id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_work_times SET deleted_at = ?, updated_at = ?
+                       WHERE deleted_at IS NULL
+                         AND gantt_id IN (SELECT id FROM gantt_rows WHERE title_id = ?)"
+                      (time/now-utc) (time/now-utc) title-id]))
+
+(defn count-gantt-work-times [ds gantt-id]
+  (:c (jdbc/execute-one! ds ["SELECT COUNT(*) AS c FROM gantt_work_times
+                              WHERE gantt_id = ? AND deleted_at IS NULL"
+                             gantt-id])))
+
+(defn insert-gantt-checklist-item! [ds {:keys [gantt-id label status]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO gantt_checklist_items (gantt_id, label, status, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?) RETURNING *"
+                      gantt-id label status (time/now-utc) (time/now-utc)]))
+
+(defn update-gantt-checklist-item! [ds id {:keys [label status]}]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_checklist_items SET label = ?, status = ?, updated_at = ?
+                       WHERE id = ? AND deleted_at IS NULL RETURNING *"
+                      label status (time/now-utc) id]))
+
+(defn find-gantt-checklist-item [ds id]
+  (jdbc/execute-one! ds ["SELECT * FROM gantt_checklist_items WHERE id = ?" id]))
+
+(defn list-gantt-checklist-items [ds gantt-id]
+  (jdbc/execute! ds ["SELECT * FROM gantt_checklist_items
+                      WHERE gantt_id = ? AND deleted_at IS NULL
+                      ORDER BY id"
+                     gantt-id]))
+
+(defn soft-delete-gantt-checklist-item! [ds id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_checklist_items SET deleted_at = ?, updated_at = ?
+                       WHERE id = ? AND deleted_at IS NULL RETURNING *"
+                      (time/now-utc) (time/now-utc) id]))
+
+(defn soft-delete-gantt-checklist-items-for-gantt! [ds gantt-id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_checklist_items SET deleted_at = ?, updated_at = ?
+                       WHERE gantt_id = ? AND deleted_at IS NULL"
+                      (time/now-utc) (time/now-utc) gantt-id]))
+
+(defn soft-delete-gantt-checklist-items-for-title! [ds title-id]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_checklist_items SET deleted_at = ?, updated_at = ?
+                       WHERE deleted_at IS NULL
+                         AND gantt_id IN (SELECT id FROM gantt_rows WHERE title_id = ?)"
+                      (time/now-utc) (time/now-utc) title-id]))
+
+(defn count-gantt-checklist [ds gantt-id]
+  (let [row (jdbc/execute-one! ds
+                               ["SELECT COUNT(*) AS total,
+                                       SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done
+                                 FROM gantt_checklist_items
+                                 WHERE gantt_id = ? AND deleted_at IS NULL"
+                                gantt-id])
+        total (:total row)
+        done (:done row)]
+    {:total (if (nil? total) 0 total)
+     :done (if (nil? done) 0 done)}))
 
 (defn find-gantt-progress-day [ds gantt-id day]
   (jdbc/execute-one! ds ["SELECT * FROM gantt_progress_days WHERE gantt_id = ? AND day = ?"

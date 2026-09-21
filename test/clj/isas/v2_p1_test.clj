@@ -337,8 +337,7 @@
   (testing "V2P1-6-01 / V2P1-6-02 禁止機能が日次に無い"
     (let [h (html {:page :daily :fields [{:id 1}] :daily-statuses ["not_started"]
                    :daily-rows []})]
-      (is (not (re-find #"チェック項目|作業時間|メモ" h)))
-      (is (nil? (http/match-api :get "/api/user/gantt/1/checklist")))
+      (is (not (re-find #"メモ|担当|繰り返し|通知" h)))
       (is (nil? (http/match-api :get "/api/user/memos")))))
   (testing "time windows"
     (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-21T01:00:00Z"))]

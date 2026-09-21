@@ -592,7 +592,7 @@
                                 {:id 4 :title_id 10 :title "メモ" :start_at "2026-09-18T10:00"
                                  :end_at "2026-09-18T11:00" :field_ids []}])]
       (is (= :api (tu/fx-op s [:submit {:act "select-gantt-row" :form {:id "3"}}])))
-      (is (= :html (tu/fx-op s [:submit {:act "select-gantt-row" :form {:id "4"}}])))
+      (is (= :api (tu/fx-op s [:submit {:act "select-gantt-row" :form {:id "4"}}])))
       (is (= :api (tu/fx-op s [:submit {:act "add-gantt-row"
                                         :form {:title "" :start_at "2026-09-18T08:00" :end_at "2026-09-18T09:00"}}])))
       (is (= :html (tu/fx-op s [:submit {:act "add-gantt-row" :form {:title "x"}}])))
@@ -722,7 +722,7 @@
                    (ui/render (assoc s :gantt-selected 3
                                      :gantt-progress {:ok true :applicable true :percent 0}))))
       (is (= :html (tu/fx-op s [:gantt-loaded {:ok true}])))
-      (is (= :html (tu/fx-op (assoc s :gantt-selected 3)
+      (is (= :api (tu/fx-op (assoc s :gantt-selected 3)
                             [:gantt-loaded {:ok true
                                             :titles (:gantt-titles s)
                                             :rows [{:id 3 :title_id 10 :title "行" :start_at "2026-09-18T08:00"

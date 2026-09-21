@@ -71,6 +71,19 @@
    :execution_status (:execution_status row)
    :field_ids (db/list-gantt-targets ds (:id row))})
 
+(defn- child-summary [ds gantt-id]
+  (let [wt (db/count-gantt-work-times ds gantt-id)
+        cl (db/count-gantt-checklist ds gantt-id)
+        done (:done cl)
+        total (:total cl)]
+    {:work_time_count (long (if (nil? wt) 0 wt))
+     :checklist_done (long (if (nil? done) 0 done))
+     :checklist_total (long (if (nil? total) 0 total))}))
+
+(defn- present-daily-row [ds row]
+  (merge (present-row ds row)
+         (child-summary ds (:id row))))
+
 (def ^:private execution-statuses #{"not_started" "in_progress" "done"})
 
 (defn- normalize-execution-status [s]
@@ -120,11 +133,11 @@
             base (->> (db/list-gantt-rows (:ds sys) user-id)
                       (filter #(contains? status-set (:execution_status %))))
             rows (if (= :all (:window win))
-                   (mapv #(present-row (:ds sys) %) base)
+                   (mapv #(present-daily-row (:ds sys) %) base)
                    (let [[w0 w1] (:window win)]
                      (->> base
                           (filter #(overlaps-window? % w0 w1))
-                          (mapv #(present-row (:ds sys) %)))))]
+                          (mapv #(present-daily-row (:ds sys) %)))))]
         (log/info "日次一覧を返しました"
                   :user-id user-id :range (str range) :statuses (:statuses st) :count (count rows))
         {:ok true :rows rows}))))
@@ -196,6 +209,8 @@
         {:ok false :code "title_not_found"})
       :else
       (do
+        (db/soft-delete-gantt-work-times-for-title! (:ds sys) tid)
+        (db/soft-delete-gantt-checklist-items-for-title! (:ds sys) tid)
         (db/soft-delete-gantt-rows-for-title! (:ds sys) tid)
         (db/soft-delete-gantt-title! (:ds sys) tid)
         (log/info "ガント題名をソフト削除しました" :user-id user-id :title-id tid)
@@ -413,6 +428,8 @@
         {:ok false :code "gantt_not_found"})
       :else
       (do
+        (db/soft-delete-gantt-work-times-for-gantt! (:ds sys) gid)
+        (db/soft-delete-gantt-checklist-items-for-gantt! (:ds sys) gid)
         (db/soft-delete-gantt-row! (:ds sys) gid)
         (log/info "ガント行をソフト削除しました" :user-id user-id :gantt-id gid)
         {:ok true}))))
@@ -478,3 +495,236 @@
    :work_name nil
    :execution_status "not_started"
    :field_ids []})
+
+(defn- present-work-time [row]
+  {:id (:id row)
+   :gantt_id (:gantt_id row)
+   :start_at (:start_at row)
+   :end_at (:end_at row)})
+
+(defn- present-checklist-item [row]
+  {:id (:id row)
+   :gantt_id (:gantt_id row)
+   :label (:label row)
+   :status (:status row)})
+
+(defn- require-active-parent [sys user-id id]
+  (let [gate (require-fields sys user-id)
+        gid (geo/as-int id)
+        row (when gid (db/find-gantt-row (:ds sys) user-id gid))]
+    (cond
+      (not (:ok gate))
+      gate
+
+      (nil? gid)
+      (do
+        (log/warn "親ガント作業がありません" :user-id user-id :gantt-id id)
+        {:ok false :code "gantt_not_found"})
+
+      (nil? row)
+      (do
+        (log/warn "親ガント作業がありません" :user-id user-id :gantt-id id)
+        {:ok false :code "gantt_not_found"})
+
+      (not (active-row? row))
+      (do
+        (log/warn "親ガント作業がありません" :user-id user-id :gantt-id id)
+        {:ok false :code "gantt_not_found"})
+
+      :else
+      {:ok true :gantt-id gid :row row})))
+
+(defn- work-time-missing? [tid existing parent-gid]
+  (cond
+    (nil? tid) true
+    (nil? existing) true
+    (some? (:deleted_at existing)) true
+    (not= (:gantt_id existing) parent-gid) true
+    :else false))
+
+(defn- checklist-item-missing? [cid existing parent-gid]
+  (cond
+    (nil? cid) true
+    (nil? existing) true
+    (some? (:deleted_at existing)) true
+    (not= (:gantt_id existing) parent-gid) true
+    :else false))
+
+(defn- normalize-checklist-label [s]
+  (let [t (str/trim (str (or s "")))]
+    (cond
+      (str/blank? t)
+      (do
+        (log/warn "チェック項目名が空です")
+        {:ok false :code "label_required"})
+      (> (count t) 200)
+      (do
+        (log/warn "チェック項目名が長すぎます" :length (count t))
+        {:ok false :code "label_too_long"})
+      :else
+      {:ok true :label t})))
+
+(defn- normalize-checklist-status
+  ([s] (normalize-checklist-status s nil))
+  ([s default]
+   (if (and (nil? s) (some? default))
+     {:ok true :status default}
+     (let [t (str/trim (str (or s "")))]
+       (if (#{"pending" "done"} t)
+         {:ok true :status t}
+         (do
+           (log/warn "チェック状態が不正です" :value s)
+           {:ok false :code "checklist_status_invalid"}))))))
+
+(defn list-work-times [sys user-id gantt-id]
+  (let [parent (require-active-parent sys user-id gantt-id)]
+    (if-not (:ok parent)
+      parent
+      (let [items (mapv present-work-time
+                        (db/list-gantt-work-times (:ds sys) (:gantt-id parent)))]
+        (log/info "作業時間を一覧しました"
+                  :user-id user-id :gantt-id (:gantt-id parent) :count (count items))
+        {:ok true :work_times items}))))
+
+(defn create-work-time [sys user-id gantt-id body]
+  (let [parent (require-active-parent sys user-id gantt-id)
+        times (normalize-times (:start_at body) (:end_at body))]
+    (cond
+      (not (:ok parent)) parent
+      (not (:ok times))
+      (do
+        (log/warn "作業時間の時刻が不正です"
+                  :user-id user-id :gantt-id gantt-id :code (:code times))
+        times)
+      :else
+      (let [row (db/insert-gantt-work-time! (:ds sys)
+                                            {:gantt-id (:gantt-id parent)
+                                             :start-at (:start-at times)
+                                             :end-at (:end-at times)})]
+        (log/info "作業時間を足しました"
+                  :user-id user-id :gantt-id (:gantt-id parent) :work-time-id (:id row)
+                  :start-at (:start-at times) :end-at (:end-at times))
+        {:ok true :work_time (present-work-time row)}))))
+
+(defn update-work-time [sys user-id gantt-id work-time-id body]
+  (let [parent (require-active-parent sys user-id gantt-id)
+        tid (geo/as-int work-time-id)
+        times (normalize-times (:start_at body) (:end_at body))
+        existing (when tid (db/find-gantt-work-time (:ds sys) tid))]
+    (cond
+      (not (:ok parent)) parent
+      (not (:ok times))
+      (do
+        (log/warn "作業時間の更新時刻が不正です"
+                  :user-id user-id :gantt-id gantt-id :work-time-id work-time-id
+                  :code (:code times))
+        times)
+      (work-time-missing? tid existing (:gantt-id parent))
+      (do
+        (log/warn "作業時間が見つかりません"
+                  :user-id user-id :gantt-id gantt-id :work-time-id work-time-id)
+        {:ok false :code "work_time_not_found"})
+      :else
+      (let [row (db/update-gantt-work-time! (:ds sys) tid
+                                            {:start-at (:start-at times)
+                                             :end-at (:end-at times)})]
+        (log/info "作業時間を直しました"
+                  :user-id user-id :gantt-id (:gantt-id parent) :work-time-id tid
+                  :start-at (:start-at times) :end-at (:end-at times))
+        {:ok true :work_time (present-work-time row)}))))
+
+(defn soft-delete-work-time [sys user-id gantt-id work-time-id]
+  (let [parent (require-active-parent sys user-id gantt-id)
+        tid (geo/as-int work-time-id)
+        existing (when tid (db/find-gantt-work-time (:ds sys) tid))]
+    (cond
+      (not (:ok parent)) parent
+      (work-time-missing? tid existing (:gantt-id parent))
+      (do
+        (log/warn "消す作業時間がありません"
+                  :user-id user-id :gantt-id gantt-id :work-time-id work-time-id)
+        {:ok false :code "work_time_not_found"})
+      :else
+      (do
+        (db/soft-delete-gantt-work-time! (:ds sys) tid)
+        (log/info "作業時間をソフト削除しました"
+                  :user-id user-id :gantt-id (:gantt-id parent) :work-time-id tid)
+        {:ok true}))))
+
+(defn list-checklist-items [sys user-id gantt-id]
+  (let [parent (require-active-parent sys user-id gantt-id)]
+    (if-not (:ok parent)
+      parent
+      (let [items (mapv present-checklist-item
+                        (db/list-gantt-checklist-items (:ds sys) (:gantt-id parent)))]
+        (log/info "チェック項目を一覧しました"
+                  :user-id user-id :gantt-id (:gantt-id parent) :count (count items))
+        {:ok true :checklist_items items}))))
+
+(defn create-checklist-item [sys user-id gantt-id body]
+  (let [parent (require-active-parent sys user-id gantt-id)
+        label (normalize-checklist-label (:label body))
+        status (normalize-checklist-status (:status body) "pending")]
+    (cond
+      (not (:ok parent)) parent
+      (not (:ok label)) label
+      (not (:ok status)) status
+      :else
+      (let [row (db/insert-gantt-checklist-item! (:ds sys)
+                                                 {:gantt-id (:gantt-id parent)
+                                                  :label (:label label)
+                                                  :status (:status status)})]
+        (log/info "チェック項目を足しました"
+                  :user-id user-id :gantt-id (:gantt-id parent)
+                  :checklist-item-id (:id row) :label (:label label) :status (:status status))
+        {:ok true :checklist_item (present-checklist-item row)}))))
+
+(defn update-checklist-item [sys user-id gantt-id item-id body]
+  (let [parent (require-active-parent sys user-id gantt-id)
+        cid (geo/as-int item-id)
+        existing (when cid (db/find-gantt-checklist-item (:ds sys) cid))]
+    (cond
+      (not (:ok parent)) parent
+      (checklist-item-missing? cid existing (:gantt-id parent))
+      (do
+        (log/warn "チェック項目が見つかりません"
+                  :user-id user-id :gantt-id gantt-id :checklist-item-id item-id)
+        {:ok false :code "checklist_item_not_found"})
+      :else
+      (let [has-label? (contains? body :label)
+            has-status? (contains? body :status)
+            label (if has-label?
+                    (normalize-checklist-label (:label body))
+                    {:ok true :label (:label existing)})
+            status (if has-status?
+                     (normalize-checklist-status (:status body))
+                     {:ok true :status (:status existing)})]
+        (cond
+          (not (:ok label)) label
+          (not (:ok status)) status
+          :else
+          (let [row (db/update-gantt-checklist-item! (:ds sys) cid
+                                                     {:label (:label label)
+                                                      :status (:status status)})]
+            (log/info "チェック項目を直しました"
+                      :user-id user-id :gantt-id (:gantt-id parent)
+                      :checklist-item-id cid :label (:label label) :status (:status status))
+            {:ok true :checklist_item (present-checklist-item row)}))))))
+
+(defn soft-delete-checklist-item [sys user-id gantt-id item-id]
+  (let [parent (require-active-parent sys user-id gantt-id)
+        cid (geo/as-int item-id)
+        existing (when cid (db/find-gantt-checklist-item (:ds sys) cid))]
+    (cond
+      (not (:ok parent)) parent
+      (checklist-item-missing? cid existing (:gantt-id parent))
+      (do
+        (log/warn "消すチェック項目がありません"
+                  :user-id user-id :gantt-id gantt-id :checklist-item-id item-id)
+        {:ok false :code "checklist_item_not_found"})
+      :else
+      (do
+        (db/soft-delete-gantt-checklist-item! (:ds sys) cid)
+        (log/info "チェック項目をソフト削除しました"
+                  :user-id user-id :gantt-id (:gantt-id parent) :checklist-item-id cid)
+        {:ok true}))))
