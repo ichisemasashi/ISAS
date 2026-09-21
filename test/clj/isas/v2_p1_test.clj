@@ -46,7 +46,8 @@
       (is (re-find #">日次一覧<" h))
       (is (re-find #"daily-range" h))
       (is (re-find #"今日" h))
-      (is (re-find #"今週" h))
+      (is (re-find #"直近7日" h))
+      (is (re-find #"すべて" h))
       (is (re-find #"未着手" h))
       (is (re-find #"着手中" h))
       (is (re-find #"完了" h))
@@ -167,7 +168,7 @@
                                                     "user" usid))
                             [:row :id])
                   d (get-in (tu/parse (tu/post-json app "/api/user/gantt"
-                                                    (row-body tid "週内" "2026-09-22T08:00" "2026-09-22T09:00")
+                                                    (row-body tid "7日内" "2026-09-18T08:00" "2026-09-18T09:00")
                                                     "user" usid))
                             [:row :id])
                   _ (tu/put-json app (str "/api/user/gantt/" a)
@@ -175,14 +176,17 @@
                                         :execution_status "in_progress")
                                  "user" usid)
                   _ (tu/put-json app (str "/api/user/gantt/" d)
-                                 (assoc (row-body tid "週内" "2026-09-22T08:00" "2026-09-22T09:00")
+                                 (assoc (row-body tid "7日内" "2026-09-18T08:00" "2026-09-18T09:00")
                                         :execution_status "done")
                                  "user" usid)
                   today (tu/parse (tu/get-query app "/api/user/gantt/daily"
                                                 {:range "today"} "user" usid))
-                  week (tu/parse (tu/get-query app "/api/user/gantt/daily"
-                                               {:range "week" :statuses "not_started,in_progress,done"}
-                                               "user" usid))
+                  days7 (tu/parse (tu/get-query app "/api/user/gantt/daily"
+                                                {:range "days7" :statuses "not_started,in_progress,done"}
+                                                "user" usid))
+                  all (tu/parse (tu/get-query app "/api/user/gantt/daily"
+                                              {:range "all" :statuses "not_started,in_progress,done"}
+                                              "user" usid))
                   empty (tu/parse (tu/get-query app "/api/user/gantt/daily"
                                                 {:range "today" :statuses ""} "user" usid))
                   bad-r (tu/parse (tu/get-query app "/api/user/gantt/daily"
@@ -197,7 +201,11 @@
               (is (some #(= "今日内" (:title %)) (:rows today)))
               (is (not (some #(= "境界終端" (:title %)) (:rows today))))
               (is (not (some #(= "境界開始" (:title %)) (:rows today))))
-              (is (some #(= "週内" (:title %)) (:rows week)))
+              (is (some #(= "7日内" (:title %)) (:rows days7)))
+              (is (not (some #(= "境界終端" (:title %)) (:rows days7))))
+              (is (:ok all))
+              (is (some #(= "7日内" (:title %)) (:rows all)))
+              (is (some #(= "境界終端" (:title %)) (:rows all)))
               (is (:ok empty))
               (is (= [] (:rows empty)))
               (is (= "range_invalid" (:code bad-r)))
@@ -250,8 +258,10 @@
                                                       :field_ids []}]})
           fail (ui/daily-loaded s0 {:ok false :code "no_fields"})
           empty-st (ui/handle s0 [:submit {:act "set-daily-statuses" :form {}}])
-          set-week (ui/handle (assoc (:state loaded) :daily-rows [{:id 1}])
-                              [:submit {:act "set-daily-range" :form {:range "week"}}])
+          set-days7 (ui/handle (assoc (:state loaded) :daily-rows [{:id 1}])
+                               [:submit {:act "set-daily-range" :form {:range "days7"}}])
+          set-all (ui/handle (assoc (:state loaded) :daily-rows [{:id 1}])
+                             [:submit {:act "set-daily-range" :form {:range "all"}}])
           set-st (ui/handle (:state loaded)
                             [:submit {:act "set-daily-statuses"
                                       :form {:status ["not_started" "done"]}}])
@@ -288,8 +298,10 @@
       (is (empty? (get-in empty-st [:state :daily-statuses])))
       (is (empty? (get-in empty-st [:state :daily-rows])))
       (is (= :html (ffirst (:fx empty-st))))
-      (is (= "week" (get-in set-week [:state :daily-range])))
-      (is (= :api (ffirst (:fx set-week))))
+      (is (= "days7" (get-in set-days7 [:state :daily-range])))
+      (is (= :api (ffirst (:fx set-days7))))
+      (is (= "all" (get-in set-all [:state :daily-range])))
+      (is (= :api (ffirst (:fx set-all))))
       (is (= ["not_started" "done"] (get-in set-st [:state :daily-statuses])))
       (is (= :api (ffirst (:fx save))))
       (is (re-find #"/api/user/gantt/1" (nth (first (:fx save)) 2)))
@@ -302,7 +314,7 @@
       (is (= :html (ffirst (:fx fields-off))))
       (is (= :api (ffirst (:fx sess))))
       (is (= :daily (get-in path [:state :page])))
-      (is (= "week" (get-in path [:state :daily-range])))))
+      (is (= "days7" (get-in path [:state :daily-range])))))
   (testing "code-message と gantt body"
     (is (= (:execution-status-invalid ui/messages)
            (ui/with-ui-lang {:ui-lang "ja"} #(ui/code-message "execution_status_invalid"))))
@@ -331,9 +343,11 @@
   (testing "time windows"
     (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-21T01:00:00Z"))]
       (is (= ["2026-09-21T00:00" "2026-09-22T00:00"] (time/tokyo-today-window)))
+      (is (= ["2026-09-15T00:00" "2026-09-22T00:00"] (time/tokyo-days7-window)))
       (is (= ["2026-09-21T00:00" "2026-09-28T00:00"] (time/tokyo-week-window))))
     (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-19T15:00:00Z"))]
-      (is (= ["2026-09-14T00:00" "2026-09-21T00:00"] (time/tokyo-week-window)))))
+      (is (= ["2026-09-14T00:00" "2026-09-21T00:00"] (time/tokyo-week-window)))
+      (is (= ["2026-09-14T00:00" "2026-09-21T00:00"] (time/tokyo-days7-window)))))
   (testing "cloverage 分岐"
     (is (= [] (#'ui/form-status-list {:status ""})))
     (is (= ["a" "b"] (#'ui/form-status-list {:status (list "a" "b")})))
@@ -343,13 +357,13 @@
                  (ui/with-ui-lang {:ui-lang "ja"}
                    #(#'ui/execution-status-select-html "weird" nil))))
     (is (false? (#'ui/daily-status-on? {:daily-statuses nil} "done")))
-    (is (re-find #"range=week" (#'ui/daily-query-path {:daily-range "nope" :daily-statuses nil})))
+    (is (re-find #"range=days7" (#'ui/daily-query-path {:daily-range "nope" :daily-statuses nil})))
     (is (re-find #"該当する作業はありません"
                  (html {:page :daily :fields [{:id 1}]
                         :daily-range "nope" :daily-statuses ["not_started"] :daily-rows nil})))
     (is (re-find #"選んだ期間・状態に重なる作業がありません"
                  (html {:page :daily :fields [{:id 1}]
-                        :daily-range "week" :daily-statuses ["not_started"]
+                        :daily-range "days7" :daily-statuses ["not_started"]
                         :daily-rows [] :daily-total 3})))
     (is (re-find #"作業タイトル"
                  (html {:page :works :fields [{:id 1}] :gantt-rows [] :gantt-titles []})))
@@ -360,10 +374,11 @@
     (is (re-find #"状態フィルタを1つ以上"
                  (html {:page :daily :fields [{:id 1}]
                         :daily-range nil :daily-statuses nil :daily-rows nil})))
-    (is (re-find #"range=week" (#'ui/daily-query-path {})))
-    (is (re-find #"range=week" (#'ui/daily-query-path {:daily-range nil})))
-    (is (re-find #"range=week" (#'ui/daily-query-path {:daily-range "week" :daily-statuses ["done"]})))
-    (is (re-find #"今週"
+    (is (re-find #"range=days7" (#'ui/daily-query-path {})))
+    (is (re-find #"range=days7" (#'ui/daily-query-path {:daily-range nil})))
+    (is (re-find #"range=days7" (#'ui/daily-query-path {:daily-range "days7" :daily-statuses ["done"]})))
+    (is (re-find #"range=all" (#'ui/daily-query-path {:daily-range "all"})))
+    (is (re-find #"直近7日"
                  (html {:page :daily :fields [{:id 1}]})))
     (let [          ctx-ok (ui/handle (assoc (ui/init-state) :page :daily :session {:email "a"}
                                    :kind "user" :fields [{:id 1}]

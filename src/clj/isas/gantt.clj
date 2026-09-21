@@ -97,7 +97,8 @@
 (defn- daily-window [range-key]
   (case (str range-key)
     "today" {:ok true :window (time/tokyo-today-window)}
-    "week" {:ok true :window (time/tokyo-week-window)}
+    "days7" {:ok true :window (time/tokyo-days7-window)}
+    "all" {:ok true :window :all}
     (do
       (log/warn "日次の期間が不正です" :range range-key)
       {:ok false :code "range_invalid"})))
@@ -105,6 +106,28 @@
 (defn- overlaps-window? [row window-start window-end]
   (and (pos? (compare window-end (str (:start_at row))))
        (pos? (compare (str (:end_at row)) window-start))))
+
+(defn list-daily [sys user-id {:keys [range statuses]}]
+  (let [gate (require-fields sys user-id)
+        win (daily-window range)
+        st (parse-daily-statuses statuses)]
+    (cond
+      (not (:ok gate)) gate
+      (not (:ok win)) win
+      (not (:ok st)) st
+      :else
+      (let [status-set (set (:statuses st))
+            base (->> (db/list-gantt-rows (:ds sys) user-id)
+                      (filter #(contains? status-set (:execution_status %))))
+            rows (if (= :all (:window win))
+                   (mapv #(present-row (:ds sys) %) base)
+                   (let [[w0 w1] (:window win)]
+                     (->> base
+                          (filter #(overlaps-window? % w0 w1))
+                          (mapv #(present-row (:ds sys) %)))))]
+        (log/info "日次一覧を返しました"
+                  :user-id user-id :range (str range) :statuses (:statuses st) :count (count rows))
+        {:ok true :rows rows}))))
 
 (defn- active-row? [row]
   (nil? (:deleted_at row)))
@@ -266,25 +289,6 @@
                       :title (:title v) :fields (count (:field-ids v))
                       :execution-status status)
             {:ok true :row (present-row (:ds sys) (db/find-gantt-row (:ds sys) user-id gid))}))))))
-
-(defn list-daily [sys user-id {:keys [range statuses]}]
-  (let [gate (require-fields sys user-id)
-        win (daily-window range)
-        st (parse-daily-statuses statuses)]
-    (cond
-      (not (:ok gate)) gate
-      (not (:ok win)) win
-      (not (:ok st)) st
-      :else
-      (let [[w0 w1] (:window win)
-            status-set (set (:statuses st))
-            rows (->> (db/list-gantt-rows (:ds sys) user-id)
-                      (filter #(overlaps-window? % w0 w1))
-                      (filter #(contains? status-set (:execution_status %)))
-                      (mapv #(present-row (:ds sys) %)))]
-        (log/info "日次一覧を返しました"
-                  :user-id user-id :range (str range) :statuses (:statuses st) :count (count rows))
-        {:ok true :rows rows}))))
 
 (defn progress-percent [numerator denominator all-done?]
   (let [n (double (or numerator 0.0))

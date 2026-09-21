@@ -17,6 +17,8 @@
       (is (= "2026-09-12T00:00" (time/axis-start-day)))
       (is (= "2026-09-15T00:00" (time/axis-end-hours 72)))
       (is (= "2026-09-19T00:00" (time/axis-week-end)))
+      (is (= ["2026-09-12T00:00" "2026-09-13T00:00"] (time/tokyo-today-window)))
+      (is (= ["2026-09-06T00:00" "2026-09-13T00:00"] (time/tokyo-days7-window)))
       (is (= "2026-10-01T00:00" (time/axis-month-end)))
       (is (= "2026-09-12T08:30" (time/today-at 8 30)))
       (is (true? (time/local-minute-ok? "2026-09-12T08:00")))

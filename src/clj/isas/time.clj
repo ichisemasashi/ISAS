@@ -79,8 +79,17 @@
         end (.atStartOfDay (.plusDays d 1))]
     [(format-local-minute start) (format-local-minute end)]))
 
+(defn tokyo-days7-window
+  "Asia/Tokyo の直近7暦日（今日含む）[(今日-6日)0:00, 翌日0:00)。終端は含まない。"
+  []
+  (let [d (today-tokyo)
+        start (.atStartOfDay (.minusDays d 6))
+        end (.atStartOfDay (.plusDays d 1))]
+    [(format-local-minute start) (format-local-minute end)]))
+
 (defn tokyo-week-window
-  "Asia/Tokyo の今週（月曜始まり）[月曜0:00, 翌月曜0:00)。終端は含まない。"
+  "Asia/Tokyo の今週（月曜始まり）[月曜0:00, 翌月曜0:00)。終端は含まない。
+  日次一覧では使わない（ガント軸など他用途向けに残す）。"
   []
   (let [d (today-tokyo)
         dow (.getValue (.getDayOfWeek d))

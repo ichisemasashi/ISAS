@@ -133,12 +133,13 @@
    :works-no-fields "圃場が1枚以上あるときだけ、作業を管理できます"
    :works-empty "まだ作業がありません。下の「新しい作業を追加」から登録できます"
    :daily-title "日次一覧"
-   :daily-lead "今日や今週の予定を、未着手／着手中／完了で回す一覧です"
+   :daily-lead "今日・直近7日・すべての予定を、未着手／着手中／完了で回す一覧です"
    :nav-daily "日次"
    :phone-daily "日次一覧はパソコンで開いてください"
    :daily-no-fields "圃場が1枚以上あるときだけ、日次一覧を使えます"
    :daily-today "今日"
-   :daily-week "今週"
+   :daily-days7 "直近7日"
+   :daily-all "すべて"
    :daily-range-label "期間"
    :daily-filter-apply "絞り込む"
    :daily-filter-empty "状態フィルタを1つ以上オンにしてください"
@@ -147,7 +148,7 @@
    :daily-link-works "作業画面を開く"
    :daily-section-list "一覧"
    :daily-section-filter "期間と状態"
-   :home-link-daily "今日・今週の予定を実行状態で回す"
+   :home-link-daily "今日・直近7日・すべての予定を実行状態で回す"
    :home-link-works "予定の追加・編集"
    :home-link-gantt "題名ごとの時間軸・進捗・地図"
    :fields-lead "圃場の名前・面積・メモを直します。新しい圃場は地図画面で作ります"
@@ -439,12 +440,13 @@
    :works-no-fields "Work management is available only when you have at least one field"
    :works-empty "No works yet. Use “Add a new work” below"
    :daily-title "Daily list"
-   :daily-lead "Run today’s or this week’s plans with Not started / In progress / Done"
+   :daily-lead "Run plans for today, the last 7 days, or all, with Not started / In progress / Done"
    :nav-daily "Daily"
    :phone-daily "Open the daily list on a computer"
    :daily-no-fields "Daily list is available only when you have at least one field"
    :daily-today "Today"
-   :daily-week "This week"
+   :daily-days7 "Last 7 days"
+   :daily-all "All"
    :daily-range-label "Range"
    :daily-filter-apply "Apply filters"
    :daily-filter-empty "Turn on at least one status filter"
@@ -453,7 +455,7 @@
    :daily-link-works "Open Works"
    :daily-section-list "List"
    :daily-section-filter "Range and status"
-   :home-link-daily "Run plans for today or this week by status"
+   :home-link-daily "Run plans for today, the last 7 days, or all by status"
    :home-link-works "Add and edit schedules"
    :home-link-gantt "Time axis, progress, and map by title"
    :fields-lead "Edit field names, areas, and memos. Create new fields on the map"
@@ -902,7 +904,7 @@
    :gantt-axis "day"
    :gantt-orient "time-h"
    :gantt-finalize-result nil
-   :daily-range "week"
+   :daily-range "days7"
    :daily-statuses ["not_started" "in_progress"]
    :daily-rows []
    :daily-total nil
@@ -1822,8 +1824,8 @@
 
 (defn- daily-query-path [state]
   (let [range (let [raw (:daily-range state)
-                    r (str (if (nil? raw) "week" raw))]
-                (if (#{"today" "week"} r) r "week"))
+                    r (str (if (nil? raw) "days7" raw))]
+                (if (#{"today" "days7" "all"} r) r "days7"))
         statuses (into [] (:daily-statuses state))]
     (str "/api/user/gantt/daily?range=" (encode-q range)
          "&statuses=" (encode-q (str/join "," statuses)))))
@@ -1956,8 +1958,8 @@
 (defn daily-view [state]
   (let [fields (:fields state)
         range (let [raw (:daily-range state)
-                    r (str (if (nil? raw) "week" raw))]
-                (if (#{"today" "week"} r) r "week"))
+                    r (str (if (nil? raw) "days7" raw))]
+                (if (#{"today" "days7" "all"} r) r "days7"))
         statuses (into [] (:daily-statuses state))
         rows (into [] (:daily-rows state))
         total (or (:daily-total state) 0)]
@@ -1973,7 +1975,8 @@
                     "<div class=\"toolbar\" id=\"daily-range-form\">"
                     (select-switch (m :daily-range-label) "daily-range" range
                                    [["today" (m :daily-today)]
-                                    ["week" (m :daily-week)]])
+                                    ["days7" (m :daily-days7)]
+                                    ["all" (m :daily-all)]])
                     "</div>"
                     "<form data-act=\"set-daily-statuses\" method=\"post\" id=\"daily-status-filter\">"
                     "<fieldset><legend>" (esc (m :execution-status)) "</legend>"
@@ -2951,7 +2954,7 @@
        :fx [[:api "POST" "/api/admin/gantt/progress/finalize" body :gantt-finalize-result]]})
     "set-daily-range"
     (let [range (str/trim (as-text (:range form)))
-          range' (if (#{"today" "week"} range) range "today")
+          range' (if (#{"today" "days7" "all"} range) range "today")
           s (assoc state :daily-range range' :flash nil)
           statuses (into [] (:daily-statuses s))]
       (if (empty? statuses)
@@ -3051,7 +3054,7 @@
                        :gantt-axis "day" :gantt-orient "time-h" :form {} :paint-data nil)
 
                 (= :daily (:page s))
-                (assoc s :daily-range "week"
+                (assoc s :daily-range "days7"
                        :daily-statuses ["not_started" "in_progress"]
                        :daily-rows [] :daily-total nil :flash nil)
 
