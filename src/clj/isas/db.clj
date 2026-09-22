@@ -280,6 +280,7 @@
   (ensure-column! ds "fields" "area_m2" "INTEGER")
   (ensure-column! ds "fields" "area_ha" "REAL")
   (ensure-column! ds "fields" "memo" "TEXT")
+  (ensure-column! ds "memos" "gantt_id" "INTEGER")
   (migrate-gantt-titles! ds)
   (log/info "データベースの表を用意しました")
   ds)
@@ -573,9 +574,20 @@
 (defn find-gantt-row [ds user-id id]
   (jdbc/execute-one! ds ["SELECT * FROM gantt_rows WHERE id = ? AND user_id = ?" id user-id]))
 
+(defn find-gantt-row-by-id
+  "利用者横断。ソフト削除済みも含む（メモ紐づけ要約用）。"
+  [ds id]
+  (jdbc/execute-one! ds ["SELECT * FROM gantt_rows WHERE id = ?" id]))
+
 (defn list-gantt-rows [ds user-id]
   (jdbc/execute! ds ["SELECT * FROM gantt_rows WHERE user_id = ? AND deleted_at IS NULL ORDER BY start_at, id"
                      user-id]))
+
+(defn list-gantt-rows-undeleted-all
+  "管理者候補用。全利用者の未削除行。start_at → user_id → id。"
+  [ds]
+  (jdbc/execute! ds ["SELECT * FROM gantt_rows WHERE deleted_at IS NULL
+                      ORDER BY start_at, user_id, id"]))
 
 (defn list-gantt-rows-for-title [ds user-id title-id]
   (jdbc/execute! ds ["SELECT * FROM gantt_rows
@@ -931,6 +943,13 @@
 
 (defn find-memo [ds id]
   (jdbc/execute-one! ds ["SELECT * FROM memos WHERE id = ?" id]))
+
+(defn set-memo-gantt!
+  "紐づけの付け外し。content_saved_at は触らない。"
+  [ds id gantt-id]
+  (jdbc/execute-one! ds
+                     ["UPDATE memos SET gantt_id = ?, updated_at = ? WHERE id = ? RETURNING *"
+                      gantt-id (time/now-utc) id]))
 
 (defn update-memo-body! [ds id body content-saved-at]
   (jdbc/execute-one! ds

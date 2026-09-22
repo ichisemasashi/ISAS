@@ -110,8 +110,32 @@
    :filename (:filename row)
    :content_type (:content_type row)})
 
+(defn- present-gantt-summary
+  "紐づけ要約。無いときは nil。削除済み作業も id・title・deleted を返す。"
+  [sys memo]
+  (when-let [gid (geo/as-int (:gantt_id memo))]
+    (if-let [row (db/find-gantt-row-by-id (:ds sys) gid)]
+      {:id (:id row)
+       :title (:title row)
+       :deleted (some? (:deleted_at row))}
+      {:id gid :title nil :deleted true})))
+
+(defn- can-link-gantt?
+  "付け外しは作成者または管理者。"
+  [memo actor]
+  (or (author? memo actor) (admin? actor)))
+
+(defn- linkable-parent?
+  "公開済み・親・未削除のみ。"
+  [memo]
+  (and (some? memo)
+       (not (deleted? memo))
+       (published? memo)
+       (nil? (:parent_id memo))))
+
 (defn present-memo
-  "§2.5.1 のメモオブジェクト。editable_until は公開済みかつ作成者本人のときだけ入る。"
+  "§2.5.1 のメモオブジェクト。editable_until は公開済みかつ作成者本人のときだけ入る。
+  第2版工程5: gantt 要約（id・title・deleted）を含む。"
   [sys memo actor]
   (let [ds (:ds sys)
         mid (:id memo)
@@ -132,12 +156,14 @@
                        nil)
      :can_edit (can-edit? memo actor)
      :can_delete (if mine? true (admin? actor))
+     :can_link_gantt (boolean (and (linkable-parent? memo) (can-link-gantt? memo actor)))
      :tags (db/list-memo-tags ds mid)
      :links (db/list-memo-links ds mid)
      :attachments (mapv present-attachment (db/list-memo-attachments ds mid))
      :bookmarked (db/author-has-bookmarked? ds mid (actor-kind actor) (actor-id actor))
      :bookmark_count (db/count-memo-bookmarks ds mid)
-     :reply_count (db/count-memo-replies ds mid)}))
+     :reply_count (db/count-memo-replies ds mid)
+     :gantt (present-gantt-summary sys memo)}))
 
 ;;; 入力の正規化（§3.2）
 
@@ -649,3 +675,85 @@
   (let [rows (db/list-bookmarked-memos (:ds sys))]
     (log-info! "メモのブックマーク一覧を返しました" (assoc (actor-info actor) :count (count rows)))
     {:ok true :memos (mapv #(present-memo sys % actor) rows)}))
+
+;;; ガント任意紐づけ（第2版工程5）
+
+(defn- resolve-linkable-gantt
+  "新規紐づけ先。未削除のみ。利用者は自分の行、管理者は全利用者。"
+  [sys actor gantt-id]
+  (let [gid (geo/as-int gantt-id)]
+    (cond
+      (nil? gid)
+      nil
+
+      :else
+      (let [row (db/find-gantt-row-by-id (:ds sys) gid)]
+        (cond
+          (or (nil? row) (some? (:deleted_at row)))
+          nil
+
+          (admin? actor)
+          row
+
+          (and (= "user" (actor-kind actor))
+               (= (actor-id actor) (long (:user_id row))))
+          row
+
+          :else
+          nil)))))
+
+(defn link-gantt!
+  "公開済み親に作業を1件紐づける（既存があれば置き換え）。編集窓・content_saved_at は独立。"
+  [sys actor id body]
+  (let [mid (geo/as-int id)
+        memo (when mid (db/find-memo (:ds sys) mid))
+        ctx (assoc (actor-info actor) :memo-id mid :gantt-id (:gantt_id body))]
+    (cond
+      (or (nil? memo) (deleted? memo) (not (visible? memo actor)))
+      (deny "紐づけ先のメモがありません" "memo_not_found" ctx)
+
+      (not (linkable-parent? memo))
+      (deny "下書きまたは返信には紐づけできません" "link_not_allowed" ctx)
+
+      (not (can-link-gantt? memo actor))
+      (deny "メモの紐づけは作成者または管理者だけです" "forbidden_memo" ctx)
+
+      (nil? (geo/as-int (:gantt_id body)))
+      (deny "紐づけ先の作業 ID が必要です" "gantt_id_required" ctx)
+
+      :else
+      (let [row (resolve-linkable-gantt sys actor (:gantt_id body))]
+        (if-not row
+          (deny "紐づけ先の作業がありません" "gantt_not_found"
+                (assoc ctx :gantt-id (str (:gantt_id body))))
+          (let [gid (:id row)
+                updated (db/set-memo-gantt! (:ds sys) mid gid)]
+            (log-info! "メモに作業を紐づけました"
+                       (assoc (actor-info actor) :memo-id mid :gantt-id gid
+                              :replaced-gantt-id (:gantt_id memo)))
+            {:ok true :memo (present-memo sys updated actor)}))))))
+
+(defn unlink-gantt!
+  "紐づけを外す。無くても成功（冪等）。"
+  [sys actor id]
+  (let [mid (geo/as-int id)
+        memo (when mid (db/find-memo (:ds sys) mid))
+        ctx (assoc (actor-info actor) :memo-id mid)]
+    (cond
+      (or (nil? memo) (deleted? memo) (not (visible? memo actor)))
+      (deny "紐づけ解除のメモがありません" "memo_not_found" ctx)
+
+      (not (linkable-parent? memo))
+      (deny "下書きまたは返信の紐づけは外せません" "link_not_allowed" ctx)
+
+      (not (can-link-gantt? memo actor))
+      (deny "メモの紐づけ解除は作成者または管理者だけです" "forbidden_memo" ctx)
+
+      :else
+      (let [prev (:gantt_id memo)
+            updated (if (nil? prev)
+                      memo
+                      (db/set-memo-gantt! (:ds sys) mid nil))]
+        (log-info! "メモの作業紐づけを外しました"
+                   (assoc (actor-info actor) :memo-id mid :previous-gantt-id prev))
+        {:ok true :memo (present-memo sys updated actor)}))))

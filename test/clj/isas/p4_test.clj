@@ -343,10 +343,12 @@
           (is (= "title_not_found"
                  (:code (tu/parse (tu/delete-path app "/api/user/gantt/titles/99999"
                                                   "user" usid))))))
-        (testing "P4-2.4-11 / P4-2.4-c01 / P4-7-05 圃場0"
+        (testing "P4-2.4-11 / P4-2.4-c01 / P4-7-05 圃場0（一覧は成功・作成は no_fields）"
           (let [pw0 (tu/invite-pw app asid "p4-zero@example.com")
-                sid0 (tu/user-sid app "p4-zero@example.com" pw0)]
-            (is (= "no_fields" (:code (tu/parse (tu/get-path app "/api/user/gantt" "user" sid0)))))
+                sid0 (tu/user-sid app "p4-zero@example.com" pw0)
+                listed0 (tu/parse (tu/get-path app "/api/user/gantt" "user" sid0))]
+            (is (true? (:ok listed0)))
+            (is (= [] (:rows listed0)))
             (is (= "no_fields" (:code (tu/parse (tu/post-json app "/api/user/gantt"
                                                               (row-body tid "x" "2026-09-18T08:00" "2026-09-18T09:00")
                                                               "user" sid0)))))))
@@ -533,7 +535,9 @@
             (doseq [f others]
               (tu/delete-path app (str "/api/user/fields/" (:id f)) "user" usid))
             (tu/delete-path app (str "/api/user/fields/" (:id only)) "user" usid)
-            (is (= "no_fields" (:code (tu/parse (tu/get-path app "/api/user/gantt" "user" usid)))))
+            (let [listed0 (tu/parse (tu/get-path app "/api/user/gantt" "user" usid))]
+              (is (true? (:ok listed0)))
+              (is (some #(= gid (:id %)) (:rows listed0))))
             (add-field app usid "復活" tu/square)
             (is (some #(= gid (:id %))
                       (:rows (tu/parse (tu/get-path app "/api/user/gantt" "user" usid)))))))

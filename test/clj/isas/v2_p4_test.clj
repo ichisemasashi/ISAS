@@ -188,10 +188,10 @@
       (is (nil? (get-in r-order [:state :order])))
       (is (re-find #"指示は利用者ログイン" h))
       (is (nil? (re-find #"この入口では使えません" h)))))
-  (testing "V2P4-6-01 紐づけ等混入なし"
+  (testing "V2P4-6-01 工程5以前の禁止経路・文言は混入しない"
     (is (nil? (http/match-api :post "/api/memos/link-gantt")))
     (let [h (html {:page :memos :narrow? true})]
-      (is (not (re-find #"オフライン必須|ネイティブアプリ|ガント紐づけ" h))))))
+      (is (not (re-find #"オフライン必須|ネイティブアプリ" h))))))
 
 (deftest v2p4-api-and-handlers
   (tu/with-sys

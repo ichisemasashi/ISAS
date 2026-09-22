@@ -424,6 +424,17 @@
    :memos-deleted "削除しました"
    :memos-bookmarked "ブックマークしました"
    :memos-unbookmarked "ブックマークを外しました"
+   :memos-gantt-label "紐づいた作業"
+   :memos-gantt-link "作業を紐づける"
+   :memos-gantt-retarget "別の作業に付け替える"
+   :memos-gantt-unlink "紐づけを外す"
+   :memos-gantt-deleted "削除済み"
+   :memos-gantt-empty "付けられる作業がありません"
+   :memos-gantt-select "作業を選ぶ"
+   :memos-gantt-linked "作業を紐づけました"
+   :memos-gantt-unlinked "紐づけを外しました"
+   :link-not-allowed "下書きや返信には作業を付けられません"
+   :gantt-id-required "紐づける作業を選んでください"
    :memo-not-found "そのメモはありません"
    :body-required "本文を入力してください"
    :tag-limit "タグは20件までにしてください"
@@ -857,6 +868,17 @@
    :memos-deleted "Deleted"
    :memos-bookmarked "Bookmarked"
    :memos-unbookmarked "Bookmark removed"
+   :memos-gantt-label "Linked work"
+   :memos-gantt-link "Link work"
+   :memos-gantt-retarget "Link a different work"
+   :memos-gantt-unlink "Unlink work"
+   :memos-gantt-deleted "Deleted"
+   :memos-gantt-empty "No work available to link"
+   :memos-gantt-select "Choose work"
+   :memos-gantt-linked "Work linked"
+   :memos-gantt-unlinked "Work unlinked"
+   :link-not-allowed "Drafts and replies cannot be linked to work"
+   :gantt-id-required "Choose a work to link"
    :memo-not-found "That memo does not exist"
    :body-required "Enter a body"
    :tag-limit "Use 20 tags or fewer"
@@ -1070,6 +1092,8 @@
     "parent_not_found" (m :parent-not-found)
     "not_draft" (m :not-draft)
     "bookmark_not_found" (m :bookmark-not-found)
+    "link_not_allowed" (m :link-not-allowed)
+    "gantt_id_required" (m :gantt-id-required)
     (m :api-error)))
 
 (defn encode-q [s]
@@ -1257,7 +1281,9 @@
    :memo-search-active? false
    :memo-compose {}
    :memo-last-saved nil
-   :memo-before-id nil})
+   :memo-before-id nil
+   :memo-gantt-candidates []
+   :memo-gantt-pick nil})
 
 (defn map-mode [state]
   (let [mm (:map-mode state)
@@ -3078,6 +3104,69 @@
        "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
        "<button type=\"submit\">" (esc (m :btn-delete)) "</button></form>"))
 
+(defn- memo-gantt-option-label [row admin?]
+  (let [title (str (or (:title row) ""))
+        email (str (or (:user_email row) ""))]
+    (if (and admin? (not (str/blank? email)))
+      (str email " — " title)
+      title)))
+
+(defn- memo-gantt-summary-html [gantt]
+  (when gantt
+    (str "<p class=\"memo-gantt-summary\" id=\"memo-gantt-summary\">"
+         (esc (m :memos-gantt-label)) ": "
+         (esc (or (:title gantt) ""))
+         (when (:deleted gantt)
+           (str "（" (esc (m :memos-gantt-deleted)) "）"))
+         "</p>")))
+
+(defn- memo-gantt-link-section
+  "スレッド詳細の公開済み親のみ。作成者・管理者は付け外し、閲覧者は紐づきありのときだけ要約。"
+  [state memo]
+  (let [gantt (:gantt memo)
+        can? (boolean (:can_link_gantt memo))
+        admin? (= "admin" (str (:kind state)))
+         cands (vec (or (:memo-gantt-candidates state) []))
+         pick (let [p (:memo-gantt-pick state)]
+                (if (nil? p)
+                  (str (:id gantt))
+                  (str p)))]
+    (cond
+      (and (not can?) gantt)
+      (str "<div class=\"memo-gantt-link\" id=\"memo-gantt-link\">"
+           (memo-gantt-summary-html gantt)
+           "</div>")
+
+      (not can?)
+      ""
+
+      :else
+      (str "<div class=\"memo-gantt-link\" id=\"memo-gantt-link\">"
+           (when gantt (memo-gantt-summary-html gantt))
+           (if (empty? cands)
+             (str "<p class=\"empty-hint\" id=\"memo-gantt-empty\">"
+                  (esc (m :memos-gantt-empty)) "</p>")
+             (str "<form data-act=\"memo-gantt-link\" method=\"post\" id=\"memo-gantt-link-form\">"
+                  "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+                  "<label>" (esc (m :memos-gantt-select))
+                  "<select name=\"gantt_id\" id=\"memo-gantt-select\">"
+                  (apply str
+                         (for [r cands]
+                           (str "<option value=\"" (esc (:id r)) "\""
+                                (when (= (str (:id r)) pick) " selected")
+                                ">" (esc (memo-gantt-option-label r admin?))
+                                "</option>")))
+                  "</select></label>"
+                  "<button type=\"submit\" id=\"memo-gantt-link-btn\" class=\"btn-primary\">"
+                  (esc (m (if gantt :memos-gantt-retarget :memos-gantt-link)))
+                  "</button></form>"))
+           (when gantt
+             (str "<form data-act=\"memo-gantt-unlink\" method=\"post\" class=\"inline\" id=\"memo-gantt-unlink-form\">"
+                  "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+                  "<button type=\"submit\" id=\"memo-gantt-unlink-btn\">"
+                  (esc (m :memos-gantt-unlink)) "</button></form>"))
+           "</div>"))))
+
 (defn- memo-status-fieldset [selected]
   (str "<fieldset class=\"memo-status\"><legend>" (esc (m :memos-compose)) "</legend>"
        (apply str
@@ -3195,6 +3284,9 @@
          (esc (m :memos-close-thread)) "</button></form>"
          "<ul class=\"memo-list memo-thread\">"
          (memo-item-html state sel)
+         "</ul>"
+         (memo-gantt-link-section state sel)
+         "<ul class=\"memo-list memo-thread memo-replies\">"
          (apply str (for [r (:memo-replies state)] (memo-item-html state r)))
          "</ul>"
          "<form data-act=\"memo-reply\" method=\"post\" id=\"memo-reply-form\">"
@@ -3895,9 +3987,26 @@
 
 (defn memo-loaded [state body]
   (if (:ok body)
-    (guarded (assoc state :memo-selected-row (:memo body)))
+    (let [memo (:memo body)
+          s (assoc state :memo-selected-row memo :memo-gantt-pick nil)
+          cand-fx (when (:can_link_gantt memo)
+                    (if (= "admin" (str (:kind state)))
+                      [[:api "GET" "/api/admin/gantt/rows" nil :memo-gantt-candidates-loaded]]
+                      [[:api "GET" "/api/user/gantt" nil :memo-gantt-candidates-loaded]]))]
+      (if (seq cand-fx)
+        {:state (assoc s :memo-gantt-candidates [])
+         :fx (into [[:html (render (assoc s :memo-gantt-candidates []))]] cand-fx)}
+        (guarded (assoc s :memo-gantt-candidates []))))
     (let [s (assoc state :memo-selected nil :memo-selected-row nil :memo-replies []
+                   :memo-gantt-candidates []
                    :flash {:error? true :text (code-message (:code body)) :near "memo-timeline"})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn memo-gantt-candidates-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :memo-gantt-candidates (vec (or (:rows body) []))))
+    (let [s (assoc state :memo-gantt-candidates []
+                   :flash {:error? true :text (code-message (:code body)) :near "memo-thread-section"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn memo-save-result [state body]
@@ -3960,6 +4069,25 @@
                 (update :memo-search-results replace-memo-in-list memo)
                 (assoc :memo-last-saved memo))
       sel? (assoc :memo-selected-row memo))))
+
+(defn memo-gantt-result [state body]
+  (let [near (or (:pending-flash-near state) "memo-thread-section")
+        state (dissoc state :pending-flash-near)
+        unlink? (boolean (:memo-gantt-unlinking state))
+        state (dissoc state :memo-gantt-unlinking)]
+    (if (:ok body)
+      (let [memo (:memo body)
+            text (if unlink? (m :memos-gantt-unlinked) (m :memos-gantt-linked))
+            s (-> (upsert-memo-everywhere state memo)
+                  (assoc :memo-selected-row memo)
+                  (flash-ok-state text near))]
+        {:state s :fx (into (or (memo-thread-fx s) [])
+                            (when (:can_link_gantt memo)
+                              (if (= "admin" (str (:kind s)))
+                                [[:api "GET" "/api/admin/gantt/rows" nil :memo-gantt-candidates-loaded]]
+                                [[:api "GET" "/api/user/gantt" nil :memo-gantt-candidates-loaded]])))})
+      (let [s (assoc state :flash {:error? true :text (memo-code-message (:code body)) :near near})]
+        {:state s :fx [[:html (render s)]]}))))
 
 (defn memo-attach-result [state body]
   (let [near (or (:pending-flash-near state) (memo-list-near state))
@@ -4499,7 +4627,30 @@
       (flash-html-state state (m :memo-not-found) (memo-list-near state)))
 
     "memo-close-thread"
-    (guarded (assoc state :memo-selected nil :memo-selected-row nil :memo-replies [] :flash nil))
+    (guarded (assoc state :memo-selected nil :memo-selected-row nil :memo-replies []
+                    :memo-gantt-candidates [] :memo-gantt-pick nil :flash nil))
+
+    "memo-gantt-link"
+    (let [id (memo-id-of form)
+          gid (str/trim (as-text (:gantt_id form)))]
+      (cond
+        (str/blank? (str id))
+        (flash-html-state state (m :memo-not-found) "memo-thread-section")
+        (str/blank? gid)
+        (flash-html-state state (m :gantt-id-required) "memo-thread-section")
+        :else
+        {:state (assoc state :pending-flash-near "memo-thread-section"
+                       :memo-gantt-pick gid
+                       :memo-gantt-unlinking false)
+         :fx [[:api "PUT" (str "/api/memos/" id "/gantt") {:gantt_id gid}
+               :memo-gantt-result]]}))
+
+    "memo-gantt-unlink"
+    (if-let [id (memo-id-of form)]
+      {:state (assoc state :pending-flash-near "memo-thread-section"
+                     :memo-gantt-unlinking true)
+       :fx [[:api "DELETE" (str "/api/memos/" id "/gantt") nil :memo-gantt-result]]}
+      (flash-html-state state (m :memo-not-found) "memo-thread-section"))
 
     "memo-delete"
     (if-let [id (memo-id-of form)]
@@ -4862,6 +5013,8 @@
       :memo-bookmarks-loaded (memo-bookmarks-loaded state arg)
       :memo-replies-loaded (memo-replies-loaded state arg)
       :memo-loaded (memo-loaded state arg)
+      :memo-gantt-candidates-loaded (memo-gantt-candidates-loaded state arg)
+      :memo-gantt-result (memo-gantt-result state arg)
       :memo-save-result (memo-save-result state arg)
       :memo-publish-result (memo-publish-result state arg)
       :memo-delete-result (memo-delete-result state arg)

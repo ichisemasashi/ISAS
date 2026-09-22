@@ -32,7 +32,8 @@
       (is (re-find #"memo-compose-section" h))
       (is (re-find #"memo-search-section|高度な条件|この条件で検索|検索" h))
       (is (re-find #"タイムライン|memos-timeline" h))
-      (is (nil? (re-find #"ガント紐づけ|gantt.?link" h)))))
+      ;; 紐づけ UI はスレッド詳細のみ（未選択の一覧には出ない）
+      (is (nil? (re-find #"id=\"memo-gantt-link\"|作業を紐づける" h)))))
   (testing "V2P3-2.1-02 /memos/drafts"
     (let [h (html {:page :memos-drafts
                    :memo-drafts [{:id 1 :body "下書きA" :status "draft" :can_edit true}]})]

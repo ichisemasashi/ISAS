@@ -76,8 +76,10 @@
           (is (not (re-find #"href=\"/gantt\"" (html {:page :home :kind "admin"}))))
           (is (true? (:ok (gantt/list-rows sys uid))))
           (let [pw0 (tu/invite-pw app asid "b4-zero@example.com")
-                uid0 (:id (db/find-user-by-email (:ds sys) "b4-zero@example.com"))]
-            (is (= "no_fields" (:code (gantt/list-rows sys uid0))))
+                uid0 (:id (db/find-user-by-email (:ds sys) "b4-zero@example.com"))
+                listed0 (gantt/list-rows sys uid0)]
+            (is (true? (:ok listed0)))
+            (is (= [] (:rows listed0)))
             (is (re-find #"圃場が1枚以上" (html {:page :gantt :fields []})))))
         (testing "B4-4.3-01 圃場削除で対象から外す。行は残る"
           (let [r (gantt/create-row sys uid {:title_id tid :title "対象行"

@@ -263,16 +263,29 @@
                   :rows row-n :work-times wt-n :checklist-items ci-n)
         {:ok true}))))
 
-(defn list-rows [sys user-id]
-  (let [gate (require-fields sys user-id)]
-    (if-not (:ok gate)
-      gate
-      (do
-        (finalize-missing-days-for-user sys user-id)
-        (log/info "ガント行を一覧しました" :user-id user-id)
-        {:ok true
-         :titles (mapv present-title (db/list-gantt-titles (:ds sys) user-id))
-         :rows (mapv #(present-row (:ds sys) %) (db/list-gantt-rows (:ds sys) user-id))}))))
+(defn list-rows
+  "自分の未削除作業一覧。第2版工程5から圃場0枚でも成功（空可）。作成・更新は require-fields のまま。"
+  [sys user-id]
+  (finalize-missing-days-for-user sys user-id)
+  (let [titles (mapv present-title (db/list-gantt-titles (:ds sys) user-id))
+        rows (mapv #(present-row (:ds sys) %) (db/list-gantt-rows (:ds sys) user-id))]
+    (log/info "ガント行を一覧しました" :user-id user-id :count (count rows) :title-count (count titles))
+    {:ok true :titles titles :rows rows}))
+
+(defn list-admin-rows
+  "管理者向け候補。全利用者の未削除行。user_email 付き。"
+  [sys]
+  (let [email-by-id (into {} (map (fn [u] [(:id u) (:email u)]) (db/list-active-users (:ds sys))))
+        rows (mapv (fn [row]
+                     {:id (:id row)
+                      :title (:title row)
+                      :user_id (:user_id row)
+                      :user_email (get email-by-id (:user_id row))
+                      :start_at (:start_at row)
+                      :end_at (:end_at row)})
+                   (db/list-gantt-rows-undeleted-all (:ds sys)))]
+    (log/info "管理者ガント候補を一覧しました" :count (count rows))
+    {:ok true :rows rows}))
 
 (defn- validate-body [sys user-id body]
   (let [title (normalize-title (:title body))

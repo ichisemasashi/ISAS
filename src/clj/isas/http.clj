@@ -298,6 +298,26 @@
                 :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
       (memo-ok (memos/soft-delete-memo sys actor id)))))
 
+(defn memo-gantt-put [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (try
+        (let [body (read-body req)]
+          (log/info "メモ作業紐づけ API を受けました"
+                    :actor-kind (:kind actor) :actor-id (:id actor)
+                    :memo-id (str id) :gantt-id (:gantt_id body))
+          (memo-ok (memos/link-gantt! sys actor id body)))
+        (catch Exception e
+          (log/warn "メモ作業紐づけを読めませんでした" :error (.getMessage e) :memo-id (str id))
+          (fail "gantt_id_required"))))))
+
+(defn memo-gantt-delete [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (log/info "メモ作業紐づけ解除 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
+      (memo-ok (memos/unlink-gantt! sys actor id)))))
+
 (defn memo-publish [sys req id]
   (with-memo-session sys req
     (fn [actor]
@@ -586,6 +606,22 @@
     :else
     (fail "unauthorized")))
 
+(defn admin-gantt-rows-get [sys req]
+  (cond
+    (require-session sys req "admin")
+    (do
+      (log/info "管理者ガント候補一覧の要求を受けました")
+      (let [r (gantt/list-admin-rows sys)]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))
+
+    (require-session sys req "user")
+    (do
+      (log/warn "利用者が管理者ガント候補を要求しました")
+      (fail "forbidden"))
+
+    :else
+    (fail "unauthorized")))
+
 (defn gantt-post [sys req]
   (with-farm sys req
     (fn [uid]
@@ -841,6 +877,7 @@
    [:post "/api/admin/relations/cut"] [:relations-cut]
    [:post "/api/admin/gantt/progress/finalize"] [:admin-gantt-progress-finalize]
    [:get "/api/admin/gantt/daily"] [:admin-gantt-daily-get]
+   [:get "/api/admin/gantt/rows"] [:admin-gantt-rows-get]
    [:get "/api/user/place"] [:place-get]
    [:put "/api/user/place"] [:place-put]
    [:put "/api/user/place/image"] [:place-image-put]
@@ -889,6 +926,11 @@
         (when (= method :post) [:memo-publish id]))
       (when-let [[_ id] (re-matches #"/api/memos/(\d+)/replies" (str uri))]
         (when (= method :get) [:memo-replies-get id]))
+      (when-let [[_ id] (re-matches #"/api/memos/(\d+)/gantt" (str uri))]
+        (cond
+          (= method :put) [:memo-gantt-put id]
+          (= method :delete) [:memo-gantt-delete id]
+          :else nil))
       (when-let [[_ id] (re-matches #"/api/memos/(\d+)" (str uri))]
         (cond
           (= method :get) [:memo-get id]
@@ -981,6 +1023,7 @@
         :relations-cut (relations-cut sys req)
         :admin-gantt-progress-finalize (admin-gantt-progress-finalize sys req)
         :admin-gantt-daily-get (admin-gantt-daily-get sys req)
+        :admin-gantt-rows-get (admin-gantt-rows-get sys req)
         :place-get (place-get sys req)
         :place-put (place-put sys req)
         :place-image-put (place-image-put sys req)
@@ -1040,6 +1083,8 @@
         :memo-get (memo-get sys req (second spec))
         :memo-put (memo-put sys req (second spec))
         :memo-delete (memo-delete sys req (second spec))
+        :memo-gantt-put (memo-gantt-put sys req (second spec))
+        :memo-gantt-delete (memo-gantt-delete sys req (second spec))
         :memo-publish (memo-publish sys req (second spec))
         :memo-replies-get (memo-replies-get sys req (second spec))
         :memo-attachment-post (memo-attachment-post sys req (second spec))

@@ -44,8 +44,10 @@
             pw2 (tu/invite-pw app asid "gantt-other@example.com")
             usid2 (tu/user-sid app "gantt-other@example.com" pw2)
             uid2 (:id (db/find-user-by-email (:ds sys) "gantt-other@example.com"))]
-        (testing "圃場0は no_fields"
-          (is (= "no_fields" (:code (gantt/list-rows sys uid))))
+          (testing "圃場0は一覧のみ成功（作成等は no_fields）"
+          (let [listed (gantt/list-rows sys uid)]
+            (is (true? (:ok listed)))
+            (is (= [] (:rows listed))))
           (is (= "no_fields" (:code (gantt/create-row sys uid {:title "a"
                                                                :start_at "2026-09-18T08:00"
                                                                :end_at "2026-09-18T09:00"}))))
