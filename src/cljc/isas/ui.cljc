@@ -154,6 +154,8 @@
    :nav-bottom-memos "メモ"
    :nav-bottom-daily "日次"
    :nav-bottom-orders "指示"
+   :orders-admin-phone "指示は利用者ログインで開けます"
+   :home-memos-more "メモの投稿・検索"
    :daily-no-fields "圃場が1枚以上あるときだけ、日次一覧を使えます"
    :daily-today "今日"
    :daily-days7 "直近7日"
@@ -585,6 +587,8 @@
    :nav-bottom-memos "Memos"
    :nav-bottom-daily "Daily"
    :nav-bottom-orders "Orders"
+   :orders-admin-phone "Open orders with a user login"
+   :home-memos-more "Compose and search memos"
    :daily-no-fields "Daily list is available only when you have at least one field"
    :daily-today "Today"
    :daily-days7 "Last 7 days"
@@ -1160,8 +1164,9 @@
           "/map/place" {:page :map-place :kind "user"}
           "/works" {:page :works :kind "user"}
           "/gantt" {:page :gantt :kind "user"}
-          "/daily" {:page :daily :kind "user"}
-          "/orders" {:page :orders :kind "user"}
+          ;; daily / orders / memos は利用者・管理者で共有。kind を固定しない（セッションの種別を保つ）。
+          "/daily" {:page :daily}
+          "/orders" {:page :orders}
           "/orders/new" {:page :orders-new :kind "user"}
           "/others" {:page :others :kind "user"}
           "/memos" {:page :memos}
@@ -1181,7 +1186,7 @@
           "/admin/map/place" {:page :map-place :kind "user"}
           nil)
         (when-let [[_ id] (re-matches #"/orders/(\d+)" p)]
-          {:page :order :kind "user" :order-id id})
+          {:page :order :order-id id})
         {:page :unknown :kind "user"})))
 
 (defn login-path [kind]
@@ -1334,11 +1339,12 @@
 (defn- bottom-nav [state]
   (when (show-bottom-nav? state)
     (let [page (:page state)
-          memo-on? (contains? #{:memos :memos-drafts :memos-bookmarks} page)
+          home (home-path (:kind state))
+          memo-on? (contains? #{:home :memos :memos-drafts :memos-bookmarks} page)
           daily-on? (= :daily page)
           orders-on? (contains? #{:orders :order} page)]
       (str "<nav class=\"bottom-nav\" id=\"bottom-nav\" aria-label=\"main\">"
-           "<a data-nav href=\"/memos\"" (when memo-on? " class=\"current\"") ">"
+           "<a data-nav href=\"" (esc home) "\"" (when memo-on? " class=\"current\"") ">"
            (esc (m :nav-bottom-memos)) "</a>"
            "<a data-nav href=\"/daily\"" (when daily-on? " class=\"current\"") ">"
            (esc (m :nav-bottom-daily)) "</a>"
@@ -1352,9 +1358,7 @@
     html))
 
 (defn- home-after-login [state]
-  (if (:narrow? state)
-    "/memos"
-    (home-path (:kind state))))
+  (home-path (:kind state)))
 
 (defn- select-switch [label data-select current options & [extra-attrs]]
   (str "<label class=\"select-switch\">" (esc label)
@@ -1439,6 +1443,31 @@
                "<label>" (esc (m :label-password-confirm)) "<input name=\"password_confirm\" type=\"password\" required></label>"
                "<button type=\"submit\">" (esc (m :btn-set-password)) "</button></form>")))
 
+(defn- home-memo-timeline-html [state]
+  (let [rows (into [] (:memos state))]
+    (str "<section class=\"form-section memo-timeline\" id=\"memo-timeline\">"
+         "<h2 class=\"section-title\">" (esc (m :memos-timeline)) "</h2>"
+         (flash-at state "memo-timeline")
+         (if (empty? rows)
+           (str "<p class=\"empty-hint\">" (esc (m :memos-empty)) "</p>")
+           (str "<ul class=\"memo-list\">"
+                (apply str
+                       (for [r rows]
+                         (str "<li class=\"memo-item\" id=\"memo-item-" (esc (:id r)) "\">"
+                              "<p class=\"memo-meta\">" (esc (:author_email r)) "</p>"
+                              "<div class=\"memo-body\">" (esc (:body r)) "</div>"
+                              "</li>")))
+                "</ul>"
+                (when (:id (last rows))
+                  (str "<form data-act=\"memo-more\" method=\"post\" class=\"inline\">"
+                       "<input type=\"hidden\" name=\"before_id\" value=\""
+                       (esc (:id (last rows))) "\">"
+                       "<button type=\"submit\" id=\"memo-more-btn\">"
+                       (esc (m :memos-more)) "</button></form>"))))
+         "<p class=\"home-memos-more\"><a data-nav href=\"/memos\">"
+         (esc (m :home-memos-more)) "</a></p>"
+         "</section>")))
+
 (defn home-view [state]
   (let [admin? (= "admin" (:kind state))
         narrow? (boolean (:narrow? state))
@@ -1448,10 +1477,7 @@
                  (flash-html state)
                  "<p>" (esc (get-in state [:session :email])) "</p>"
                  (when narrow?
-                   (str "<p><a data-nav href=\"/memos\">" (esc (m :memos-title)) "</a></p>"
-                        "<p><a data-nav href=\"/daily\">" (esc (m :daily-title)) "</a></p>"
-                        (when-not admin?
-                          (str "<p><a data-nav href=\"/orders\">" (esc (m :orders-title)) "</a></p>"))))
+                   (home-memo-timeline-html state))
                  (when (and (not admin?) (seq (:fields state)) (not narrow?))
                    (str "<p><a data-nav href=\"/daily\">" (esc (m :daily-title)) "</a>"
                         " — " (esc (m :home-link-daily)) "</p>"
@@ -1553,14 +1579,16 @@
 
 (defn orders-view [state]
   (layout (m :orders-title)
-          (str (nav-user state)
+          (str (if (= "admin" (:kind state)) (nav-admin state) (nav-user state))
                (flash-html state)
-               (when (and (not (:narrow? state)) (seq (:fields state)))
-                 (str "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
-               "<h2>" (esc (m :order-sent)) "</h2>"
-               "<ul>" (order-list-items (:orders-sent state)) "</ul>"
-               "<h2>" (esc (m :order-received)) "</h2>"
-               "<ul>" (order-list-items (:orders-received state)) "</ul>")))
+               (if (= "admin" (:kind state))
+                 (str "<p id=\"orders-admin-hint\">" (esc (m :orders-admin-phone)) "</p>")
+                 (str (when (and (not (:narrow? state)) (seq (:fields state)))
+                        (str "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
+                      "<h2>" (esc (m :order-sent)) "</h2>"
+                      "<ul>" (order-list-items (:orders-sent state)) "</ul>"
+                      "<h2>" (esc (m :order-received)) "</h2>"
+                      "<ul>" (order-list-items (:orders-received state)) "</ul>")))))
 
 (defn orders-new-view [state]
   (if (empty? (:fields state))
@@ -3003,7 +3031,7 @@
     ""
     (str "<form data-act=\"memo-attach\" method=\"post\" enctype=\"multipart/form-data\" class=\"memo-attach\">"
          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
-         "<input type=\"file\" name=\"file\" data-auto-upload=\"1\" capture=\"environment\" aria-label=\""
+         "<input type=\"file\" name=\"file\" data-auto-upload=\"1\" aria-label=\""
          (esc (m :memos-attach)) "\">"
          "<span class=\"memo-upload-status\" aria-live=\"polite\"></span>"
          "</form>")))
@@ -3358,9 +3386,15 @@
       (and (= :users (:page s)) (:session s))
       {:state s :fx [[:api "GET" "/api/admin/users" nil :users-loaded]]}
 
-      (and (#{:map :map-place :gantt :order :others} (:page s)) (:session s)
-           (or (not (:narrow? s)) (#{:order} (:page s))))
+      (and (#{:map :map-place :gantt :others} (:page s)) (:session s)
+           (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/place" nil :place-loaded]]}
+
+      (and (= :order (:page s)) (:session s))
+      (if (= "admin" (:kind s))
+        (guarded (assoc s :order nil :order-map nil
+                        :flash {:error? false :text (m :orders-admin-phone)}))
+        {:state s :fx [[:api "GET" "/api/user/place" nil :place-loaded]]})
 
       (and (= :fields (:page s)) (:session s) (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
@@ -3386,8 +3420,11 @@
         {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]})
 
       (and (= :orders (:page s)) (:session s))
-      {:state s :fx [[:api "GET" "/api/user/orders" nil :orders-loaded]
-                     [:api "GET" "/api/user/fields" nil :home-fields-loaded]]}
+      (if (= "admin" (:kind s))
+        (guarded (assoc s :orders-sent [] :orders-received []
+                        :flash {:error? false :text (m :orders-admin-phone)}))
+        {:state s :fx [[:api "GET" "/api/user/orders" nil :orders-loaded]
+                       [:api "GET" "/api/user/fields" nil :home-fields-loaded]]})
 
       (and (= :orders-new (:page s)) (:session s) (not (:narrow? s)))
       {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
@@ -3407,8 +3444,17 @@
           (guarded (assoc s :kind "user" :memo-admin-tried? nil))))
 
       (= :home (:page s))
-      (if (and (= "user" (:kind s)) (some? (:session s)))
+      (cond
+        (nil? (:session s))
+        (guarded s)
+
+        (:narrow? s)
+        {:state s :fx [[:api "GET" "/api/memos" nil :memos-loaded]]}
+
+        (= "user" (:kind s))
         {:state s :fx [[:api "GET" "/api/user/fields" nil :home-fields-loaded]]}
+
+        :else
         (guarded s))
 
       :else
@@ -4864,6 +4910,10 @@
                 (assoc s :daily-range "days7"
                        :daily-statuses ["not_started" "in_progress"]
                        :daily-rows [] :daily-total nil :flash nil)
+
+                (= :home (:page s))
+                (assoc s :memos [] :memo-selected nil :memo-selected-row nil :memo-replies []
+                       :memo-before-id nil :flash nil)
 
                 (= :gantt-progress (:page s))
                 (assoc s :gantt-finalize-result nil :form {})

@@ -25,9 +25,27 @@
 (defn root-el []
   (.getElementById js/document "app"))
 
+(defn apply-viewport-width!
+  "狭幅では実画面幅を CSS 変数に渡し、全要素の横幅の上限にする。"
+  []
+  (try
+    (let [w (js/Math.floor (or (.-innerWidth js/window) 0))
+          root (.-documentElement js/document)]
+      (when (and root (pos? w))
+        (.setProperty (.-style root) "--app-width" (str w "px"))
+        (when-let [body (.-body js/document)]
+          (set! (.-width (.-style body)) (str w "px"))
+          (set! (.-maxWidth (.-style body)) (str w "px")))
+        (when-let [app (root-el)]
+          (set! (.-width (.-style app)) (str w "px"))
+          (set! (.-maxWidth (.-style app)) (str w "px")))))
+    (catch :default _
+      nil)))
+
 (defn set-html! [html]
   (when-let [el (root-el)]
-    (set! (.-innerHTML el) html)))
+    (set! (.-innerHTML el) html)
+    (apply-viewport-width!)))
 
 (defn- draft-skip-el? [^js el]
   (let [typ (str/lower-case (str (or (.-type el) "")))]
@@ -307,6 +325,7 @@
   (dispatch! [:path {:path (current-path) :search (current-search)}]))
 
 (defn on-resize [_ev]
+  (apply-viewport-width!)
   (dispatch! [:narrow {:narrow? (narrow-screen?)}]))
 
 (defn bind-events! []
@@ -319,6 +338,7 @@
 (defn main! []
   (let [path (current-path)
         kind (kind-from-path path)]
+    (apply-viewport-width!)
     (dispatch! [:boot {:path path
                        :search (current-search)
                        :narrow? (narrow-screen?)

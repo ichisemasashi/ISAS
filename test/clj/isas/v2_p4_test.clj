@@ -35,9 +35,9 @@
 
 (deftest v2p4-screens-and-nav
   (testing "V2P4-2.1-01 / V2P4-2.3-01 狭幅下部ナビ"
-    (let [h (html {:page :memos :narrow? true})]
+    (let [h (html {:page :home :narrow? true})]
       (is (re-find #"id=\"bottom-nav\"" h))
-      (is (re-find #"href=\"/memos\"" h))
+      (is (re-find #"href=\"/home\"" h))
       (is (re-find #"href=\"/daily\"" h))
       (is (re-find #"href=\"/orders\"" h))
       (is (re-find #">メモ<" h))
@@ -71,27 +71,39 @@
   (testing "V2P4-2.2-04 狭幅で works/gantt/map は案内のまま"
     (doseq [p [:works :gantt :map]]
       (is (re-find #"パソコンで開いてください" (html {:page p :narrow? true :fields [{:id 1}]})))))
-  (testing "V2P4-2.2-05 狭幅ログイン着地は /memos"
+  (testing "V2P4-2.2-05 狭幅ログイン着地はホーム"
     (let [r (ui/handle (assoc (ui/init-state) :page :login :kind "user" :narrow? true)
                        [:login-result {:ok true :email "a" :ui_lang "ja"}])]
-      (is (= "/memos" (second (first (:fx r))))))
+      (is (= "/home" (second (first (:fx r))))))
     (let [r (ui/handle (assoc (ui/init-state) :page :login :kind "admin" :narrow? true)
                        [:login-result {:ok true :email "a" :ui_lang "ja"}])]
-      (is (= "/memos" (second (first (:fx r))))))
+      (is (= "/admin/home" (second (first (:fx r))))))
     (let [r (ui/handle (assoc (ui/init-state) :page :login :kind "user" :narrow? false)
                        [:login-result {:ok true :email "a" :ui_lang "ja"}])]
       (is (= "/home" (second (first (:fx r)))))))
-  (testing "V2P4-2.2-06 /home 狭幅は下部ナビ付き"
-    (let [h (html {:page :home :narrow? true})]
+  (testing "V2P4-2.2-06 /home 狭幅はタイムラインのみ"
+    (let [h (html {:page :home :narrow? true
+                   :memos [{:id 1 :body "ホーム本文" :author_email "a@example.com"}]})]
       (is (re-find #"id=\"bottom-nav\"" h))
-      (is (re-find #"href=\"/memos\"" h))
-      (is (re-find #"href=\"/daily\"" h))))
+      (is (re-find #"memo-timeline" h))
+      (is (re-find #"ホーム本文" h))
+      (is (nil? (re-find #"memo-compose-section" h)))
+      (is (re-find #"href=\"/memos\"" h))))
   (testing "V2P4-2.3-02 current"
-    (is (re-find #"href=\"/memos\" class=\"current\"" (html {:page :memos :narrow? true})))
+    (is (re-find #"href=\"/home\" class=\"current\"" (html {:page :home :narrow? true})))
     (is (re-find #"href=\"/daily\" class=\"current\"" (html {:page :daily :narrow? true
                                                              :daily-statuses ["not_started"]
                                                              :fields [{:id 1}]})))
     (is (re-find #"href=\"/orders\" class=\"current\"" (html {:page :orders :narrow? true}))))
+  (testing "V2P4-2.3-03 管理者日次で kind を落とさない"
+    (let [from (assoc (ui/init-state) :page :home :kind "admin" :narrow? true
+                      :session {:email "admin@example.com"})
+          to (ui/handle from [:path {:path "/daily" :search ""}])]
+      (is (= "admin" (get-in to [:state :kind])))
+      (is (some? (get-in to [:state :session])))
+      (is (= :daily (get-in to [:state :page])))
+      (is (= :api (ffirst (:fx to))))
+      (is (str/includes? (nth (first (:fx to)) 2) "/api/admin/gantt/daily"))))
   (testing "V2P4-2.4-03 圃場0狭幅は日次閲覧可・パソコンは不可"
     (let [narrow (html {:page :daily :narrow? true :fields []
                         :daily-statuses ["not_started"] :daily-rows []})
@@ -120,12 +132,14 @@
   (testing "V2P4-2.4-06 フィルタ全オフ"
     (is (re-find #"状態フィルタを1つ以上オンにしてください"
                  (html {:page :daily :narrow? true :fields [{:id 1}] :daily-statuses []}))))
-  (testing "V2P4-2.5-01 capture=environment"
+  (testing "V2P4-2.5-01 添付は任意形式（capture 無し）"
     (let [h (html {:page :memos :narrow? true
                    :memo-selected 1
                    :memo-selected-row {:id 1 :body "親" :status "published" :can_edit true
                                        :author_email "a@example.com"}})]
-      (is (re-find #"capture=\"environment\"" h))))
+      (is (re-find #"type=\"file\"" h))
+      (is (nil? (re-find #"capture=" h)))
+      (is (nil? (re-find #"accept=\"image" h)))))
   (testing "V2P4-5-01 文言"
     (ui/with-ui-lang {:ui-lang "ja"}
       (fn []
@@ -133,7 +147,8 @@
         (is (= "日次" (get ui/messages :nav-bottom-daily)))
         (is (= "指示" (get ui/messages :nav-bottom-orders)))
         (is (= "スマホでは状態を変えられません" (get ui/messages :daily-phone-readonly)))
-        (is (= "日次一覧はスマホで開いてください" (get ui/messages :phone-daily-admin-pc)))))
+        (is (= "日次一覧はスマホで開いてください" (get ui/messages :phone-daily-admin-pc)))
+        (is (= "指示は利用者ログインで開けます" (get ui/messages :orders-admin-phone)))))
     (is (= "Memos" (get ui/messages-en :nav-bottom-memos)))
     (is (= "Daily" (get ui/messages-en :nav-bottom-daily)))
     (is (= "Orders" (get ui/messages-en :nav-bottom-orders))))
@@ -142,12 +157,37 @@
                            [:login-result {:ok true :email "a" :ui_lang "ja"}])
           to-daily (ui/handle (assoc (:state login) :session {:email "a"} :narrow? true)
                               [:path {:path "/daily" :search ""}])
-          to-orders (ui/handle (assoc (:state to-daily) :session {:email "a"} :narrow? true)
+          to-orders (ui/handle (assoc (:state to-daily) :session {:email "a"} :narrow? true
+                                      :kind "user")
                                [:path {:path "/orders" :search ""}])]
-      (is (= "/memos" (second (first (:fx login)))))
+      (is (= "/home" (second (first (:fx login)))))
       (is (= :daily (get-in to-daily [:state :page])))
       (is (= :api (ffirst (:fx to-daily))))
       (is (= :orders (get-in to-orders [:state :page])))))
+  (testing "利用者狭幅の指示は読める"
+    (let [h (html {:page :orders :narrow? true
+                   :orders-sent [{:id 1 :work_date "2026-09-21" :work_name "田植え" :status "open"}]
+                   :orders-received []})]
+      (is (nil? (re-find #"この入口では使えません" h)))
+      (is (re-find #"田植え" h))
+      (is (re-find #"出した指示|受けた指示" h))))
+  (testing "管理者の指示は案内のみ（forbidden にしない）"
+    (let [r (ui/session-loaded
+             (assoc (ui/init-state) :page :orders :kind "admin" :narrow? true
+                    :session {:email "admin@example.com"})
+             {:ok true :email "admin@example.com"})
+          r-order (ui/session-loaded
+                   (assoc (ui/init-state) :page :order :kind "admin" :narrow? true
+                          :session {:email "admin@example.com"} :order-id "1")
+                   {:ok true :email "admin@example.com"})
+          h (html {:page :orders :kind "admin" :narrow? true
+                   :flash {:error? false :text "指示は利用者ログインで開けます"}})]
+      (is (= :html (ffirst (:fx r))))
+      (is (re-find #"指示は利用者ログイン" (get-in r [:state :flash :text])))
+      (is (= :html (ffirst (:fx r-order))))
+      (is (nil? (get-in r-order [:state :order])))
+      (is (re-find #"指示は利用者ログイン" h))
+      (is (nil? (re-find #"この入口では使えません" h)))))
   (testing "V2P4-6-01 紐づけ等混入なし"
     (is (nil? (http/match-api :post "/api/memos/link-gantt")))
     (let [h (html {:page :memos :narrow? true})]
@@ -265,10 +305,16 @@
                     :daily-statuses ["not_started"])
              {:ok true :fields []})]
       (is (= :html (ffirst (:fx r))))))
-  (testing "guarded ログイン済み狭幅は /memos"
+  (testing "guarded ログイン済み狭幅はホーム"
     (let [r (ui/guarded (assoc (ui/init-state) :page :login :kind "user" :narrow? true
                                :session {:email "a"}))]
-      (is (= "/memos" (second (first (:fx r)))))))
+      (is (= "/home" (second (first (:fx r)))))))
+  (testing "狭幅ホームは memos を読む"
+    (let [r (ui/session-loaded
+             (assoc (ui/init-state) :page :home :kind "user" :narrow? true
+                    :session {:email "a"})
+             {:ok true :email "a"})]
+      (is (= "/api/memos" (nth (first (:fx r)) 2)))))
   (testing "cloverage 分岐: 日次空フィルタ・メモ置換"
     (let [h (html {:page :daily :narrow? false :fields [{:id 1}]
                    :daily-statuses ["done"] :daily-rows [] :daily-total 3})]

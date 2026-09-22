@@ -101,6 +101,9 @@
       border-top: 1px solid #ccc;
       padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
       gap: 0.35rem;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 100%;
     }
     .bottom-nav a {
       flex: 1 1 0;
@@ -111,12 +114,54 @@
       margin-right: 0;
       border-radius: 6px;
       font-weight: 600;
+      box-sizing: border-box;
+      max-width: 100%;
     }
     .bottom-nav a.current { background: #e8f0fa; color: #0d47a1; }
     @media (max-width: 799.98px) {
-      body { margin: 1rem 1rem 4.5rem; max-width: none; }
-      .bottom-nav { display: flex; }
-      .ol-map { height: 22rem; }
+      html {
+        width: var(--app-width, 100vw);
+        max-width: 100%;
+        overflow-x: hidden;
+      }
+      body {
+        margin: 0;
+        padding: 0.75rem 0.75rem 4.75rem;
+        width: var(--app-width, 100vw);
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
+      }
+      #app {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
+      }
+      #app *,
+      #app *::before,
+      #app *::after {
+        box-sizing: border-box;
+        max-width: 100%;
+      }
+      img, video, svg, canvas, iframe {
+        height: auto;
+      }
+      input, textarea, select, button, table, pre, code {
+        width: 100%;
+        max-width: 100%;
+      }
+      fieldset input[type="checkbox"],
+      form.inline button,
+      .toolbar button,
+      .select-switch select {
+        width: auto;
+        max-width: 100%;
+      }
+      nav a { display: inline-block; margin: 0.2rem 0.45rem 0.2rem 0; }
+      .bottom-nav { display: flex; width: var(--app-width, 100%); max-width: 100%; }
+      .ol-map { height: 22rem; width: 100%; max-width: 100%; }
+      .page-lead, .memo-body, .memo-item { word-break: break-word; overflow-wrap: anywhere; }
     }
   </style>
 </head>
