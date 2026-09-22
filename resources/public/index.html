@@ -91,6 +91,33 @@
     .gantt-title-list form { display: inline-block; margin: 0.25rem 0.35rem 0.25rem 0; }
     .gantt-title-item.selected button { font-weight: bold; }
     .gantt-row.selected button { font-weight: bold; }
+    .daily-item-user { margin: 0 0 0.25rem; color: #444; font-size: 0.85rem; }
+    .bottom-nav {
+      display: none;
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      z-index: 40;
+      background: #f7f7f7;
+      border-top: 1px solid #ccc;
+      padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
+      gap: 0.35rem;
+    }
+    .bottom-nav a {
+      flex: 1 1 0;
+      text-align: center;
+      text-decoration: none;
+      color: #222;
+      padding: 0.55rem 0.25rem;
+      margin-right: 0;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .bottom-nav a.current { background: #e8f0fa; color: #0d47a1; }
+    @media (max-width: 799.98px) {
+      body { margin: 1rem 1rem 4.5rem; max-width: none; }
+      .bottom-nav { display: flex; }
+      .ol-map { height: 22rem; }
+    }
   </style>
 </head>
 <body>

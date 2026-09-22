@@ -67,10 +67,12 @@
     (is (not (re-find #"<p><a data-nav href=\"/daily\">" (html {:page :home :fields []})))))
   (testing "V2P1-2.1-05 管理者ホームに日次は無い"
     (is (not (re-find #"/daily" (html {:page :home :kind "admin" :session {:email "a"}})))))
-  (testing "V2P1-2.1-06 狭い画面"
-    (is (re-find #"日次一覧はパソコンで開いてください"
-                 (html {:page :daily :narrow? true :fields [{:id 1}]})))
-    (is (not (re-find #"daily-list" (html {:page :daily :narrow? true :fields [{:id 1}]})))))
+  (testing "V2P1-2.1-06 狭い画面は第2版工程4で閲覧専用"
+    (let [h (html {:page :daily :narrow? true :fields [{:id 1}]
+                   :daily-statuses ["not_started"] :daily-rows []})]
+      (is (re-find #"スマホでは状態を変えられません" h))
+      (is (re-find #"daily-list|daily-filter" h))
+      (is (not (re-find #"set-daily-row-status" h)))))
   (testing "V2P1-2.1-07 /works 実行状態"
     (let [h (html {:page :works
                    :fields [{:id 1 :name "北"}]
@@ -220,9 +222,15 @@
                   r0 (tu/parse (tu/get-query app "/api/user/gantt/daily"
                                              {:range "today"} "user" usid0))
                   ra (tu/parse (tu/get-query app "/api/user/gantt/daily"
-                                             {:range "today"} "admin" asid))]
-              (is (= "no_fields" (:code r0)))
-              (is (= "forbidden" (:code ra)))))
+                                             {:range "today"} "admin" asid))
+                  post0 (tu/parse (tu/post-json app "/api/user/gantt"
+                                                {:title "x" :start_at "2026-09-21T08:00"
+                                                 :end_at "2026-09-21T09:00" :field_ids []}
+                                                "user" usid0))]
+              (is (:ok r0))
+              (is (= [] (:rows r0)))
+              (is (= "forbidden" (:code ra)))
+              (is (= "no_fields" (:code post0)))))
           (testing "V2P1-3.2-03 ％非連動（progress は従来どおり）"
             (let [f (:field (tu/parse (tu/post-json app "/api/user/fields"
                                                     {:name "南" :geojson tu/square-east} "user" usid)))
@@ -450,7 +458,7 @@
                                                 :daily-statuses)
                                         {:ok true :fields [{:id 1}]})]
       (is (= :nav (ffirst (:fx no-sess))))
-      (is (= :html (ffirst (:fx narrow))))
+      (is (= :api (ffirst (:fx narrow))))
       (is (= :api (ffirst (:fx wide))))
       (is (= :html (ffirst (:fx empty-save))))
       (is (= :html (ffirst (:fx via-handle))))

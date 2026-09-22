@@ -149,6 +149,11 @@
    :daily-title "日次一覧"
    :daily-lead "今日・直近7日・すべての予定を、未着手／着手中／完了で回す一覧です"
    :phone-daily "日次一覧はパソコンで開いてください"
+   :phone-daily-admin-pc "日次一覧はスマホで開いてください"
+   :daily-phone-readonly "スマホでは状態を変えられません"
+   :nav-bottom-memos "メモ"
+   :nav-bottom-daily "日次"
+   :nav-bottom-orders "指示"
    :daily-no-fields "圃場が1枚以上あるときだけ、日次一覧を使えます"
    :daily-today "今日"
    :daily-days7 "直近7日"
@@ -575,6 +580,11 @@
    :daily-title "Daily list"
    :daily-lead "Run plans for today, the last 7 days, or all, with Not started / In progress / Done"
    :phone-daily "Open the daily list on a computer"
+   :phone-daily-admin-pc "Open the daily list on a phone"
+   :daily-phone-readonly "Status cannot be changed on a phone"
+   :nav-bottom-memos "Memos"
+   :nav-bottom-daily "Daily"
+   :nav-bottom-orders "Orders"
    :daily-no-fields "Daily list is available only when you have at least one field"
    :daily-today "Today"
    :daily-days7 "Last 7 days"
@@ -1311,7 +1321,40 @@
   (str (children-prefix state) suffix))
 
 (defn layout [title body]
-  (str "<main><h1>" (esc title) "</h1>" body "</main>"))
+  (str "<main id=\"app-main\">" "<h1>" (esc title) "</h1>" body "</main>"))
+
+(defn- bottom-nav-pages? [page]
+  (not (contains? #{:login :reset-request :reset :unknown} page)))
+
+(defn- show-bottom-nav? [state]
+  (and (boolean (:narrow? state))
+       (some? (:session state))
+       (bottom-nav-pages? (:page state))))
+
+(defn- bottom-nav [state]
+  (when (show-bottom-nav? state)
+    (let [page (:page state)
+          memo-on? (contains? #{:memos :memos-drafts :memos-bookmarks} page)
+          daily-on? (= :daily page)
+          orders-on? (contains? #{:orders :order} page)]
+      (str "<nav class=\"bottom-nav\" id=\"bottom-nav\" aria-label=\"main\">"
+           "<a data-nav href=\"/memos\"" (when memo-on? " class=\"current\"") ">"
+           (esc (m :nav-bottom-memos)) "</a>"
+           "<a data-nav href=\"/daily\"" (when daily-on? " class=\"current\"") ">"
+           (esc (m :nav-bottom-daily)) "</a>"
+           "<a data-nav href=\"/orders\"" (when orders-on? " class=\"current\"") ">"
+           (esc (m :nav-bottom-orders)) "</a>"
+           "</nav>"))))
+
+(defn- with-bottom-nav [state html]
+  (if (show-bottom-nav? state)
+    (str html (bottom-nav state))
+    html))
+
+(defn- home-after-login [state]
+  (if (:narrow? state)
+    "/memos"
+    (home-path (:kind state))))
 
 (defn- select-switch [label data-select current options & [extra-attrs]]
   (str "<label class=\"select-switch\">" (esc label)
@@ -1404,6 +1447,11 @@
             (str (if admin? (nav-admin state) (nav-user state))
                  (flash-html state)
                  "<p>" (esc (get-in state [:session :email])) "</p>"
+                 (when narrow?
+                   (str "<p><a data-nav href=\"/memos\">" (esc (m :memos-title)) "</a></p>"
+                        "<p><a data-nav href=\"/daily\">" (esc (m :daily-title)) "</a></p>"
+                        (when-not admin?
+                          (str "<p><a data-nav href=\"/orders\">" (esc (m :orders-title)) "</a></p>"))))
                  (when (and (not admin?) (seq (:fields state)) (not narrow?))
                    (str "<p><a data-nav href=\"/daily\">" (esc (m :daily-title)) "</a>"
                         " — " (esc (m :home-link-daily)) "</p>"
@@ -1412,10 +1460,9 @@
                         "<p><a data-nav href=\"/gantt\">" (esc (m :gantt-title)) "</a>"
                         " — " (esc (m :home-link-gantt)) "</p>"
                         "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
-                 (when (not admin?)
+                 (when (and (not admin?) (not narrow?))
                    (str "<p><a data-nav href=\"/orders\">" (esc (m :orders-title)) "</a></p>"
-                        (when-not narrow?
-                          (str "<p><a data-nav href=\"/others\">" (esc (m :others-title)) "</a></p>"))))
+                        "<p><a data-nav href=\"/others\">" (esc (m :others-title)) "</a></p>"))
                  (when-not narrow?
                    (str "<p><a data-nav href=\"/memos\">" (esc (m :memos-title)) "</a>"
                         " — " (esc (m :home-link-memos)) "</p>"))))))
@@ -1471,11 +1518,6 @@
 
 (defn phone-view [state]
   (cond
-    (contains? #{:memos :memos-drafts :memos-bookmarks} (:page state))
-    (layout (m :memos-title)
-            (str (if (= "admin" (:kind state)) (nav-admin state) (nav-user state))
-                 (flash-html state) "<p>" (esc (m :phone-memos)) "</p>"))
-
     (= :orders-new (:page state))
     (layout (m :orders-title)
             (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-orders-edit)) "</p>"))
@@ -1491,10 +1533,6 @@
     (= :works (:page state))
     (layout (m :works-title)
             (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-works)) "</p>"))
-
-    (= :daily (:page state))
-    (layout (m :daily-title)
-            (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-daily)) "</p>"))
 
     :else
     (layout (m :map-title)
@@ -2361,8 +2399,11 @@
   (let [range (let [raw (:daily-range state)
                     r (str (if (nil? raw) "days7" raw))]
                 (if (#{"today" "days7" "all"} r) r "days7"))
-        statuses (into [] (:daily-statuses state))]
-    (str "/api/user/gantt/daily?range=" (encode-q range)
+        statuses (into [] (:daily-statuses state))
+        base (if (= "admin" (:kind state))
+               "/api/admin/gantt/daily"
+               "/api/user/gantt/daily")]
+    (str base "?range=" (encode-q range)
          "&statuses=" (encode-q (str/join "," statuses)))))
 
 (defn- page-lead-html [key]
@@ -2370,6 +2411,71 @@
 
 (defn- section-title-html [key]
   (str "<h2 class=\"section-title\">" (esc (m key)) "</h2>"))
+
+(defn- daily-filter-section [state]
+  (let [range (let [raw (:daily-range state)
+                    r (str (if (nil? raw) "days7" raw))]
+                (if (#{"today" "days7" "all"} r) r "days7"))]
+    (str "<section class=\"form-section\" id=\"daily-filter-section\">"
+         (section-title-html :daily-section-filter)
+         "<div class=\"toolbar\" id=\"daily-range-form\">"
+         (select-switch (m :daily-range-label) "daily-range" range
+                        [["today" (m :daily-today)]
+                         ["days7" (m :daily-days7)]
+                         ["all" (m :daily-all)]])
+         "</div>"
+         "<form data-act=\"set-daily-statuses\" method=\"post\" id=\"daily-status-filter\">"
+         "<fieldset><legend>" (esc (m :execution-status)) "</legend>"
+         (apply str
+                (for [[v lab] [["not_started" (m :exec-not-started)]
+                               ["in_progress" (m :exec-in-progress)]
+                               ["done" (m :exec-done)]]]
+                  (str "<label><input type=\"checkbox\" name=\"status\" value=\"" v "\""
+                       (when (daily-status-on? state v) " checked")
+                       "> " (esc lab) "</label>")))
+         "<button type=\"submit\" id=\"daily-filter-btn\">"
+         (esc (m :daily-filter-apply)) "</button>"
+         "</fieldset></form>"
+         "</section>")))
+
+(defn- daily-exec-label [status]
+  (case (str status)
+    "in_progress" (m :exec-in-progress)
+    "done" (m :exec-done)
+    (m :exec-not-started)))
+
+(defn- daily-row-html [state r readonly?]
+  (let [admin? (= "admin" (:kind state))]
+    (str "<div class=\"daily-item\" id=\"daily-item-" (esc (:id r)) "\">"
+         (when (and admin? (not (str/blank? (str (:user_email r)))))
+           (str "<p class=\"daily-item-user\">" (esc (:user_email r)) "</p>"))
+         "<span class=\"daily-item-title\">" (esc (:title r)) "</span>"
+         " <span class=\"daily-item-time\">"
+         (esc (format-display-instant (:start_at r)))
+         "〜"
+         (esc (format-display-instant (:end_at r))) "</span>"
+         "<p class=\"daily-item-summary\">"
+         "<span>" (esc (daily-work-time-summary (:work_time_count r))) "</span>"
+         " / "
+         "<span>" (esc (daily-checklist-summary (:checklist_done r)
+                                                (:checklist_total r)))
+         "</span>"
+         (when-not readonly?
+           (str " · <a data-nav href=\"/works\">"
+                (esc (m :daily-link-edit-work)) "</a>"))
+         "</p>"
+         (if readonly?
+           (str "<p class=\"daily-item-status\">" (esc (m :execution-status)) ": "
+                (esc (daily-exec-label (:execution_status r))) "</p>")
+           (str "<form data-act=\"set-daily-row-status\" method=\"post\" class=\"daily-status-form\">"
+                "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
+                "<label>" (esc (m :execution-status))
+                (execution-status-select-html (:execution_status r)
+                                              (str "daily-status-" (:id r)))
+                "</label>"
+                "<button type=\"submit\">" (esc (m :btn-save)) "</button>"
+                "</form>"))
+         "</div>")))
 
 (defn- gantt-title-select-html [titles selected-id include-none? select-id]
   (str "<select name=\"title_id\""
@@ -2511,77 +2617,52 @@
                       "</section>")))))))
 
 (defn daily-view [state]
-  (let [fields (:fields state)
-        range (let [raw (:daily-range state)
-                    r (str (if (nil? raw) "days7" raw))]
-                (if (#{"today" "days7" "all"} r) r "days7"))
+  (let [admin? (= "admin" (:kind state))
+        narrow? (boolean (:narrow? state))
+        fields (:fields state)
         statuses (into [] (:daily-statuses state))
         rows (into [] (:daily-rows state))
-        total (or (:daily-total state) 0)]
-    (layout (m :daily-title)
-            (str (nav-user state)
-                 (flash-html state)
-                 (if (empty? fields)
-                   (str "<p>" (esc (m :daily-no-fields)) "</p>")
-                   (str
-                    (page-lead-html :daily-lead)
-                    "<section class=\"form-section\" id=\"daily-filter-section\">"
-                    (section-title-html :daily-section-filter)
-                    "<div class=\"toolbar\" id=\"daily-range-form\">"
-                    (select-switch (m :daily-range-label) "daily-range" range
-                                   [["today" (m :daily-today)]
-                                    ["days7" (m :daily-days7)]
-                                    ["all" (m :daily-all)]])
-                    "</div>"
-                    "<form data-act=\"set-daily-statuses\" method=\"post\" id=\"daily-status-filter\">"
-                    "<fieldset><legend>" (esc (m :execution-status)) "</legend>"
-                    (apply str
-                           (for [[v lab] [["not_started" (m :exec-not-started)]
-                                          ["in_progress" (m :exec-in-progress)]
-                                          ["done" (m :exec-done)]]]
-                             (str "<label><input type=\"checkbox\" name=\"status\" value=\"" v "\""
-                                  (when (daily-status-on? state v) " checked")
-                                  "> " (esc lab) "</label>")))
-                    "<button type=\"submit\" id=\"daily-filter-btn\">"
-                    (esc (m :daily-filter-apply)) "</button>"
-                    "</fieldset></form>"
-                    "</section>"
-                    (if (empty? statuses)
-                      (str "<p id=\"daily-filter-hint\">" (esc (m :daily-filter-empty)) "</p>")
-                      (str "<section class=\"daily-list form-section\" id=\"daily-list\">"
-                           (section-title-html :daily-section-list)
-                           (flash-at state "daily-list")
-                           (if (empty? rows)
-                             (if (pos? total)
-                               (str "<p class=\"empty-hint\">" (esc (m :daily-empty-filtered)) "</p>"
-                                    "<p><a data-nav href=\"/works\">" (esc (m :daily-link-works)) "</a></p>")
-                               (str "<p class=\"empty-hint\">" (esc (m :daily-empty)) "</p>"
-                                    "<p><a data-nav href=\"/works\">" (esc (m :daily-link-works)) "</a></p>"))
-                             (apply str
-                                    (for [r rows]
-                                      (str "<div class=\"daily-item\" id=\"daily-item-" (esc (:id r)) "\">"
-                                           "<span class=\"daily-item-title\">" (esc (:title r)) "</span>"
-                                           " <span class=\"daily-item-time\">"
-                                           (esc (format-display-instant (:start_at r)))
-                                           "〜"
-                                           (esc (format-display-instant (:end_at r))) "</span>"
-                                           "<p class=\"daily-item-summary\">"
-                                           "<span>" (esc (daily-work-time-summary (:work_time_count r))) "</span>"
-                                           " / "
-                                           "<span>" (esc (daily-checklist-summary (:checklist_done r)
-                                                                                  (:checklist_total r)))
-                                           "</span>"
-                                           " · <a data-nav href=\"/works\">"
-                                           (esc (m :daily-link-edit-work)) "</a></p>"
-                                           "<form data-act=\"set-daily-row-status\" method=\"post\" class=\"daily-status-form\">"
-                                           "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id r)) "\">"
-                                           "<label>" (esc (m :execution-status))
-                                           (execution-status-select-html (:execution_status r)
-                                                                         (str "daily-status-" (:id r)))
-                                           "</label>"
-                                           "<button type=\"submit\">" (esc (m :btn-save)) "</button>"
-                                           "</form></div>"))))
-                           "</section>"))))))))
+        total (or (:daily-total state) 0)
+        readonly? (boolean (or narrow? admin?))
+        nav (if admin? (nav-admin state) (nav-user state))]
+    (cond
+      (and admin? (not narrow?))
+      (layout (m :daily-title)
+              (str nav (flash-html state)
+                   "<p>" (esc (m :phone-daily-admin-pc)) "</p>"))
+
+      (and (not admin?) (not narrow?) (empty? fields))
+      (layout (m :daily-title)
+              (str nav (flash-html state)
+                   "<p>" (esc (m :daily-no-fields)) "</p>"))
+
+      :else
+      (layout (m :daily-title)
+              (str nav
+                   (flash-html state)
+                   (when narrow?
+                     (str "<p class=\"field-hint\" id=\"daily-readonly-hint\">"
+                          (esc (m :daily-phone-readonly)) "</p>"))
+                   (page-lead-html :daily-lead)
+                   (daily-filter-section state)
+                   (if (empty? statuses)
+                     (str "<p id=\"daily-filter-hint\">" (esc (m :daily-filter-empty)) "</p>")
+                     (str "<section class=\"daily-list form-section\" id=\"daily-list\">"
+                          (section-title-html :daily-section-list)
+                          (flash-at state "daily-list")
+                          (if (empty? rows)
+                            (if (pos? total)
+                              (str "<p class=\"empty-hint\">" (esc (m :daily-empty-filtered)) "</p>"
+                                   (when-not readonly?
+                                     (str "<p><a data-nav href=\"/works\">"
+                                          (esc (m :daily-link-works)) "</a></p>")))
+                              (str "<p class=\"empty-hint\">" (esc (m :daily-empty)) "</p>"
+                                   (when-not readonly?
+                                     (str "<p><a data-nav href=\"/works\">"
+                                          (esc (m :daily-link-works)) "</a></p>"))))
+                            (apply str (for [r rows]
+                                         (daily-row-html state r readonly?))))
+                          "</section>")))))))
 
 (defn gantt-view [state]
   (let [fields (:fields state)]
@@ -2922,7 +3003,7 @@
     ""
     (str "<form data-act=\"memo-attach\" method=\"post\" enctype=\"multipart/form-data\" class=\"memo-attach\">"
          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
-         "<input type=\"file\" name=\"file\" data-auto-upload=\"1\" aria-label=\""
+         "<input type=\"file\" name=\"file\" data-auto-upload=\"1\" capture=\"environment\" aria-label=\""
          (esc (m :memos-attach)) "\">"
          "<span class=\"memo-upload-status\" aria-live=\"polite\"></span>"
          "</form>")))
@@ -3183,33 +3264,35 @@
 (defn render [state]
   (with-ui-lang state
     (fn []
-      (if (and (:narrow? state) (contains? #{:fields :map :map-place :works :gantt :daily :orders-new :others
-                                             :memos :memos-drafts :memos-bookmarks} (:page state)))
-        (phone-view state)
-        (case (:page state)
-          :login (login-view state)
-          :reset-request (reset-request-view state)
-          :reset (reset-view state)
-          :home (home-view state)
-          :invite (invite-view state)
-          :password (password-view state)
-          :users (users-view state)
-          :fields (fields-view state)
-          :map (if (:place state) (map-view state) (map-place-view state))
-          :map-place (map-place-view state)
-          :works (works-view state)
-          :gantt (gantt-view state)
-          :daily (daily-view state)
-          :orders (orders-view state)
-          :orders-new (orders-new-view state)
-          :order (order-view state)
-          :others (others-view state)
-          :relations (relations-view state)
-          :gantt-progress (gantt-progress-admin-view state)
-          :memos (memos-view state)
-          :memos-drafts (memos-drafts-view state)
-          :memos-bookmarks (memos-bookmarks-view state)
-          (unknown-view state))))))
+      (with-bottom-nav
+       state
+       (if (and (:narrow? state) (contains? #{:fields :map :map-place :works :gantt :orders-new :others}
+                                            (:page state)))
+         (phone-view state)
+         (case (:page state)
+           :login (login-view state)
+           :reset-request (reset-request-view state)
+           :reset (reset-view state)
+           :home (home-view state)
+           :invite (invite-view state)
+           :password (password-view state)
+           :users (users-view state)
+           :fields (fields-view state)
+           :map (if (:place state) (map-view state) (map-place-view state))
+           :map-place (map-place-view state)
+           :works (works-view state)
+           :gantt (gantt-view state)
+           :daily (daily-view state)
+           :orders (orders-view state)
+           :orders-new (orders-new-view state)
+           :order (order-view state)
+           :others (others-view state)
+           :relations (relations-view state)
+           :gantt-progress (gantt-progress-admin-view state)
+           :memos (memos-view state)
+           :memos-drafts (memos-drafts-view state)
+           :memos-bookmarks (memos-bookmarks-view state)
+           (unknown-view state)))))))
 
 (defn apply-route [state path search]
   (let [r (route-for path)]
@@ -3229,7 +3312,7 @@
 
     (and (= :login (:page state)) (:session state))
     {:state state
-     :fx [[:nav (home-path (:kind state))]]}
+     :fx [[:nav (home-after-login state)]]}
 
     :else
     {:state state
@@ -3286,9 +3369,21 @@
       {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
 
       (= :daily (:page s))
-      (if (and (:session s) (not (:narrow? s)))
-        {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
-        (guarded s))
+      (cond
+        (nil? (:session s))
+        (guarded s)
+
+        (= "admin" (:kind s))
+        (if (:narrow? s)
+          (let [statuses (into [] (:daily-statuses s))]
+            (if (empty? statuses)
+              (guarded (assoc s :daily-rows [] :daily-total nil))
+              {:state s
+               :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]]}))
+          (guarded s))
+
+        :else
+        {:state s :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]})
 
       (and (= :orders (:page s)) (:session s))
       {:state s :fx [[:api "GET" "/api/user/orders" nil :orders-loaded]
@@ -3302,9 +3397,7 @@
 
       (memo-page? (:page s))
       (if (:session s)
-        (if (:narrow? s)
-          (guarded s)
-          {:state s :fx (memos-load-fx s)})
+        {:state s :fx (memos-load-fx s)}
         ;; 経路が利用者・管理者で同じなので、直接開いたときは管理者の入場も試す。
         (if (= "user" (:kind s))
           (if-not (:memo-admin-tried? s)
@@ -3361,7 +3454,7 @@
       (and (= :works (:page s)) (empty? (:fields s)))
       (guarded s)
 
-      (and (= :daily (:page s)) (empty? (:fields s)))
+      (and (= :daily (:page s)) (empty? (:fields s)) (not (:narrow? s)))
       (guarded (assoc s :daily-rows []))
 
       (= :works (:page s))
@@ -3373,9 +3466,10 @@
       (let [statuses (into [] (:daily-statuses s))]
         (if (empty? statuses)
           (guarded (assoc s :daily-rows [] :daily-total nil))
-          {:state s
-           :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]
-                [:api "GET" "/api/user/gantt" nil :daily-context-loaded]]}))
+          (let [fx (cond-> [[:api "GET" (daily-query-path s) nil :daily-loaded]]
+                     (seq (:fields s))
+                     (conj [:api "GET" "/api/user/gantt" nil :daily-context-loaded]))]
+            {:state s :fx fx})))
 
       (= :orders-new (:page s))
       (let [defaults #?(:clj {:work_date (time/today-work-date)
@@ -3982,11 +4076,12 @@
 
 (defn after-login [state body]
   (if (:ok body)
-    {:state (assoc state
+    (let [s (assoc state
                    :session {:email (:email body)}
                    :ui-lang (normalize-lang (:ui_lang body))
-                   :flash nil)
-     :fx [[:nav (home-path (:kind state))]]}
+                   :flash nil)]
+      {:state s
+       :fx [[:nav (home-after-login s)]]})
     {:state (assoc state :flash {:error? true :text (code-message (:code body))})
      :fx [[:html (render (assoc state :flash {:error? true :text (code-message (:code body))}))]]}))
 

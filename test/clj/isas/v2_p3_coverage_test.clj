@@ -348,7 +348,7 @@
       (is (re-find #">スレッド<" h)))
     (is (re-find #"下書きはありません" (html {:page :memos-drafts :memo-drafts []})))
     (is (re-find #"ブックマークはありません" (html {:page :memos-bookmarks :memo-bookmarks []})))
-    (is (re-find #"メモはパソコン" (html {:page :memos :kind "admin" :narrow? true}))))
+    (is (re-find #"memo-compose|タイムライン|メモ" (html {:page :memos :kind "admin" :narrow? true}))))
   (testing "session-loaded memo paths"
     (let [r (ui/handle {:page :memos :kind "user" :session {:email "a"} :ui-lang "ja" :narrow? false}
                        [:session-loaded {:ok true :email "a"}])]
@@ -367,7 +367,7 @@
       (is (= "user" (get-in r [:state :kind]))))
     (let [r (ui/handle {:page :memos :kind "user" :session {:email "a"} :ui-lang "ja" :narrow? true}
                        [:session-loaded {:ok true :email "a"}])]
-      (is (some #(= :html (first %)) (:fx r)))))
+      (is (= "/api/memos" (nth (first (:fx r)) 2)))))
   (testing "loaders and result handlers"
     (let [base {:page :memos :kind "user" :session {:email "a"} :ui-lang "ja"
                 :memos [] :memo-selected 1}]

@@ -46,14 +46,14 @@
   (testing "V2P3-2.1-04 ホーム出口"
     (is (re-find #"href=\"/memos\"" (html {:page :home})))
     (is (re-find #"href=\"/memos\"" (html {:page :home :kind "admin"}))))
-  (testing "V2P3-2.1-05 狭い画面は案内のみ"
+  (testing "V2P3-2.1-05 狭い画面は第2版工程4で対等"
     (doseq [p [:memos :memos-drafts :memos-bookmarks]]
       (let [h (html {:page p :narrow? true})]
-        (is (re-find #"メモはパソコンで開いてください" h))
-        (is (nil? (re-find #"memo-compose-section" h))))))
-  (testing "V2P3-2.1-06 狭い画面ナビにメモ無し"
-    (is (nil? (re-find #"href=\"/memos\"" (html {:page :home :narrow? true}))))
-    (is (nil? (re-find #"href=\"/memos\"" (html {:page :home :kind "admin" :narrow? true})))))
+        (is (nil? (re-find #"メモはパソコンで開いてください" h)))
+        (is (re-find #"bottom-nav|memo-" h)))))
+  (testing "V2P3-2.1-06 狭い画面ナビにメモあり（工程4）"
+    (is (re-find #"href=\"/memos\"" (html {:page :home :narrow? true})))
+    (is (re-find #"href=\"/memos\"" (html {:page :home :kind "admin" :narrow? true}))))
   (testing "V2P3-2.1-08 画面遷移ナビ"
     (let [h (html {:page :memos})]
       (is (re-find #"href=\"/memos\"" h))

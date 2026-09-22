@@ -565,9 +565,26 @@
 (defn gantt-daily-get [sys req]
   (with-farm sys req
     (fn [uid]
-      (let [q (query-params req)
-            r (gantt/list-daily sys uid {:range (:range q) :statuses (:statuses q)})]
-        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))))
+      (let [q (query-params req)]
+        (log/info "利用者日次一覧の要求を受けました"
+                  :user-id uid :range (:range q) :statuses (:statuses q))
+        (let [r (gantt/list-daily sys uid {:range (:range q) :statuses (:statuses q)})]
+          (if (:ok r) (ok (dissoc r :ok)) (fail (:code r))))))))
+
+(defn admin-gantt-daily-get [sys req]
+  (cond
+    (require-session sys req "admin")
+    (let [q (query-params req)]
+      (log/info "管理者日次一覧の要求を受けました"
+                :range (:range q) :statuses (:statuses q))
+      (let [r (gantt/list-admin-daily sys {:range (:range q) :statuses (:statuses q)})]
+        (if (:ok r) (ok (dissoc r :ok)) (fail (:code r)))))
+
+    (require-session sys req "user")
+    (fail "forbidden")
+
+    :else
+    (fail "unauthorized")))
 
 (defn gantt-post [sys req]
   (with-farm sys req
@@ -823,6 +840,7 @@
    [:post "/api/admin/users/revoke"] [:revoke]
    [:post "/api/admin/relations/cut"] [:relations-cut]
    [:post "/api/admin/gantt/progress/finalize"] [:admin-gantt-progress-finalize]
+   [:get "/api/admin/gantt/daily"] [:admin-gantt-daily-get]
    [:get "/api/user/place"] [:place-get]
    [:put "/api/user/place"] [:place-put]
    [:put "/api/user/place/image"] [:place-image-put]
@@ -962,6 +980,7 @@
         :revoke (revoke-post sys req)
         :relations-cut (relations-cut sys req)
         :admin-gantt-progress-finalize (admin-gantt-progress-finalize sys req)
+        :admin-gantt-daily-get (admin-gantt-daily-get sys req)
         :place-get (place-get sys req)
         :place-put (place-put sys req)
         :place-image-put (place-image-put sys req)

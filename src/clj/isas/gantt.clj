@@ -129,11 +129,9 @@
        (pos? (compare (str (:end_at row)) window-start))))
 
 (defn list-daily [sys user-id {:keys [range statuses]}]
-  (let [gate (require-fields sys user-id)
-        win (daily-window range)
+  (let [win (daily-window range)
         st (parse-daily-statuses statuses)]
     (cond
-      (not (:ok gate)) gate
       (not (:ok win)) win
       (not (:ok st)) st
       :else
@@ -148,6 +146,38 @@
                           (mapv #(present-daily-row (:ds sys) %)))))]
         (log/info "日次一覧を返しました"
                   :user-id user-id :range (str range) :statuses (:statuses st) :count (count rows))
+        {:ok true :rows rows}))))
+
+(defn list-admin-daily [sys {:keys [range statuses]}]
+  (let [win (daily-window range)
+        st (parse-daily-statuses statuses)]
+    (cond
+      (not (:ok win)) win
+      (not (:ok st)) st
+      :else
+      (let [status-set (set (:statuses st))
+            window (:window win)
+            users (db/list-active-users (:ds sys))
+            rows (->> users
+                      (mapcat
+                       (fn [u]
+                         (let [uid (:id u)
+                               email (:email u)
+                               base (->> (db/list-gantt-rows (:ds sys) uid)
+                                         (filter #(contains? status-set (:execution_status %))))
+                               filtered (if (= :all window)
+                                          base
+                                          (let [[w0 w1] window]
+                                            (filter #(overlaps-window? % w0 w1) base)))]
+                           (map (fn [row]
+                                  (assoc (present-daily-row (:ds sys) row)
+                                         :user_id uid
+                                         :user_email email))
+                                filtered))))
+                      (sort-by (juxt :start_at :user_id :id))
+                      vec)]
+        (log/info "管理者日次一覧を返しました"
+                  :range (str range) :statuses (:statuses st) :count (count rows))
         {:ok true :rows rows}))))
 
 (defn- active-row? [row]

@@ -102,18 +102,23 @@
                                       :execution_status "not_started"
                                       :work_time_count 1 :checklist_done 0 :checklist_total 0}]}))))
   (testing "V2P2-2.1-04 狭い画面に変更 UI 無し"
-    (doseq [page [:works :gantt :daily]]
+    (doseq [page [:works :gantt]]
       (let [h (html {:page page :narrow? true :fields [{:id 1}]})]
         (is (re-find #"パソコンで開いてください" h))
-        (is (not (re-find #"works-work-times|gantt-work-times|作業時間を足す" h))))))
+        (is (not (re-find #"works-work-times|gantt-work-times|作業時間を足す" h)))))
+    (let [h (html {:page :daily :narrow? true :fields [{:id 1}]
+                   :daily-statuses ["not_started"] :daily-rows []})]
+      (is (re-find #"スマホでは状態を変えられません" h))
+      (is (not (re-find #"set-daily-row-status|作業時間を足す" h)))))
   (testing "V2P2-2.1-07 狭い画面ナビに使えない入口無し"
     (let [h (html {:page :home :narrow? true :fields [{:id 1}]})]
       (is (not (re-find #"href=\"/works\"" h)))
       (is (not (re-find #"href=\"/gantt\"" h)))
-      (is (not (re-find #"href=\"/daily\"" h)))
       (is (not (re-find #"href=\"/fields\"" h)))
       (is (not (re-find #"href=\"/map\"" h)))
-      (is (re-find #"href=\"/orders\"" h))))
+      (is (re-find #"href=\"/orders\"" h))
+      (is (re-find #"href=\"/daily\"" h))
+      (is (re-find #"href=\"/memos\"" h))))
   (testing "V2P2-2.1-08 flash near は操作箇所"
     (let [h (html {:page :works :fields [{:id 1}]
                    :gantt-selected 1
