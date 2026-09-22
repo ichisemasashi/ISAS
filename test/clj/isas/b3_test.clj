@@ -33,8 +33,8 @@
           (is (true? (:ok (paints/create-paint sys uid {:field_id fid :work_name "田植え" :geojson tu/square-inner})))))
         (testing "B3-2-03 / B3-5.4-01 狭い画面に塗りは持たない"
           (is (not (re-find #"ブラシ|全面完了|塗りを確定する" (html {:page :map :narrow? true :place place :fields [{:id 1}]})))))
-        (testing "B3-2-04 / B3-4.5-06 / B3-6-04 / B3-7.3-03 / B3-10-02 地図にガントと指示は出さない"
-          (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"|パーセントサークル|指示" wide)))
+        (testing "B3-2-04 / B3-4.5-06 / B3-6-04 / B3-7.3-03 / B3-10-02 地図にガントと指示編集は出さない"
+          (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"|パーセントサークル|出した指示|受けた指示" wide)))
           (is (some? (http/match-api :post "/api/user/orders"))))
         (testing "B3-3-01 / B3-5.2-01 管理者は塗れない"
           (is (= 403 (:status (tu/post-json app "/api/user/paints"

@@ -83,17 +83,20 @@
   (let [e (crypto/normalize-email email)]
     (cond
       (not (crypto/email-ok? email))
-      {:ok false :code "invite_invalid_email"}
+      (do (log/warn "招待のメールが不正です" :email email :by-kind actor-kind :by-id actor-id)
+          {:ok false :code "invite_invalid_email"})
 
       (db/find-admin-by-email (:ds sys) e)
-      {:ok false :code "invite_duplicate_admin"}
+      (do (log/warn "管理者メールは招待できません" :email e :by-kind actor-kind :by-id actor-id)
+          {:ok false :code "invite_duplicate_admin"})
 
       :else
       (let [ds (:ds sys)
             existing (db/find-user-by-email ds e)]
         (cond
           (and existing (nil? (:revoked_at existing)))
-          {:ok false :code "invite_duplicate_user"}
+          (do (log/warn "既に招待済みの利用者です" :email e :by-kind actor-kind :by-id actor-id)
+              {:ok false :code "invite_duplicate_user"})
 
           existing
           (let [pw (crypto/initial-password)
@@ -135,13 +138,16 @@
 (defn change-password [sys kind account password current-password password-confirm]
   (cond
     (not= password password-confirm)
-    {:ok false :code "password_mismatch"}
+    (do (log/warn "パスワード確認が一致しません" :kind kind :account-id (:id account))
+        {:ok false :code "password_mismatch"})
 
     (< (count (or password "")) 8)
-    {:ok false :code "password_too_short"}
+    (do (log/warn "パスワードが短すぎます" :kind kind :account-id (:id account))
+        {:ok false :code "password_too_short"})
 
     (not (crypto/check-secret current-password (:password_hash account)))
-    {:ok false :code "password_wrong"}
+    (do (log/warn "現在のパスワードが違います" :kind kind :account-id (:id account))
+        {:ok false :code "password_wrong"})
 
     :else
     (do
@@ -196,10 +202,12 @@
 (defn complete-reset [sys kind token password password-confirm]
   (cond
     (not= password password-confirm)
-    {:ok false :code "password_mismatch"}
+    (do (log/warn "再設定のパスワード確認が一致しません" :kind kind)
+        {:ok false :code "password_mismatch"})
 
     (< (count (or password "")) 8)
-    {:ok false :code "password_too_short"}
+    (do (log/warn "再設定のパスワードが短すぎます" :kind kind)
+        {:ok false :code "password_too_short"})
 
     :else
     (let [row (match-token (:ds sys) kind token)]

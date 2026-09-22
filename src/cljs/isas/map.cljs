@@ -287,12 +287,20 @@
         has-paint? (not (str/blank? (str pid)))]
     (doseq [id ["paint-confirm-btn" "paint-discard-btn"]]
       (when-let [^js el (.getElementById js/document id)]
-        (set! (.-disabled el) (not has-draft?))))
+        (set! (.-hidden el) (not has-draft?))
+        (when-let [^js form (.-form el)]
+          (set! (.-hidden form) (not has-draft?)))))
+    (when-let [^js el (.getElementById js/document "paint-draft-note")]
+      (set! (.-hidden el) has-draft?))
     (doseq [id ["paint-complete-btn" "paint-delete-all-btn"]]
       (when-let [^js el (.getElementById js/document id)]
-        (set! (.-disabled el) (not has-field?))))
+        (set! (.-hidden el) (not has-field?))
+        (when-let [^js form (.-form el)]
+          (set! (.-hidden form) (not has-field?)))))
     (when-let [^js el (.getElementById js/document "paint-delete-btn")]
-      (set! (.-disabled el) (not has-paint?)))
+      (set! (.-hidden el) (not has-paint?))
+      (when-let [^js form (.-form el)]
+        (set! (.-hidden form) (not has-paint?))))
     (when-let [^js el (.getElementById js/document "paint-field-note")]
       (set! (.-hidden el) has-field?))
     (when-let [^js el (.getElementById js/document "paint-stroke-note")]

@@ -272,7 +272,7 @@
   (testing "P4-6 / P4-6-01〜10 作らないもの"
     (let [h (html {:page :gantt :fields [{:id 1}]})
           doc (slurp (io/file "docs/詳細試験仕様書_工程4.md"))]
-      (is (not (re-find #"指示|日誌|関係を切|言語切替" h)))
+      (is (not (re-find #"出した指示|受けた指示|日誌を書|関係を切|言語切替" h)))
       (is (= [:gantt-delete "1"] (http/match-api :delete "/api/user/gantt/1")))
       (is (nil? (http/match-api :put "/api/user/work-names")))
       (is (some? (http/match-api :post "/api/user/orders")))

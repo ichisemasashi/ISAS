@@ -117,7 +117,7 @@
       (is (re-find #"パソコンで開いてください" h))
       (is (not (re-find #"この指示を閉じる" h)))))
   (testing "P5-2.1-10 /map に他人を混ぜない"
-    (is (not (re-find #"他人|orders" (html {:page :map :place {:west 1 :south 2 :east 3 :north 4}
+    (is (not (re-find #"他人の対象|href=\"/others\"" (html {:page :map :place {:west 1 :south 2 :east 3 :north 4}
                                             :fields [{:id 1 :name "自分"}]})))))
   (testing "P5-2.1-11 管理者に指示画面は無い"
     (is (= :unknown (:page (ui/route-for "/admin/orders"))))

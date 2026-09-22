@@ -106,6 +106,31 @@
       (let [h (html {:page page :narrow? true :fields [{:id 1}]})]
         (is (re-find #"パソコンで開いてください" h))
         (is (not (re-find #"works-work-times|gantt-work-times|作業時間を足す" h))))))
+  (testing "V2P2-2.1-07 狭い画面ナビに使えない入口無し"
+    (let [h (html {:page :home :narrow? true :fields [{:id 1}]})]
+      (is (not (re-find #"href=\"/works\"" h)))
+      (is (not (re-find #"href=\"/gantt\"" h)))
+      (is (not (re-find #"href=\"/daily\"" h)))
+      (is (not (re-find #"href=\"/fields\"" h)))
+      (is (not (re-find #"href=\"/map\"" h)))
+      (is (re-find #"href=\"/orders\"" h))))
+  (testing "V2P2-2.1-08 flash near は操作箇所"
+    (let [h (html {:page :works :fields [{:id 1}]
+                   :gantt-selected 1
+                   :gantt-rows [{:id 1 :title "t" :start_at "a" :end_at "b"
+                                 :execution_status "not_started" :field_ids []}]
+                   :flash {:error? true :text "日時が不正です" :near "works-work-time-add-box"}})]
+      (is (re-find #"id=\"flash-works-work-time-add-box\"" h))
+      (is (re-find #"日時が不正です" h))
+      (is (not (re-find #"<p class=\"flash error\">日時が不正です</p>" h)))))
+  (testing "V2P2-2.1-09 flash 成功も操作箇所寄り"
+    (let [h (html {:page :works :fields [{:id 1}]
+                   :gantt-selected 1
+                   :gantt-rows [{:id 1 :title "t" :start_at "a" :end_at "b"
+                                 :execution_status "not_started" :field_ids []}]
+                   :flash {:error? false :text "作業時間を保存しました" :near "works-work-times"}})]
+      (is (re-find #"id=\"flash-works-work-times\"" h))
+      (is (re-find #"作業時間を保存しました" h))))
   (testing "V2P2-2.1-05 新規フォームに子 UI 無し"
     (let [h (html {:page :works :fields [{:id 1 :name "北"}]
                    :gantt-rows [] :gantt-titles [{:id 1 :name "題A"}]})]
@@ -656,4 +681,111 @@
                    (:code (gantt/update-checklist-item sys uid gid 1 {:status "pending"}))))
             (is (= "gantt_not_found"
                    (:code (gantt/soft-delete-checklist-item sys uid gid 1))))))))))
-)
+
+(deftest v2p2-flash-near-and-gantt-save-branches
+  (testing "work-time error near"
+    (let [near (ui/handle (assoc (ui/init-state) :page :works :kind "user"
+                                 :session {:email "a"} :gantt-selected 1
+                                 :gantt-rows [{:id 1 :title "t" :start_at "a" :end_at "b"
+                                               :execution_status "not_started" :field_ids []}])
+                          [:work-time-save-result {:ok false :code "time_invalid"}])]
+      (is (= "works-work-times" (get-in near [:state :flash :near])))))
+  (testing "gantt-save-result near on gantt add and works save"
+    (let [added-gantt (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                                        :session {:email "a"} :gantt-selected nil)
+                                 [:gantt-save-result
+                                  {:ok true :row {:id 9 :title_id 1 :title "新"}}])
+          added-works (ui/handle (assoc (ui/init-state) :page :works :kind "user"
+                                        :session {:email "a"} :gantt-selected nil)
+                                 [:gantt-save-result
+                                  {:ok true :row {:id 8 :title_id 1 :title "新作"}}])
+          saved-works (ui/handle (assoc (ui/init-state) :page :works :kind "user"
+                                        :session {:email "a"} :gantt-selected 3)
+                                 [:gantt-save-result
+                                  {:ok true :row {:id 3 :title_id 1 :title "旧"}}])
+          saved-gantt (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                                        :session {:email "a"} :gantt-selected 4)
+                                 [:gantt-save-result
+                                  {:ok true :row {:id 4 :title_id 1 :title "旧ガ"}}])
+          err-gantt (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                                      :session {:email "a"})
+                               [:gantt-save-result {:ok false :code "time_order"}])]
+      (is (= "gantt-add-form" (get-in added-gantt [:state :flash :near])))
+      (is (= "works-add-form" (get-in added-works [:state :flash :near])))
+      (is (= "works-save-form" (get-in saved-works [:state :flash :near])))
+      (is (= "gantt-save-form" (get-in saved-gantt [:state :flash :near])))
+      (is (= "gantt-save-form" (get-in err-gantt [:state :flash :near])))))
+  (testing "flash-ok-state blank near"
+    (is (nil? (:near (:flash (#'ui/flash-ok-state (ui/init-state) "x" nil)))))
+    (is (= "n" (:near (:flash (#'ui/flash-ok-state (ui/init-state) "x" "n"))))))
+  (testing "gantt-delete-result near"
+    (let [r (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                              :session {:email "a"} :gantt-selected 1)
+                       [:gantt-delete-result {:ok true}])
+          rw (ui/handle (assoc (ui/init-state) :page :works :kind "user"
+                               :session {:email "a"} :gantt-selected 1)
+                        [:gantt-delete-result {:ok true}])]
+      (is (= "gantt-edit-section" (get-in r [:state :flash :near])))
+      (is (= "works-edit-section" (get-in rw [:state :flash :near])))))
+  (testing "title save flash near"
+    (let [ok (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                               :session {:email "a"})
+                        [:gantt-title-save-result {:ok true :title {:id 2}}])
+          bad (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                                :session {:email "a"})
+                         [:gantt-title-save-result {:ok false :code "title_required"}])]
+      (is (= "gantt-titles" (get-in ok [:state :flash :near])))
+      (is (= "gantt-titles" (get-in bad [:state :flash :near])))))
+  (testing "password/invite flash near"
+    (let [pw (ui/handle (assoc (ui/init-state) :page :password :kind "user"
+                               :session {:email "a"})
+                        [:password-result {:ok false :code "password_wrong"}])
+          inv (ui/handle (assoc (ui/init-state) :page :invite :kind "user"
+                                :session {:email "a"})
+                         [:invite-result {:ok false :code "invite_invalid_email"}])]
+      (is (= "password-form-section" (get-in pw [:state :flash :near])))
+      (is (= "invite-form-section" (get-in inv [:state :flash :near])))))
+  (testing "flash-ok without near keeps page-top flash"
+    (let [h (html {:page :home :flash {:error? false :text "ok"}})]
+      (is (re-find #"<p class=\"flash ok\">ok</p>" h))
+      (is (not (re-find #"id=\"flash-" h)))))
+  (testing "children-near / pending-flash-near / delete error / order near"
+    (is (= "gantt-work-times" (#'ui/children-near {:page :gantt} "-work-times")))
+    (is (= "works-checklist" (#'ui/children-near {:page :works} "-checklist")))
+    (let [pending (ui/handle (assoc (ui/init-state) :page :works :kind "user"
+                                    :session {:email "a"} :gantt-selected 1
+                                    :pending-flash-near "works-work-time-add-box"
+                                    :gantt-rows [{:id 1 :title "t" :start_at "a" :end_at "b"
+                                                  :execution_status "not_started" :field_ids []}])
+                             [:work-time-save-result {:ok false :code "time_invalid"}])
+          pend-ok (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                                    :session {:email "a"} :gantt-selected 1
+                                    :pending-flash-near "gantt-checklist-add-box")
+                             [:checklist-item-save-result
+                              {:ok true :checklist_item {:gantt_id 1}}])
+          del-bad (ui/handle (assoc (ui/init-state) :page :works :kind "user"
+                                    :session {:email "a"})
+                             [:gantt-delete-result {:ok false :code "gantt_not_found"}])
+          ord-new (ui/handle (assoc (ui/init-state) :page :orders-new :kind "user"
+                                    :session {:email "a"})
+                             [:order-save-result {:ok false :code "time_order"}])
+          ord-edit (ui/handle (assoc (ui/init-state) :page :order :kind "user"
+                                     :session {:email "a"})
+                              [:order-save-result {:ok false :code "no_fields"}])
+          wn (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                               :session {:email "a"})
+                        [:gantt-save-result {:ok false :code "work_name_required"}])
+          err-works (ui/handle (assoc (ui/init-state) :page :works :kind "user"
+                                      :session {:email "a"})
+                               [:gantt-save-result {:ok false :code "time_order"}])
+          del-gantt-bad (ui/handle (assoc (ui/init-state) :page :gantt :kind "user"
+                                          :session {:email "a"})
+                                   [:gantt-delete-result {:ok false :code "gantt_not_found"}])]
+      (is (= "works-work-time-add-box" (get-in pending [:state :flash :near])))
+      (is (= "gantt-checklist-add-box" (get-in pend-ok [:state :flash :near])))
+      (is (= "works-edit-section" (get-in del-bad [:state :flash :near])))
+      (is (= "gantt-edit-section" (get-in del-gantt-bad [:state :flash :near])))
+      (is (= "orders-new-section" (get-in ord-new [:state :flash :near])))
+      (is (nil? (get-in ord-edit [:state :flash :near])))
+      (is (= "works-save-form" (get-in err-works [:state :flash :near])))
+      (is (re-find #"作業名" (get-in wn [:state :flash :text])))))))

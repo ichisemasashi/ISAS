@@ -66,13 +66,14 @@
         complete (make-form {"id" c-id "work_name" c-wn})
         del-paint (make-form {"id" d-id})
         del-all (make-form {"id" da-id "work_name" da-wn})
-        confirm-btn (js-obj "disabled" true)
-        discard-btn (js-obj "disabled" true)
-        complete-btn (js-obj "disabled" true)
-        delete-all-btn (js-obj "disabled" true)
-        delete-btn (js-obj "disabled" true)
+        confirm-btn (js-obj "disabled" true "hidden" true)
+        discard-btn (js-obj "disabled" true "hidden" true)
+        complete-btn (js-obj "disabled" true "hidden" true)
+        delete-all-btn (js-obj "disabled" true "hidden" true)
+        delete-btn (js-obj "disabled" true "hidden" true)
         field-note (js-obj "hidden" false)
         stroke-note (js-obj "hidden" false)
+        draft-note (js-obj "hidden" false)
         forms {"save-place" save
                "preview-place" save
                "save-image-extent" img
@@ -102,6 +103,7 @@
                       "paint-delete-btn" delete-btn
                       "paint-field-note" field-note
                       "paint-stroke-note" stroke-note
+                      "paint-draft-note" draft-note
                       nil))
                   "querySelector"
                   (fn [sel]
@@ -240,31 +242,31 @@
             (set! (.-features mod) mod)
             (call-ol mod "modifyend" #js {:features mod})))
         (enter "paint")
-        (is (true? (.-disabled confirm-btn)))
-        (is (true? (.-disabled discard-btn)))
+        (is (true? (.-hidden confirm-btn)))
+        (is (true? (.-hidden discard-btn)))
         (fire "brush" nil)
         (let [draw (last-ol "drawend")]
           (call-ol draw "drawend" #js {:feature draw})
           ;; P3-S-02: one brush stroke clears Draw so pan works again
           (is (nil? (:draw @m/current)))
           (is (false? (:drawing? @m/current)))
-          (is (false? (.-disabled confirm-btn)))
-          (is (false? (.-disabled discard-btn))))
+          (is (false? (.-hidden confirm-btn)))
+          (is (false? (.-hidden discard-btn))))
         (fire "discard" nil)
         (is (nil? (seq (:drafts @m/current))))
-        (is (true? (.-disabled confirm-btn)))
+        (is (true? (.-hidden confirm-btn)))
         (let [click (last-ol "click")]
           (when click
             (set! (.-props click) (js-obj "id" 1 "name" "北"))
             (call-ol click "click" #js {:pixel #js [1 1]})
-            (is (false? (.-disabled complete-btn)))
-            (is (false? (.-disabled delete-all-btn)))
+            (is (false? (.-hidden complete-btn)))
+            (is (false? (.-hidden delete-all-btn)))
             (is (true? (.-hidden field-note)))
-            (is (true? (.-disabled delete-btn)))
+            (is (true? (.-hidden delete-btn)))
             (set! (.-value d-id) "9")
             (m/refresh-paint-actions!)
             (is (= "9" (str (.-value d-id))))
-            (is (false? (.-disabled delete-btn)))
+            (is (false? (.-hidden delete-btn)))
             (is (true? (.-hidden stroke-note)))))
         (enter "merge")
         (fire "image-shift" nil)

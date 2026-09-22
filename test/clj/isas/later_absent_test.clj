@@ -19,8 +19,8 @@
             map-html (html {:page :map :place {:west 1 :south 2 :east 3 :north 4}})
             home (html {:page :home})
             admin-home (html {:page :home :kind "admin"})]
-        (testing "B3-2-04 / P3-2.1-08 指示は地図に出さない。ガント表はある"
-          (is (not (re-find #"指示" map-html)))
+        (testing "B3-2-04 / P3-2.1-08 指示編集は地図に出さない。ガント表はある"
+          (is (not (re-find #"出した指示|受けた指示|この指示を閉じる" map-html)))
           (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"" map-html)))
           (is (contains? names "paints"))
           (is (contains? names "gantt_rows")))

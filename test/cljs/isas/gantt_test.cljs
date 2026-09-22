@@ -72,8 +72,8 @@
                                     "data-orient" "time-h"
                                     nil))
                   :querySelectorAll (fn [_] rows)}
-        save-btn #js {:disabled false}
-        add-btn #js {:disabled false}
+        save-btn #js {:hidden false}
+        add-btn #js {:hidden false}
         save-form #js {:id "gantt-save-form"
                        :querySelector (fn [sel]
                                         (cond
@@ -142,8 +142,8 @@
     (is (string? (.-left bar-style)))
     (is (re-find #"/" (.-innerHTML ticks)))
     (is (re-find #"gantt-grid-line" (.-innerHTML grid)))
-    (is (false? (.-disabled save-btn)))
-    (is (false? (.-disabled add-btn)))
+    (is (false? (.-hidden save-btn)))
+    (is (false? (.-hidden add-btn)))
     (is (pos? (count @listeners)))
     (set! (.-getAttribute axis)
           (fn [a]

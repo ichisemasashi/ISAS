@@ -118,6 +118,7 @@
    :gantt-title-new-placeholder "新しい題名"
    :gantt-title-select "先に題名を選ぶか、下で題名を足してください"
    :gantt-title-deleted "題名を消しました"
+   :gantt-title-saved "題名を保存しました"
    :gantt-title-delete-confirm "この題名と中の作業を一覧から消します。よろしいですか？"
    :gantt-work-add "作業を足す"
    :gantt-work-new-placeholder "新しい作業"
@@ -140,12 +141,13 @@
    :works-delete-lead "この作業そのものを一覧から消します（作業時間・チェックも一緒に見えなくなります）"
    :nav-works "作業"
    :nav-gantt "ガント"
+   :nav-daily "日次"
+   :nav-orders "指示"
    :phone-works "作業の編集はパソコンで開いてください"
    :works-no-fields "圃場が1枚以上あるときだけ、作業を管理できます"
    :works-empty "まだ作業がありません。下の「新しい作業を登録」から作れます"
    :daily-title "日次一覧"
    :daily-lead "今日・直近7日・すべての予定を、未着手／着手中／完了で回す一覧です"
-   :nav-daily "日次"
    :phone-daily "日次一覧はパソコンで開いてください"
    :daily-no-fields "圃場が1枚以上あるときだけ、日次一覧を使えます"
    :daily-today "今日"
@@ -205,6 +207,11 @@
    :checklist-delete-confirm "このチェック項目を消します。よろしいですか？"
    :work-time-deleted "作業時間を消しました"
    :checklist-deleted "チェック項目を消しました"
+   :work-time-saved "作業時間を保存しました"
+   :checklist-item-saved "チェック項目を保存しました"
+   :gantt-row-saved "作業を保存しました"
+   :gantt-row-added "作業を登録しました"
+   :daily-status-saved "実行状態を保存しました"
    :daily-link-edit-work "作業を開く"
    :gantt-start "開始"
    :gantt-end "終了"
@@ -469,6 +476,7 @@
    :gantt-title-new-placeholder "New title"
    :gantt-title-select "Select a title above, or add one below"
    :gantt-title-deleted "Title removed"
+   :gantt-title-saved "Title saved"
    :gantt-title-delete-confirm "Remove this title and its works from the list?"
    :gantt-work-add "Add work"
    :gantt-work-new-placeholder "New work"
@@ -491,12 +499,13 @@
    :works-delete-lead "Removes this work from the list (its work times and checklist also disappear from normal views)"
    :nav-works "Works"
    :nav-gantt "Gantt"
+   :nav-daily "Daily"
+   :nav-orders "Orders"
    :phone-works "Edit works on a computer"
    :works-no-fields "Work management is available only when you have at least one field"
    :works-empty "No works yet. Use “Register a new work” below"
    :daily-title "Daily list"
    :daily-lead "Run plans for today, the last 7 days, or all, with Not started / In progress / Done"
-   :nav-daily "Daily"
    :phone-daily "Open the daily list on a computer"
    :daily-no-fields "Daily list is available only when you have at least one field"
    :daily-today "Today"
@@ -556,6 +565,11 @@
    :checklist-delete-confirm "Remove this checklist item?"
    :work-time-deleted "Work time removed"
    :checklist-deleted "Checklist item removed"
+   :work-time-saved "Work time saved"
+   :checklist-item-saved "Checklist item saved"
+   :gantt-row-saved "Work saved"
+   :gantt-row-added "Work registered"
+   :daily-status-saved "Execution status saved"
    :daily-link-edit-work "Open work"
    :gantt-start "Start"
    :gantt-end "End"
@@ -1040,9 +1054,43 @@
 (defn- cancel-form []
   (mode-form "cancel" (m :map-cancel)))
 
-(defn flash-html [state]
+(declare render)
+
+(defn flash-html
+  "ページ先頭用。:near 付き（操作箇所寄り）の flash はここでは出さない。"
+  [state]
   (when-let [f (:flash state)]
-    (str "<p class=\"flash " (if (:error? f) "error" "ok") "\">" (esc (:text f)) "</p>")))
+    (when (str/blank? (str (or (:near f) "")))
+      (str "<p class=\"flash " (if (:error? f) "error" "ok") "\">"
+           (esc (:text f)) "</p>"))))
+
+(defn flash-at
+  "操作箇所の直上用。flash の :near が near-id と一致するときだけ出す。"
+  [state near-id]
+  (when-let [f (:flash state)]
+    (when (= (str (:near f)) (str near-id))
+      (str "<p class=\"flash " (if (:error? f) "error" "ok")
+           "\" id=\"flash-" (esc near-id) "\">"
+           (esc (:text f)) "</p>"))))
+
+(defn- flash-html-state
+  ([state text] (flash-html-state state text nil))
+  ([state text near]
+   (let [s (assoc state :flash (cond-> {:error? true :text text}
+                                 (not (str/blank? (str near))) (assoc :near (str near))))]
+     {:state s :fx [[:html (render s)]]})))
+
+(defn- flash-ok-state
+  [state text near]
+  (assoc state :flash (if (str/blank? (str near))
+                        {:error? false :text text}
+                        {:error? false :text text :near (str near)})))
+
+(defn- children-prefix [state]
+  (if (= :gantt (:page state)) "gantt" "works"))
+
+(defn- children-near [state suffix]
+  (str (children-prefix state) suffix))
 
 (defn layout [title body]
   (str "<main><h1>" (esc title) "</h1>" body "</main>"))
@@ -1065,18 +1113,21 @@
                   ["en" (m :lang-en)]]))
 
 (defn nav-user [state]
-  (str "<nav>"
-       (lang-switcher state)
-       "<a data-nav href=\"/home\">" (esc (m :nav-home)) "</a>"
-       "<a data-nav href=\"/daily\">" (esc (m :nav-daily)) "</a>"
-       "<a data-nav href=\"/works\">" (esc (m :nav-works)) "</a>"
-       "<a data-nav href=\"/gantt\">" (esc (m :nav-gantt)) "</a>"
-       "<a data-nav href=\"/fields\">" (esc (m :nav-fields)) "</a>"
-       "<a data-nav href=\"/map\">" (esc (m :nav-map)) "</a>"
-       "<a data-nav href=\"/invite\">" (esc (m :nav-invite)) "</a>"
-       "<a data-nav href=\"/password\">" (esc (m :nav-password)) "</a>"
-       "<form data-act=\"logout\" method=\"post\"><button type=\"submit\">"
-       (esc (m :nav-logout)) "</button></form></nav>"))
+  (let [narrow? (boolean (:narrow? state))]
+    (str "<nav>"
+         (lang-switcher state)
+         "<a data-nav href=\"/home\">" (esc (m :nav-home)) "</a>"
+         (when-not narrow?
+           (str "<a data-nav href=\"/daily\">" (esc (m :nav-daily)) "</a>"
+                "<a data-nav href=\"/works\">" (esc (m :nav-works)) "</a>"
+                "<a data-nav href=\"/gantt\">" (esc (m :nav-gantt)) "</a>"
+                "<a data-nav href=\"/fields\">" (esc (m :nav-fields)) "</a>"
+                "<a data-nav href=\"/map\">" (esc (m :nav-map)) "</a>"))
+         "<a data-nav href=\"/orders\">" (esc (m :nav-orders)) "</a>"
+         "<a data-nav href=\"/invite\">" (esc (m :nav-invite)) "</a>"
+         "<a data-nav href=\"/password\">" (esc (m :nav-password)) "</a>"
+         "<form data-act=\"logout\" method=\"post\"><button type=\"submit\">"
+         (esc (m :nav-logout)) "</button></form></nav>")))
 
 (defn nav-admin [state]
   (str "<nav>"
@@ -1125,12 +1176,13 @@
 
 (defn home-view [state]
   (let [admin? (= "admin" (:kind state))
+        narrow? (boolean (:narrow? state))
         title (if admin? (m :admin-home) (m :user-home))]
     (layout title
             (str (if admin? (nav-admin state) (nav-user state))
                  (flash-html state)
                  "<p>" (esc (get-in state [:session :email])) "</p>"
-                 (when (and (not admin?) (seq (:fields state)))
+                 (when (and (not admin?) (seq (:fields state)) (not narrow?))
                    (str "<p><a data-nav href=\"/daily\">" (esc (m :daily-title)) "</a>"
                         " — " (esc (m :home-link-daily)) "</p>"
                         "<p><a data-nav href=\"/works\">" (esc (m :works-title)) "</a>"
@@ -1140,7 +1192,8 @@
                         "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
                  (when (not admin?)
                    (str "<p><a data-nav href=\"/orders\">" (esc (m :orders-title)) "</a></p>"
-                        "<p><a data-nav href=\"/others\">" (esc (m :others-title)) "</a></p>"))))))
+                        (when-not narrow?
+                          (str "<p><a data-nav href=\"/others\">" (esc (m :others-title)) "</a></p>"))))))))
 
 (defn invite-view [state]
   (layout (m :invite-title)
@@ -1152,6 +1205,7 @@
                       ": <code>" (esc pw) "</code></p>"))
                "<section class=\"form-section\" id=\"invite-form-section\">"
                "<h2 class=\"section-title\">" (esc (m :invite-title)) "</h2>"
+               (flash-at state "invite-form-section")
                "<form data-act=\"invite\" method=\"post\">"
                "<label>" (esc (m :label-counterpart-email)) "<input name=\"email\" type=\"email\" required></label>"
                "<button type=\"submit\">" (esc (m :btn-invite)) "</button></form>"
@@ -1164,13 +1218,13 @@
                "<p class=\"page-lead\">" (esc (m :password-lead)) "</p>"
                "<section class=\"form-section\" id=\"password-form-section\">"
                "<h2 class=\"section-title\">" (esc (m :password-title)) "</h2>"
+               (flash-at state "password-form-section")
                "<form data-act=\"password\" method=\"post\">"
                "<label>" (esc (m :label-current-password)) "<input name=\"current_password\" type=\"password\" required></label>"
                "<label>" (esc (m :label-new-password)) "<input name=\"password\" type=\"password\" required></label>"
                "<label>" (esc (m :label-password-confirm)) "<input name=\"password_confirm\" type=\"password\" required></label>"
                "<button type=\"submit\">" (esc (m :btn-change-password)) "</button></form>"
                "</section>")))
-
 (defn users-view [state]
   (layout (m :users-title)
           (str (nav-admin state)
@@ -1252,6 +1306,7 @@
                    "<p class=\"page-lead\">" (esc (m :orders-new-lead)) "</p>"
                    "<section class=\"form-section\" id=\"orders-new-section\">"
                    "<h2 class=\"section-title\">" (esc (m :orders-create)) "</h2>"
+                   (flash-at state "orders-new-section")
                    "<form data-act=\"create-order\" method=\"post\">"
                    "<label>" (esc (m :order-work-date))
                    "<input name=\"work_date\" value=\"" (esc (:work_date form)) "\"></label>"
@@ -1503,9 +1558,7 @@
         has-draft? (not (str/blank? gj))
         has-field? (not (str/blank? fid))
         has-paint? (not (str/blank? pid))
-        dis (fn [ok? tip]
-              (str (when-not ok? " disabled")
-                   " title=\"" (esc (if ok? "" tip)) "\""))]
+        hide (fn [ok?] (when-not ok? " hidden"))]
     (str
      "<div class=\"paint-tools\" data-none=\"" (:none paint-colors)
      "\" data-partial=\"" (:partial paint-colors)
@@ -1522,44 +1575,47 @@
          (str "<div class=\"toolbar paint-flow\">"
               "<button type=\"button\" id=\"paint-brush-btn\" data-map=\"brush\" data-hint=\""
               (esc (m :map-hint-brush)) "\">" (esc (m :brush)) "</button>"
-              "<form data-act=\"confirm-paint\" method=\"post\" class=\"inline\">"
+              "<form data-act=\"confirm-paint\" method=\"post\" class=\"inline\""
+              (hide has-draft?) ">"
               "<input type=\"hidden\" name=\"field_id\" value=\"" (esc fid) "\">"
               "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
               "<input type=\"hidden\" name=\"geojson\" value=\"" (esc gj) "\">"
-              "<button type=\"submit\" id=\"paint-confirm-btn\" data-need=\"draft\""
-              (dis has-draft? (m :map-need-draft)) ">"
+              "<button type=\"submit\" id=\"paint-confirm-btn\" data-need=\"draft\">"
               (esc (m :paint-confirm)) "</button></form>"
               "<button type=\"button\" id=\"paint-discard-btn\" data-map=\"discard\" data-need=\"draft\""
-              (dis has-draft? (m :map-need-draft))
+              (hide has-draft?)
               " data-hint=\"" (esc (m :map-hint-brush)) "\">"
               (esc (m :paint-discard)) "</button>"
+              (when-not has-draft?
+                (str "<p class=\"map-actions-note\" id=\"paint-draft-note\">"
+                     (esc (m :map-need-draft)) "</p>"))
               "</div>"))
         (map-action-section
          (m :map-section-field)
          (str "<p class=\"map-actions-note\" id=\"paint-field-note\""
               (when has-field? " hidden") ">"
               (esc (m :map-need-field)) "</p>"
-              "<form data-act=\"complete-field\" method=\"post\" class=\"inline\">"
+              "<form data-act=\"complete-field\" method=\"post\" class=\"inline\""
+              (hide has-field?) ">"
               "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
               "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
-              "<button type=\"submit\" id=\"paint-complete-btn\" data-need=\"field\""
-              (dis has-field? (m :map-need-field)) ">"
+              "<button type=\"submit\" id=\"paint-complete-btn\" data-need=\"field\">"
               (esc (m :paint-complete)) "</button></form>"
-              "<form data-act=\"delete-field-paints\" method=\"post\" class=\"inline\">"
+              "<form data-act=\"delete-field-paints\" method=\"post\" class=\"inline\""
+              (hide has-field?) ">"
               "<input type=\"hidden\" name=\"id\" value=\"" (esc fid) "\">"
               "<input type=\"hidden\" name=\"work_name\" value=\"" (esc wn) "\">"
-              "<button type=\"submit\" id=\"paint-delete-all-btn\" data-need=\"field\""
-              (dis has-field? (m :map-need-field)) ">"
+              "<button type=\"submit\" id=\"paint-delete-all-btn\" data-need=\"field\">"
               (esc (m :paint-delete-all)) "</button></form>"))
         (map-action-section
          (m :map-section-stroke)
          (str "<p class=\"map-actions-note\" id=\"paint-stroke-note\""
               (when has-paint? " hidden") ">"
               (esc (m :map-need-paint)) "</p>"
-              "<form data-act=\"delete-paint\" method=\"post\" class=\"inline\">"
+              "<form data-act=\"delete-paint\" method=\"post\" class=\"inline\""
+              (hide has-paint?) ">"
               "<input type=\"hidden\" name=\"id\" value=\"" (esc pid) "\">"
-              "<button type=\"submit\" id=\"paint-delete-btn\" data-need=\"paint\""
-              (dis has-paint? (m :map-need-paint)) ">"
+              "<button type=\"submit\" id=\"paint-delete-btn\" data-need=\"paint\">"
               (esc (m :paint-delete)) "</button></form>"))))
      "</div>")))
 
@@ -1983,11 +2039,14 @@
      "<div class=\"gantt-children\" id=\"" (esc prefix) "-children\">"
      "<h2 class=\"section-title\">" (esc (m :works-section-children)) "</h2>"
      "<p class=\"section-lead\">" (esc (m :works-children-lead)) "</p>"
+     (flash-at state (str prefix "-children"))
      "<section class=\"child-panel\" id=\"" (esc prefix) "-work-times\">"
      "<h3>" (esc (m :work-times)) "</h3>"
      "<p class=\"section-lead\">" (esc (m :work-times-lead)) "</p>"
+     (flash-at state (str prefix "-work-times"))
      "<div class=\"child-add\" id=\"" (esc prefix) "-work-time-add-box\">"
      "<h4>" (esc (m :work-time-add-heading)) "</h4>"
+     (flash-at state (str prefix "-work-time-add-box"))
      "<form data-act=\"add-work-time\" method=\"post\" id=\"" (esc prefix) "-work-time-add\">"
      "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
      "<label>" (esc (m :gantt-start))
@@ -2024,8 +2083,10 @@
      "<section class=\"child-panel\" id=\"" (esc prefix) "-checklist\">"
      "<h3>" (esc (m :checklist-items)) "</h3>"
      "<p class=\"section-lead\">" (esc (m :checklist-lead)) "</p>"
+     (flash-at state (str prefix "-checklist"))
      "<div class=\"child-add\" id=\"" (esc prefix) "-checklist-add-box\">"
      "<h4>" (esc (m :checklist-add-heading)) "</h4>"
+     (flash-at state (str prefix "-checklist-add-box"))
      "<form data-act=\"add-checklist-item\" method=\"post\" id=\"" (esc prefix) "-checklist-add\">"
      "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
      "<label>" (esc (m :checklist-label))
@@ -2157,8 +2218,10 @@
                          "<section class=\"form-section editing-panel\" id=\"works-edit-section\">"
                          "<p class=\"editing-banner\" id=\"works-editing-banner\">"
                          (esc (m :works-editing-prefix)) (esc (:title sel)) "</p>"
+                         (flash-at state "works-edit-section")
                          (section-title-html :works-section-edit)
                          "<p class=\"section-lead\">" (esc (m :works-basics-lead)) "</p>"
+                         (flash-at state "works-save-form")
                          "<form data-act=\"save-gantt-row\" method=\"post\" id=\"works-save-form\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                          "<label>" (esc (m :gantt-title-of-work))
@@ -2196,6 +2259,7 @@
                          "</section>"))
                       "<section class=\"form-section\" id=\"works-add-section\">"
                       (section-title-html :works-section-add)
+                      (flash-at state "works-add-form")
                       "<form data-act=\"add-gantt-row\" method=\"post\" id=\"works-add-form\">"
                       "<label>" (esc (m :gantt-title-of-work))
                       (gantt-title-select-html titles nil true "works-add-title-id") "</label>"
@@ -2255,6 +2319,7 @@
                       (str "<p id=\"daily-filter-hint\">" (esc (m :daily-filter-empty)) "</p>")
                       (str "<section class=\"daily-list form-section\" id=\"daily-list\">"
                            (section-title-html :daily-section-list)
+                           (flash-at state "daily-list")
                            (if (empty? rows)
                              (if (pos? total)
                                (str "<p class=\"empty-hint\">" (esc (m :daily-empty-filtered)) "</p>"
@@ -2320,6 +2385,7 @@
                              " <a data-nav href=\"/works\">" (esc (m :daily-link-works)) "</a></p>"))
                       "<section class=\"gantt-titles form-section\" id=\"gantt-titles\">"
                       (section-title-html :gantt-section-titles)
+                      (flash-at state "gantt-titles")
                       "<div class=\"gantt-title-list\">"
                       (if (empty? titles)
                         (str "<p class=\"empty-hint\">" (esc (m :gantt-title-select)) "</p>")
@@ -2410,8 +2476,10 @@
                             "<section class=\"form-section editing-panel\" id=\"gantt-edit-section\">"
                             "<p class=\"editing-banner\" id=\"gantt-editing-banner\">"
                             (esc (m :works-editing-prefix)) (esc (:title sel)) "</p>"
+                            (flash-at state "gantt-edit-section")
                             (section-title-html :gantt-section-edit)
                             "<p class=\"section-lead\">" (esc (m :works-basics-lead)) "</p>"
+                            (flash-at state "gantt-save-form")
                             "<form data-act=\"save-gantt-row\" method=\"post\" id=\"gantt-save-form\">"
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                             "<label>" (esc (m :gantt-title-of-work))
@@ -2483,6 +2551,7 @@
                             "</section>"))
                          "<section class=\"form-section\" id=\"gantt-add-section\">"
                          (section-title-html :gantt-section-add)
+                         (flash-at state "gantt-add-form")
                          "<form data-act=\"add-gantt-row\" method=\"post\" id=\"gantt-add-form\">"
                          "<input type=\"hidden\" name=\"title_id\" value=\"" (esc (:id title-sel)) "\">"
                          "<label>" (esc (m :gantt-title-label))
@@ -2766,7 +2835,7 @@
           row (when sel' (gantt-row-by-id (assoc state :gantt-rows rows) sel'))
           s (assoc state :gantt-rows rows :gantt-titles titles
                    :gantt-title-selected (if works? (or (:title_id row) tsel') tsel')
-                   :gantt-selected sel' :flash nil
+                   :gantt-selected sel'
                    :gantt-progress-days (when sel' (:gantt-progress-days state))
                    :gantt-work-times (if sel' (:gantt-work-times state) [])
                    :gantt-checklist-items (if sel' (:gantt-checklist-items state) []))
@@ -2785,23 +2854,31 @@
   (if (:ok body)
     (let [row (:row body)
           id (:id row)
-          tid (:title_id row)]
-      {:state (assoc state :gantt-selected id :gantt-title-selected tid
-                     :gantt-progress-days nil :flash nil)
+          tid (:title_id row)
+          added? (not (same-gantt-id? (:gantt-selected state) id))
+          text (if added? (m :gantt-row-added) (m :gantt-row-saved))
+          near (if added?
+                 (if (= :gantt (:page state)) "gantt-add-form" "works-add-form")
+                 (if (= :gantt (:page state)) "gantt-save-form" "works-save-form"))
+          s (flash-ok-state (assoc state :gantt-selected id :gantt-title-selected tid
+                                   :gantt-progress-days nil)
+                            text near)]
+      {:state s
        :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
             [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]})
     (let [code (:code body)
           text (if (= "work_name_required" code)
                  (m :gantt-work-needed)
                  (code-message code))
-          s (assoc state :flash {:error? true :text text})]
+          near (if (= :gantt (:page state)) "gantt-save-form" "works-save-form")
+          s (assoc state :flash {:error? true :text text :near near})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn daily-loaded [state body]
   (if (:ok body)
-    (guarded (assoc state :daily-rows (or (:rows body) []) :flash nil))
+    (guarded (assoc state :daily-rows (or (:rows body) [])))
     (let [s (assoc state :daily-rows []
-                   :flash {:error? true :text (code-message (:code body))})]
+                   :flash {:error? true :text (code-message (:code body)) :near "daily-list"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn daily-context-loaded [state body]
@@ -2813,74 +2890,90 @@
 
 (defn daily-status-save-result [state body]
   (if (:ok body)
-    (let [statuses (into [] (:daily-statuses state))]
+    (let [statuses (into [] (:daily-statuses state))
+          s (flash-ok-state state (m :daily-status-saved) "daily-list")]
       (if (empty? statuses)
-        (guarded (assoc state :daily-rows [] :flash nil))
-        {:state (assoc state :flash nil)
-         :fx [[:api "GET" (daily-query-path state) nil :daily-loaded]]}))
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+        (guarded (assoc s :daily-rows []))
+        {:state s
+         :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]]}))
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near "daily-list"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn gantt-delete-result [state body]
   (if (:ok body)
-    {:state (assoc state :gantt-selected nil :gantt-progress nil :gantt-progress-days nil
-                   :gantt-work-times [] :gantt-checklist-items []
-                   :flash {:error? false :text (m :gantt-deleted)})
-     :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
-          [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]}
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [near (if (= :gantt (:page state)) "gantt-edit-section" "works-edit-section")]
+      {:state (assoc state :gantt-selected nil :gantt-progress nil :gantt-progress-days nil
+                     :gantt-work-times [] :gantt-checklist-items []
+                     :flash {:error? false :text (m :gantt-deleted) :near near})
+       :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
+            [:api "GET" "/api/user/work-name-candidates" nil :work-names-loaded]]})
+    (let [near (if (= :gantt (:page state)) "gantt-edit-section" "works-edit-section")
+          s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn work-times-loaded [state body]
   (if (:ok body)
-    (guarded (assoc state :gantt-work-times (or (:work_times body) []) :flash nil))
-    (let [s (assoc state :gantt-work-times []
-                   :flash {:error? true :text (code-message (:code body))})]
+    (guarded (assoc state :gantt-work-times (or (:work_times body) [])))
+    (let [near (children-near state "-work-times")
+          s (assoc state :gantt-work-times []
+                   :flash {:error? true :text (code-message (:code body)) :near near})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn checklist-items-loaded [state body]
   (if (:ok body)
-    (guarded (assoc state :gantt-checklist-items (or (:checklist_items body) []) :flash nil))
-    (let [s (assoc state :gantt-checklist-items []
-                   :flash {:error? true :text (code-message (:code body))})]
+    (guarded (assoc state :gantt-checklist-items (or (:checklist_items body) [])))
+    (let [near (children-near state "-checklist")
+          s (assoc state :gantt-checklist-items []
+                   :flash {:error? true :text (code-message (:code body)) :near near})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn work-time-save-result [state body]
-  (if (:ok body)
-    (let [gid (or (get-in body [:work_time :gantt_id]) (:gantt-selected state))]
-      {:state (assoc state :flash nil)
-       :fx (gantt-children-load-fx gid)})
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
-      {:state s :fx [[:html (render s)]]})))
+  (let [near (or (:pending-flash-near state) (children-near state "-work-times"))
+        state (dissoc state :pending-flash-near)]
+    (if (:ok body)
+      (let [gid (or (get-in body [:work_time :gantt_id]) (:gantt-selected state))
+            s (flash-ok-state state (m :work-time-saved) near)]
+        {:state s :fx (gantt-children-load-fx gid)})
+      (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
+        {:state s :fx [[:html (render s)]]}))))
 
 (defn work-time-delete-result [state body]
   (if (:ok body)
-    {:state (assoc state :flash {:error? false :text (m :work-time-deleted)})
-     :fx (gantt-children-load-fx (:gantt-selected state))}
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [near (children-near state "-work-times")
+          s (flash-ok-state state (m :work-time-deleted) near)]
+      {:state s :fx (gantt-children-load-fx (:gantt-selected state))})
+    (let [near (children-near state "-work-times")
+          s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn checklist-item-save-result [state body]
-  (if (:ok body)
-    (let [gid (or (get-in body [:checklist_item :gantt_id]) (:gantt-selected state))]
-      {:state (assoc state :flash nil)
-       :fx (gantt-children-load-fx gid)})
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
-      {:state s :fx [[:html (render s)]]})))
+  (let [near (or (:pending-flash-near state) (children-near state "-checklist"))
+        state (dissoc state :pending-flash-near)]
+    (if (:ok body)
+      (let [gid (or (get-in body [:checklist_item :gantt_id]) (:gantt-selected state))
+            s (flash-ok-state state (m :checklist-item-saved) near)]
+        {:state s :fx (gantt-children-load-fx gid)})
+      (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
+        {:state s :fx [[:html (render s)]]}))))
 
 (defn checklist-item-delete-result [state body]
   (if (:ok body)
-    {:state (assoc state :flash {:error? false :text (m :checklist-deleted)})
-     :fx (gantt-children-load-fx (:gantt-selected state))}
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [near (children-near state "-checklist")
+          s (flash-ok-state state (m :checklist-deleted) near)]
+      {:state s :fx (gantt-children-load-fx (:gantt-selected state))})
+    (let [near (children-near state "-checklist")
+          s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn gantt-title-save-result [state body]
   (if (:ok body)
-    (let [tid (get-in body [:title :id])]
-      {:state (assoc state :gantt-title-selected tid :flash nil)
+    (let [tid (get-in body [:title :id])
+          s (flash-ok-state (assoc state :gantt-title-selected tid)
+                            (m :gantt-title-saved)
+                            "gantt-titles")]
+      {:state s
        :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]]})
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near "gantt-titles"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn gantt-title-delete-result [state body]
@@ -2888,9 +2981,9 @@
     {:state (assoc state :gantt-title-selected nil :gantt-selected nil
                    :gantt-work-times [] :gantt-checklist-items []
                    :gantt-progress nil :gantt-progress-days nil
-                   :flash {:error? false :text (m :gantt-title-deleted)})
+                   :flash {:error? false :text (m :gantt-title-deleted) :near "gantt-titles"})
      :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]]}
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near "gantt-titles"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn gantt-progress-days-loaded [state body]
@@ -2952,7 +3045,9 @@
                  (= "time_invalid" code) (m :order-time-invalid)
                  (= "time_order" code) (m :order-time-order)
                  :else (code-message code))
-          s (assoc state :flash {:error? true :text text})]
+          near (if (= :orders-new (:page state)) "orders-new-section" nil)
+          s (assoc state :flash (cond-> {:error? true :text text}
+                                  near (assoc :near near)))]
       {:state s :fx [[:html (render s)]]})))
 
 (defn journal-save-result [state body]
@@ -3099,10 +3194,6 @@
   (let [s (str/trim (str (or (:id form) (get-in state [:form :paint-id]) "")))]
     (when-not (str/blank? s) s)))
 
-(defn- flash-html-state [state text]
-  (let [s (assoc state :flash {:error? true :text text})]
-    {:state s :fx [[:html (render s)]]}))
-
 (defn after-field-delete [state body]
   (if (:ok body)
     {:state state :fx [[:api "GET" "/api/user/fields" nil :fields-loaded]]}
@@ -3156,16 +3247,16 @@
   (if (:ok body)
     (let [s (assoc state
                    :initial-password (:initial_password body)
-                   :flash {:error? false :text (m :invite-ok)})]
+                   :flash {:error? false :text (m :invite-ok) :near "invite-form-section"})]
       {:state s :fx [[:html (render s)]]})
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near "invite-form-section"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn after-password [state body]
   (if (:ok body)
-    (let [s (assoc state :flash {:error? false :text (m :password-ok)})]
+    (let [s (assoc state :flash {:error? false :text (m :password-ok) :near "password-form-section"})]
       {:state s :fx [[:html (render s)]]})
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near "password-form-section"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn after-revoke [state]
@@ -3195,7 +3286,7 @@
     "add-gantt-title"
     (let [name (str/trim (as-text (:name form)))]
       (if (str/blank? name)
-        (flash-html-state state (code-message "title_required"))
+        (flash-html-state state (code-message "title_required") "gantt-titles")
         {:state state
          :fx [[:api "POST" "/api/user/gantt/titles" {:name name}
                :gantt-title-save-result]]}))
@@ -3206,9 +3297,9 @@
           name (str/trim (as-text (:name form)))]
       (cond
         (str/blank? id)
-        (flash-html-state state (m :gantt-title-select))
+        (flash-html-state state (m :gantt-title-select) "gantt-titles")
         (str/blank? name)
-        (flash-html-state state (code-message "title_required"))
+        (flash-html-state state (code-message "title_required") "gantt-titles")
         :else
         {:state state
          :fx [[:api "PUT" (str "/api/user/gantt/titles/" id) {:name name}
@@ -3218,7 +3309,7 @@
                                   (:gantt-title-selected state)
                                   (:id form))))]
       (if (str/blank? id)
-        (flash-html-state state (m :gantt-title-select))
+        (flash-html-state state (m :gantt-title-select) "gantt-titles")
         {:state state
          :fx [[:api "DELETE" (str "/api/user/gantt/titles/" id) nil
                :gantt-title-delete-result]]}))
@@ -3247,12 +3338,13 @@
           title (str/trim (as-text (:title form)))
           title' (if (str/blank? title) (m :gantt-work-new-placeholder) title)
           start (str/trim (as-text (:start_at form)))
-          end (str/trim (as-text (:end_at form)))]
+          end (str/trim (as-text (:end_at form)))
+          near (if (= :gantt (:page state)) "gantt-add-form" "works-add-form")]
       (cond
         (and (= :gantt (:page state)) (str/blank? tid))
-        (flash-html-state state (m :gantt-title-select))
+        (flash-html-state state (m :gantt-title-select) near)
         (or (str/blank? start) (str/blank? end))
-        (flash-html-state state (m :time-invalid))
+        (flash-html-state state (m :time-invalid) near)
         :else
         {:state state
          :fx [[:api "POST" "/api/user/gantt"
@@ -3269,16 +3361,17 @@
           fids (:field_ids body)
           wn (str/trim (as-text (:work_name body)))
           body' (assoc body :title_id (let [tid (str/trim (as-text (:title_id body)))]
-                                        (when-not (str/blank? tid) tid)))]
+                                        (when-not (str/blank? tid) tid)))
+          near (if (= :gantt (:page state)) "gantt-save-form" "works-save-form")]
       (cond
         (str/blank? id)
-        (flash-html-state state (m :gantt-not-found))
+        (flash-html-state state (m :gantt-not-found) near)
         (and (= :gantt (:page state)) (nil? (:title_id body')))
-        (flash-html-state state (m :gantt-title-select))
+        (flash-html-state state (m :gantt-title-select) near)
         (and (seq fids) (str/blank? wn))
-        (flash-html-state state (m :gantt-work-needed))
+        (flash-html-state state (m :gantt-work-needed) near)
         (or (str/blank? (:start_at body')) (str/blank? (:end_at body')))
-        (flash-html-state state (m :time-invalid))
+        (flash-html-state state (m :time-invalid) near)
         :else
         {:state state
          :fx [[:api "PUT" (str "/api/user/gantt/" id) body' :gantt-save-result]]}))
@@ -3327,9 +3420,9 @@
           row (gantt-row-by-id (assoc state :gantt-rows (:daily-rows state)) id)]
       (cond
         (or (str/blank? id) (nil? row))
-        (flash-html-state state (m :gantt-not-found))
+        (flash-html-state state (m :gantt-not-found) "daily-list")
         (not (#{"not_started" "in_progress" "done"} status))
-        (flash-html-state state (m :execution-status-invalid))
+        (flash-html-state state (m :execution-status-invalid) "daily-list")
         :else
         {:state (assoc state :flash nil)
          :fx [[:api "PUT" (str "/api/user/gantt/" id)
@@ -3338,12 +3431,13 @@
     "add-work-time"
     (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
           start (str/trim (as-text (:start_at form)))
-          end (str/trim (as-text (:end_at form)))]
+          end (str/trim (as-text (:end_at form)))
+          near (children-near state "-work-time-add-box")]
       (cond
-        (str/blank? gid) (flash-html-state state (m :gantt-not-found))
-        (or (str/blank? start) (str/blank? end)) (flash-html-state state (m :time-invalid))
+        (str/blank? gid) (flash-html-state state (m :gantt-not-found) near)
+        (or (str/blank? start) (str/blank? end)) (flash-html-state state (m :time-invalid) near)
         :else
-        {:state state
+        {:state (assoc state :pending-flash-near near)
          :fx [[:api "POST" (str "/api/user/gantt/" gid "/work-times")
                {:start_at start :end_at end}
                :work-time-save-result]]}))
@@ -3351,31 +3445,34 @@
     (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
           tid (str/trim (as-text (:id form)))
           start (str/trim (as-text (:start_at form)))
-          end (str/trim (as-text (:end_at form)))]
+          end (str/trim (as-text (:end_at form)))
+          near (children-near state "-work-times")]
       (cond
-        (or (str/blank? gid) (str/blank? tid)) (flash-html-state state (m :work-time-not-found))
-        (or (str/blank? start) (str/blank? end)) (flash-html-state state (m :time-invalid))
+        (or (str/blank? gid) (str/blank? tid)) (flash-html-state state (m :work-time-not-found) near)
+        (or (str/blank? start) (str/blank? end)) (flash-html-state state (m :time-invalid) near)
         :else
-        {:state state
+        {:state (assoc state :pending-flash-near near)
          :fx [[:api "PUT" (str "/api/user/gantt/" gid "/work-times/" tid)
                {:start_at start :end_at end}
                :work-time-save-result]]}))
     "delete-work-time"
     (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
-          tid (str/trim (as-text (:id form)))]
+          tid (str/trim (as-text (:id form)))
+          near (children-near state "-work-times")]
       (if (or (str/blank? gid) (str/blank? tid))
-        (flash-html-state state (m :work-time-not-found))
+        (flash-html-state state (m :work-time-not-found) near)
         {:state state
          :fx [[:api "DELETE" (str "/api/user/gantt/" gid "/work-times/" tid) nil
                :work-time-delete-result]]}))
     "add-checklist-item"
     (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
-          label (str/trim (as-text (:label form)))]
+          label (str/trim (as-text (:label form)))
+          near (children-near state "-checklist-add-box")]
       (cond
-        (str/blank? gid) (flash-html-state state (m :gantt-not-found))
-        (str/blank? label) (flash-html-state state (m :label-required))
+        (str/blank? gid) (flash-html-state state (m :gantt-not-found) near)
+        (str/blank? label) (flash-html-state state (m :label-required) near)
         :else
-        {:state state
+        {:state (assoc state :pending-flash-near near)
          :fx [[:api "POST" (str "/api/user/gantt/" gid "/checklist-items")
                {:label label}
                :checklist-item-save-result]]}))
@@ -3383,21 +3480,23 @@
     (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
           cid (str/trim (as-text (:id form)))
           label (str/trim (as-text (:label form)))
-          status (str/trim (as-text (:status form)))]
+          status (str/trim (as-text (:status form)))
+          near (children-near state "-checklist")]
       (cond
-        (or (str/blank? gid) (str/blank? cid)) (flash-html-state state (m :checklist-item-not-found))
-        (str/blank? label) (flash-html-state state (m :label-required))
-        (not (#{"pending" "done"} status)) (flash-html-state state (m :checklist-status-invalid))
+        (or (str/blank? gid) (str/blank? cid)) (flash-html-state state (m :checklist-item-not-found) near)
+        (str/blank? label) (flash-html-state state (m :label-required) near)
+        (not (#{"pending" "done"} status)) (flash-html-state state (m :checklist-status-invalid) near)
         :else
-        {:state state
+        {:state (assoc state :pending-flash-near near)
          :fx [[:api "PUT" (str "/api/user/gantt/" gid "/checklist-items/" cid)
                {:label label :status status}
                :checklist-item-save-result]]}))
     "delete-checklist-item"
     (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
-          cid (str/trim (as-text (:id form)))]
+          cid (str/trim (as-text (:id form)))
+          near (children-near state "-checklist")]
       (if (or (str/blank? gid) (str/blank? cid))
-        (flash-html-state state (m :checklist-item-not-found))
+        (flash-html-state state (m :checklist-item-not-found) near)
         {:state state
          :fx [[:api "DELETE" (str "/api/user/gantt/" gid "/checklist-items/" cid) nil
                :checklist-item-delete-result]]}))

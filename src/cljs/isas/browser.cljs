@@ -193,6 +193,10 @@
               (when (seq draft)
                 (restore-form-draft! draft))
               (set-document-lang! (:ui-lang @app-state))
+              (when-let [near (some-> @app-state :flash :near str)]
+                (when-not (str/blank? near)
+                  (when-let [el (.getElementById js/document (str "flash-" near))]
+                    (.scrollIntoView el #js {:block "nearest" :behavior "smooth"}))))
               (when-let [f @map-sync-fn]
                 (f @app-state dispatch!))
               (when-let [f @gantt-sync-fn]

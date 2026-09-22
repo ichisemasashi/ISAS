@@ -212,20 +212,19 @@
         end (form-value form "end_at")]
     (times-ok? start end)))
 
-(defn- set-disabled! [^js btn disabled?]
+(defn- set-action-visible! [^js btn visible?]
   (when btn
-    (set! (.-disabled btn) (boolean disabled?))))
+    (set! (.-hidden btn) (not visible?))))
 
 (defn- refresh-save-btn! []
   (when-let [^js form (.getElementById js/document "gantt-save-form")]
-    (set-disabled! (.getElementById js/document "gantt-save-btn")
-                   (not (save-form-ok? form)))))
+    (set-action-visible! (.getElementById js/document "gantt-save-btn")
+                         (save-form-ok? form))))
 
 (defn- refresh-add-btn! []
   (when-let [^js form (.getElementById js/document "gantt-add-form")]
-    (set-disabled! (.getElementById js/document "gantt-add-btn")
-                   (not (add-form-ok? form)))))
-
+    (set-action-visible! (.getElementById js/document "gantt-add-btn")
+                         (add-form-ok? form))))
 (defn- wire-validation! []
   (refresh-save-btn!)
   (refresh-add-btn!)

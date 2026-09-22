@@ -23,17 +23,23 @@
 (defn normalize-title [s]
   (let [t (str/trim (str (or s "")))]
     (cond
-      (str/blank? t) {:ok false :code "title_required"}
-      (> (count t) 200) {:ok false :code "title_too_long"}
+      (str/blank? t)
+      (do (log/warn "作業タイトルが空です")
+          {:ok false :code "title_required"})
+      (> (count t) 200)
+      (do (log/warn "作業タイトルが長すぎます" :length (count t))
+          {:ok false :code "title_too_long"})
       :else {:ok true :title t})))
 
 (defn normalize-times [start end]
   (cond
     (not (and (time/local-minute-ok? start) (time/local-minute-ok? end)))
-    {:ok false :code "time_invalid"}
+    (do (log/warn "日時の形式が不正です" :start start :end end)
+        {:ok false :code "time_invalid"})
 
     (not (.isBefore (time/parse-local-minute start) (time/parse-local-minute end)))
-    {:ok false :code "time_order"}
+    (do (log/warn "終了が開始以前です" :start start :end end)
+        {:ok false :code "time_order"})
 
     :else
     {:ok true :start-at (str start) :end-at (str end)}))
@@ -51,11 +57,13 @@
               :else [ids])
         ints (mapv geo/as-int raw)]
     (if (some nil? ints)
-      {:ok false :code "field_not_found"}
+      (do (log/warn "対象圃場の ID が不正です" :user-id user-id)
+          {:ok false :code "field_not_found"})
       (let [uniq (vec (distinct ints))]
         (if (every? #(db/find-field (:ds sys) user-id %) uniq)
           {:ok true :field-ids uniq}
-          {:ok false :code "field_not_found"})))))
+          (do (log/warn "対象圃場が見つかりません" :user-id user-id)
+              {:ok false :code "field_not_found"}))))))
 
 (defn- present-title [t]
   {:id (:id t)
@@ -155,8 +163,12 @@
       (let [tid (geo/as-int s)
             t (when tid (db/find-gantt-title (:ds sys) user-id tid))]
         (cond
-          (nil? tid) {:ok false :code "title_not_found"}
-          (or (nil? t) (not (active-title? t))) {:ok false :code "title_not_found"}
+          (nil? tid)
+          (do (log/warn "題名 ID が不正です" :user-id user-id :title-id raw)
+              {:ok false :code "title_not_found"})
+          (or (nil? t) (not (active-title? t)))
+          (do (log/warn "題名が見つかりません" :user-id user-id :title-id tid)
+              {:ok false :code "title_not_found"})
           :else {:ok true :title-id tid})))))
 
 (defn list-titles [sys user-id]
@@ -208,12 +220,17 @@
         (log/warn "消すガント題名がありません" :user-id user-id :title-id id)
         {:ok false :code "title_not_found"})
       :else
-      (do
+      (let [rows (db/list-gantt-rows-for-title (:ds sys) user-id tid)
+            row-n (count rows)
+            wt-n (reduce + 0 (map #(db/count-gantt-work-times (:ds sys) (:id %)) rows))
+            ci-n (reduce + 0 (map #(:total (db/count-gantt-checklist (:ds sys) (:id %))) rows))]
         (db/soft-delete-gantt-work-times-for-title! (:ds sys) tid)
         (db/soft-delete-gantt-checklist-items-for-title! (:ds sys) tid)
         (db/soft-delete-gantt-rows-for-title! (:ds sys) tid)
         (db/soft-delete-gantt-title! (:ds sys) tid)
-        (log/info "ガント題名をソフト削除しました" :user-id user-id :title-id tid)
+        (log/info "ガント題名をソフト削除しました"
+                  :user-id user-id :title-id tid
+                  :rows row-n :work-times wt-n :checklist-items ci-n)
         {:ok true}))))
 
 (defn list-rows [sys user-id]
@@ -427,11 +444,15 @@
         (log/warn "消すガント行がありません" :user-id user-id :gantt-id id)
         {:ok false :code "gantt_not_found"})
       :else
-      (do
+      (let [wt (db/count-gantt-work-times (:ds sys) gid)
+            ci (db/count-gantt-checklist (:ds sys) gid)
+            ci-total (:total ci)]
         (db/soft-delete-gantt-work-times-for-gantt! (:ds sys) gid)
         (db/soft-delete-gantt-checklist-items-for-gantt! (:ds sys) gid)
         (db/soft-delete-gantt-row! (:ds sys) gid)
-        (log/info "ガント行をソフト削除しました" :user-id user-id :gantt-id gid)
+        (log/info "ガント行をソフト削除しました"
+                  :user-id user-id :gantt-id gid
+                  :work-times wt :checklist-items ci-total)
         {:ok true}))))
 
 (defn row-progress [sys user-id id]

@@ -61,14 +61,14 @@
           (is (re-find #"data-percent=\"25\"" wide))
           (is (re-find #"作業を足す" wide))
           (is (re-find #"題名|開始|終了|作業名|対象圃場" wide))
-          (is (not (re-find #"指示|日誌" wide))))
+          (is (not (re-find #"出した指示|受けた指示|日誌を書" wide))))
         (testing "B4-2-03 / B4-5.4-01 狭い画面にガント編集は無い"
           (is (re-find #"パソコンで開いてください"
                        (html {:page :gantt :narrow? true :fields [{:id 1}]})))
           (is (not (re-find #"作業を足す|data-percent=\""
                             (html {:page :gantt :narrow? true :fields [{:id 1}]})))))
-        (testing "B4-2-04 / B4-4.6-05 / B4-6-03 / B4-10-02 ガント画面に指示・日誌・切断・言語は出さない"
-          (is (not (re-find #"指示|日誌|関係を切|言語切替" wide)))
+        (testing "B4-2-04 / B4-4.6-05 / B4-6-03 / B4-10-02 ガント画面に指示編集・日誌・切断は出さない"
+          (is (not (re-find #"出した指示|受けた指示|日誌を書|関係を切|言語切替" wide)))
           (is (some? (http/match-api :post "/api/user/orders")))
           (is (nil? (http/match-api :put "/api/user/locale"))))
         (testing "B4-3-01 / B4-5.2-01 / B4-5.3-02 権限"

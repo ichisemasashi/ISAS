@@ -62,13 +62,14 @@
       (is (re-find #">選んだ圃場<" h))
       (is (re-find #">選んだ塗り<" h))
       (is (re-find #">ほか<" h))))
-  (testing "P3-2.1-01b2 未選択・下書きなしは無効"
+  (testing "P3-2.1-01b2 未選択・下書きなしは非表示"
     (let [h (map-html [{:id 1 :name "北"}])]
-      (is (re-find #"id=\"paint-confirm-btn\"[^>]*disabled" h))
-      (is (re-find #"id=\"paint-discard-btn\"[^>]*disabled" h))
-      (is (re-find #"id=\"paint-complete-btn\"[^>]*disabled" h))
-      (is (re-find #"id=\"paint-delete-all-btn\"[^>]*disabled" h))
-      (is (re-find #"id=\"paint-delete-btn\"[^>]*disabled" h))))
+      (is (re-find #"id=\"paint-confirm-btn\"" h))
+      (is (re-find #"data-act=\"confirm-paint\"[^>]*hidden" h))
+      (is (re-find #"id=\"paint-discard-btn\"[^>]*hidden" h))
+      (is (re-find #"data-act=\"complete-field\"[^>]*hidden" h))
+      (is (re-find #"data-act=\"delete-field-paints\"[^>]*hidden" h))
+      (is (re-find #"data-act=\"delete-paint\"[^>]*hidden" h))))
   (testing "P3-2.1-01c 圃場を直すと手描きが戻る"
     (let [h (html {:page :map
                    :place {:west 139 :south 35 :east 141 :north 37}
@@ -98,9 +99,9 @@
     (let [r (ui/handle (ui/init-state) [:submit {:act "discard-drafts" :form {}}])]
       (is (= :html (ffirst (:fx r))))
       (is (not= :api (ffirst (:fx r))))))
-  (testing "P3-2.1-08 / P3-6-01 ガント・％・指示は出さない"
+  (testing "P3-2.1-08 / P3-6-01 ガント・％・指示編集は出さない"
     (let [h (map-html [{:id 1 :name "北"}])]
-      (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"|パーセントサークル|指示" h)))))
+      (is (not (re-find #"id=\"gantt-titles\"|id=\"gantt-axis\"|パーセントサークル|出した指示|受けた指示" h)))))
   (testing "P3-2.4-01 / P3-2.4-05 未選択は進捗色なし。下地は工程2のまま"
     (let [h (html {:page :map
                    :place {:west 139 :south 35 :east 141 :north 37}
