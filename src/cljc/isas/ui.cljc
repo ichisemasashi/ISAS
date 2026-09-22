@@ -387,12 +387,25 @@
    :memos-bookmark-add "ブックマーク"
    :memos-bookmark-remove "ブックマークを外す"
    :memos-select-thread "スレッドを開く"
+   :memos-thread "スレッド"
+   :memos-close-thread "スレッドを閉じる"
+   :memos-edit "編集する"
    :memos-more "続きを読み込む"
    :memos-empty "メモはまだありません"
    :memos-drafts-empty "下書きはありません"
    :memos-bookmarks-empty "ブックマークはありません"
    :memos-attach "添付を追加"
+   :memos-detach "添付を外す"
+   :memos-attach-after-save "添付は、下書き保存または公開のあとに追加できます。"
    :memos-draft-label "下書き"
+   :memos-search-results "検索結果"
+   :memos-search-query-prefix "検索文字列は「"
+   :memos-search-query-suffix "」"
+   :memos-search-run "この条件で検索"
+   :memos-advanced-open "高度な条件を開く"
+   :memos-advanced-close "高度な条件を閉じる"
+   :memos-search-clear "検索をやめる"
+   :memos-search-empty "該当するメモはありません"
    :phone-memos "メモはパソコンで開いてください"
    :home-link-memos "共有メモのタイムライン"
    :memos-posted "投稿しました"
@@ -797,12 +810,25 @@
    :memos-bookmark-add "Bookmark"
    :memos-bookmark-remove "Remove bookmark"
    :memos-select-thread "Open thread"
+   :memos-thread "Thread"
+   :memos-close-thread "Close thread"
+   :memos-edit "Edit"
    :memos-more "Load more"
    :memos-empty "No memos yet"
    :memos-drafts-empty "No drafts"
    :memos-bookmarks-empty "No bookmarks"
    :memos-attach "Add attachment"
+   :memos-detach "Remove attachment"
+   :memos-attach-after-save "Add attachments after saving a draft or publishing."
    :memos-draft-label "Draft"
+   :memos-search-results "Search results"
+   :memos-search-query-prefix "Search text: \""
+   :memos-search-query-suffix "\""
+   :memos-search-run "Search with these conditions"
+   :memos-advanced-open "Show advanced conditions"
+   :memos-advanced-close "Hide advanced conditions"
+   :memos-search-clear "Clear search"
+   :memos-search-empty "No matching memos"
    :phone-memos "Open memos on a computer"
    :home-link-memos "Shared memo timeline"
    :memos-posted "Posted"
@@ -886,6 +912,58 @@
        (and d t) (str d " " t)
        d d
        :else ""))))
+
+(defn format-display-instant
+  "API の UTC ISO または Asia/Tokyo の local-minute を、画面用の日本時間に直す。"
+  [s]
+  (let [raw (str/trim (str (or s "")))]
+    (when-not (str/blank? raw)
+      (or
+       #?(:clj
+          (try
+            (let [inst (cond
+                         (re-find #"(?i)Z$|[+-]\d{2}:?\d{2}$" raw)
+                         (time/parse-instant raw)
+
+                         (re-find #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}" raw)
+                         (when-let [ldt (time/parse-local-minute (subs raw 0 (min 16 (count raw))))]
+                           (.toInstant (.atZone ldt time/tokyo)))
+
+                         :else nil)]
+              (when inst
+                (let [zdt (.atZone inst time/tokyo)
+                      date (str (.getYear zdt) "-" (pad2 (.getMonthValue zdt)) "-" (pad2 (.getDayOfMonth zdt)))
+                      time (str (pad2 (.getHour zdt)) ":" (pad2 (.getMinute zdt)))]
+                  (format-display-datetime date time))))
+            (catch Exception _ nil))
+          :cljs
+          (try
+            (let [iso (cond
+                        (re-find #"(?i)Z$|[+-]\d{2}:?\d{2}$" raw) raw
+                        (re-find #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$" raw) (str raw ":00+09:00")
+                        (re-find #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}" raw) raw
+                        :else nil)
+                  d (when iso (js/Date. iso))]
+              (when (and d (not (js/isNaN (.getTime d))))
+                (let [parts (.formatToParts
+                             (js/Intl.DateTimeFormat. "en-US"
+                                                      #js {:timeZone "Asia/Tokyo"
+                                                           :year "numeric"
+                                                           :month "2-digit"
+                                                           :day "2-digit"
+                                                           :hour "2-digit"
+                                                           :minute "2-digit"
+                                                           :hour12 false})
+                             d)
+                      get (fn [t]
+                            (some (fn [p]
+                                    (when (= t (.-type p)) (.-value p)))
+                                  (array-seq parts)))
+                      date (str (get "year") "-" (get "month") "-" (get "day"))
+                      time (str (get "hour") ":" (get "minute"))]
+                  (format-display-datetime date time))))
+            (catch :default _ nil)))
+       raw))))
 
 (def paint-colors
   {:none "#c8c8c8"
@@ -1154,7 +1232,10 @@
    :memo-search-q ""
    :memo-search-form {}
    :memo-search-advanced? false
+   :memo-search-results nil
+   :memo-search-active? false
    :memo-compose {}
+   :memo-last-saved nil
    :memo-before-id nil})
 
 (defn map-mode [state]
@@ -2346,7 +2427,8 @@
                                         "</button>"
                                         "<p class=\"work-item-meta\">"
                                         (esc (work-related-title-label state (:title_id r)))
-                                        " · " (esc (:start_at r)) "〜" (esc (:end_at r))
+                                        " · " (esc (format-display-instant (:start_at r)))
+                                        "〜" (esc (format-display-instant (:end_at r)))
                                         " · " (esc (execution-status-label (:execution_status r)))
                                         "</p></form>")))))
                       "</section>"
@@ -2474,7 +2556,9 @@
                                       (str "<div class=\"daily-item\" id=\"daily-item-" (esc (:id r)) "\">"
                                            "<span class=\"daily-item-title\">" (esc (:title r)) "</span>"
                                            " <span class=\"daily-item-time\">"
-                                           (esc (:start_at r)) "〜" (esc (:end_at r)) "</span>"
+                                           (esc (format-display-instant (:start_at r)))
+                                           "〜"
+                                           (esc (format-display-instant (:end_at r))) "</span>"
                                            "<p class=\"daily-item-summary\">"
                                            "<span>" (esc (daily-work-time-summary (:work_time_count r))) "</span>"
                                            " / "
@@ -2602,7 +2686,9 @@
                                            (esc (m :gantt-open-prefix)) (esc (:title r))
                                            (when selected? (esc (m :works-open-selected)))
                                            "<span class=\"work-item-meta\"> ("
-                                           (esc (:start_at r)) "〜" (esc (:end_at r)) ")"
+                                           (esc (format-display-instant (:start_at r)))
+                                           "〜"
+                                           (esc (format-display-instant (:end_at r))) ")"
                                            " [" (esc (execution-status-label (:execution_status r))) "]"
                                            "</span></button>"
                                            "<div class=\"gantt-bar\"></div></form>")))))
@@ -2756,9 +2842,12 @@
 
 (defn- memo-by-id [state id]
   (let [sid (str id)]
-    (some (fn [x] (when (= sid (str (:id x))) x))
-          (concat (:memos state) (:memo-replies state)
-                  (:memo-drafts state) (:memo-bookmarks state)))))
+    (or (some (fn [x] (when (= sid (str (:id x))) x))
+              (concat (:memos state) (:memo-replies state)
+                      (:memo-drafts state) (:memo-bookmarks state)
+                      (:memo-search-results state)))
+        (let [m (:memo-last-saved state)]
+          (if (and m (= sid (str (:id m)))) m nil)))))
 
 (defn- memo-selected-memo
   "開いているスレッドの先頭。取り直した1件があればそれを使う。"
@@ -2782,11 +2871,12 @@
   (str "<p class=\"memo-meta\">"
        (esc (:author_email memo))
        (when-not (str/blank? (str (:published_at memo)))
-         (str " · " (esc (:published_at memo))))
+         (str " · " (esc (format-display-instant (:published_at memo)))))
        (when (memo-draft? memo)
          (str " · " (esc (m :memos-draft-label))))
        (when-not (str/blank? (str (:editable_until memo)))
-         (str " · " (esc (m :memos-edit-until)) (esc (:editable_until memo))))
+         (str " · " (esc (m :memos-edit-until))
+              (esc (format-display-instant (:editable_until memo)))))
        "</p>"))
 
 (defn- memo-tags-html [memo]
@@ -2811,15 +2901,43 @@
                 (for [a (:attachments memo)]
                   (str "<li><a href=\"/api/memos/" (esc (:id memo))
                        "/attachments/" (esc (:id a)) "\">"
-                       (esc (:filename a)) "</a></li>")))
+                       (esc (:filename a)) "</a>"
+                       (if (:can_edit memo)
+                         (str " <form data-act=\"memo-detach\" method=\"post\" class=\"inline\">"
+                              "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+                              "<input type=\"hidden\" name=\"attachment_id\" value=\"" (esc (:id a)) "\">"
+                              "<button type=\"submit\">" (esc (m :memos-detach)) "</button></form>")
+                         "")
+                       "</li>")))
          "</ul>")))
 
 (defn- memo-attach-form [memo]
-  (str "<form data-act=\"memo-attach\" method=\"post\" enctype=\"multipart/form-data\" class=\"memo-attach\">"
-       "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
-       "<label>" (esc (m :memos-attach))
-       "<input type=\"file\" name=\"file\"></label>"
-       "<button type=\"submit\">" (esc (m :memos-attach)) "</button></form>"))
+  (if-not (:can_edit memo)
+    ""
+    (str "<form data-act=\"memo-attach\" method=\"post\" enctype=\"multipart/form-data\" class=\"memo-attach\">"
+         "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+         "<label>" (esc (m :memos-attach))
+         "<input type=\"file\" name=\"file\"></label>"
+         "<button type=\"submit\">" (esc (m :memos-attach)) "</button></form>")))
+
+(defn- memo-edit-form [memo]
+  (if-not (:can_edit memo)
+    ""
+    (str "<details class=\"memo-edit\" open>"
+         "<summary>" (esc (m :memos-edit)) "</summary>"
+         "<form data-act=\"memo-update\" method=\"post\" class=\"memo-edit-form\">"
+         "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+         "<label>" (esc (m :memos-body-label))
+         "<textarea name=\"body\" rows=\"3\">" (esc (:body memo)) "</textarea></label>"
+         "<label>" (esc (m :memos-tags-label))
+         "<textarea name=\"tags\" rows=\"2\">"
+         (esc (str/join "\n" (or (:tags memo) []))) "</textarea></label>"
+         "<label>" (esc (m :memos-links-label))
+         "<textarea name=\"links\" rows=\"2\">"
+         (esc (str/join "\n" (or (:links memo) []))) "</textarea></label>"
+         "<button type=\"submit\">" (esc (m :btn-save)) "</button></form>"
+         (memo-attach-form memo)
+         "</details>")))
 
 (defn- memo-star-form [memo]
   (let [on? (boolean (:bookmarked memo))]
@@ -2854,21 +2972,27 @@
                      "> " (esc (m key)) "</label>")))
        "</fieldset>"))
 
-(defn- memo-item-html [state memo]
-  (str "<li class=\"memo-item\" id=\"memo-item-" (esc (:id memo)) "\">"
-       "<p class=\"memo-body\">" (esc (:body memo)) "</p>"
-       (memo-meta-html memo)
-       (memo-tags-html memo)
-       (memo-links-html memo)
-       (memo-attachments-html memo)
-       "<p class=\"memo-actions\">"
-       (when-not (memo-draft? memo) (memo-star-form memo))
-       (when (= :memos (:page state)) (memo-select-form memo))
-       (when (:can_delete memo) (memo-delete-form memo))
-       "</p></li>"))
+(defn- memo-item-html
+  "opts: :show-select? タイムライン／検索でスレッドを開くボタンを出す。"
+  ([state memo] (memo-item-html state memo {:show-select? false}))
+  ([state memo opts]
+   (str "<li class=\"memo-item\" id=\"memo-item-" (esc (:id memo)) "\">"
+        "<p class=\"memo-body\">" (esc (:body memo)) "</p>"
+        (memo-meta-html memo)
+        (memo-tags-html memo)
+        (memo-links-html memo)
+        (memo-attachments-html memo)
+        (memo-edit-form memo)
+        "<p class=\"memo-actions\">"
+        (when-not (memo-draft? memo) (memo-star-form memo))
+        (when (:show-select? opts) (memo-select-form memo))
+        (when (:can_delete memo) (memo-delete-form memo))
+        "</p></li>")))
 
 (defn- memo-compose-section [state]
-  (let [c (or (:memo-compose state) {})]
+  (let [c (or (:memo-compose state) {})
+        last (let [m (:memo-last-saved state)]
+               (if (and m (:can_edit m)) m nil))]
     (str "<section class=\"form-section\" id=\"memo-compose-section\">"
          (section-title-html :memos-compose)
          (flash-at state "memo-compose-section")
@@ -2881,13 +3005,24 @@
          "<label>" (esc (m :memos-links-label))
          "<textarea name=\"links\" rows=\"2\">" (esc (:links c)) "</textarea></label>"
          (memo-status-fieldset "published")
+         "<p class=\"field-hint\">" (esc (m :memos-attach-after-save)) "</p>"
          "<button type=\"submit\" id=\"memo-compose-btn\" class=\"btn-primary\">"
          (esc (m :btn-save)) "</button></form>"
+         (if last
+           (str "<div class=\"memo-compose-saved\" id=\"memo-compose-saved\">"
+                "<p class=\"memo-body\">" (esc (:body last)) "</p>"
+                (memo-meta-html last)
+                (memo-attachments-html last)
+                (memo-attach-form last)
+                "</div>")
+           "")
          "</section>")))
 
 (defn- memo-search-section [state]
   (let [adv? (boolean (:memo-search-advanced? state))
-        f (or (:memo-search-form state) {})]
+        f (or (:memo-search-form state) {})
+        active? (boolean (:memo-search-active? state))
+        rows (vec (or (:memo-search-results state) []))]
     (str "<section class=\"form-section\" id=\"memo-search-section\">"
          (section-title-html :memos-search)
          (flash-at state "memo-search-section")
@@ -2895,30 +3030,57 @@
          "<label>" (esc (m :memos-search))
          "<input name=\"q\" value=\"" (esc (:memo-search-q state)) "\"></label>"
          (when adv?
-           (str "<label>" (esc (m :memos-exclude))
+           (str "<div class=\"memo-search-advanced\" id=\"memo-search-advanced\">"
+                "<label>" (esc (m :memos-exclude))
                 "<input name=\"exclude\" value=\"" (esc (:exclude f)) "\"></label>"
                 "<label>" (esc (m :memos-from))
                 "<input name=\"from\" value=\"" (esc (:from f)) "\" placeholder=\"YYYY-MM-DD\"></label>"
                 "<label>" (esc (m :memos-to))
                 "<input name=\"to\" value=\"" (esc (:to f)) "\" placeholder=\"YYYY-MM-DD\"></label>"
                 "<label>" (esc (m :memos-author))
-                "<input name=\"author\" value=\"" (esc (:author f)) "\"></label>"))
-         "<button type=\"submit\" id=\"memo-search-btn\">" (esc (m :memos-search)) "</button></form>"
+                "<input name=\"author\" value=\"" (esc (:author f)) "\"></label>"
+                "</div>"))
+         "<button type=\"submit\" id=\"memo-search-btn\" class=\"btn-primary\">"
+         (esc (m :memos-search-run)) "</button></form>"
+         "<p class=\"memo-search-actions\">"
          "<form data-act=\"memo-search-advanced-toggle\" method=\"post\" class=\"inline\">"
          "<button type=\"submit\" id=\"memo-search-advanced-btn\">"
-         (esc (m :memos-advanced-search)) "</button></form>"
+         (esc (m (if adv? :memos-advanced-close :memos-advanced-open)))
+         "</button></form>"
+         (when active?
+           (str "<form data-act=\"memo-search-clear\" method=\"post\" class=\"inline\">"
+                "<button type=\"submit\" id=\"memo-search-clear-btn\">"
+                (esc (m :memos-search-clear)) "</button></form>"))
+         "</p>"
+         (when active?
+           (str "<div class=\"memo-search-results\" id=\"memo-search-results\">"
+                "<p class=\"memo-search-query\">"
+                (esc (m :memos-search-query-prefix))
+                (esc (or (:memo-search-q state) ""))
+                (esc (m :memos-search-query-suffix))
+                "</p>"
+                "<h3>" (esc (m :memos-search-results)) "</h3>"
+                (if (empty? rows)
+                  (str "<p class=\"empty-hint\">" (esc (m :memos-search-empty)) "</p>")
+                  (str "<ul class=\"memo-list\">"
+                       (apply str (for [r rows]
+                                    (memo-item-html state r {:show-select? true})))
+                       "</ul>"))
+                "</div>"))
          "</section>")))
 
 (defn- memo-thread-section [state]
   (when-let [sel (memo-selected-memo state)]
     (str "<section class=\"form-section\" id=\"memo-thread-section\">"
-         (section-title-html :memos-select-thread)
+         (section-title-html :memos-thread)
          (flash-at state "memo-thread-section")
+         "<form data-act=\"memo-close-thread\" method=\"post\" class=\"inline\">"
+         "<button type=\"submit\" id=\"memo-close-thread-btn\">"
+         (esc (m :memos-close-thread)) "</button></form>"
          "<ul class=\"memo-list memo-thread\">"
          (memo-item-html state sel)
          (apply str (for [r (:memo-replies state)] (memo-item-html state r)))
          "</ul>"
-         (when (:can_edit sel) (memo-attach-form sel))
          "<form data-act=\"memo-reply\" method=\"post\" id=\"memo-reply-form\">"
          "<input type=\"hidden\" name=\"parent_id\" value=\"" (esc (:id sel)) "\">"
          "<label>" (esc (m :memos-body-label))
@@ -2928,6 +3090,7 @@
          "<label>" (esc (m :memos-links-label))
          "<textarea name=\"links\" rows=\"2\"></textarea></label>"
          (memo-status-fieldset "published")
+         "<p class=\"field-hint\">" (esc (m :memos-attach-after-save)) "</p>"
          "<button type=\"submit\" id=\"memo-reply-btn\" class=\"btn-primary\">"
          (esc (m :memos-reply)) "</button></form>"
          "</section>")))
@@ -2946,7 +3109,8 @@
                  (if (empty? rows)
                    (str "<p class=\"empty-hint\">" (esc (m :memos-empty)) "</p>")
                    (str "<ul class=\"memo-list\">"
-                        (apply str (for [r rows] (memo-item-html state r)))
+                        (apply str (for [r rows]
+                                     (memo-item-html state r {:show-select? true})))
                         "</ul>"
                         "<form data-act=\"memo-more\" method=\"post\" class=\"inline\">"
                         "<input type=\"hidden\" name=\"before_id\" value=\""
@@ -3595,7 +3759,10 @@
     (if (:ok body)
       (let [memo (:memo body)
             text (if (memo-draft? memo) (m :memos-draft-saved) (m :memos-posted))
-            s (flash-ok-state (assoc state :memo-compose {}) text near)]
+            s (flash-ok-state (assoc state
+                                     :memo-compose {}
+                                     :memo-last-saved memo)
+                              text near)]
         {:state s :fx (memo-refresh-fx s)})
       (let [s (assoc state :flash {:error? true :text (memo-code-message (:code body)) :near near})]
         {:state s :fx [[:html (render s)]]}))))
@@ -3634,14 +3801,18 @@
   (let [near (or (:pending-flash-near state) (memo-list-near state))
         state (dissoc state :pending-flash-near)]
     (if (:ok body)
-      (let [s (flash-ok-state state (m :saved-ok) near)]
+      (let [s (cond-> (flash-ok-state state (m :saved-ok) near)
+                (:memo body) (assoc :memo-last-saved (:memo body)))]
         {:state s :fx (memo-refresh-fx s)})
       (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
         {:state s :fx [[:html (render s)]]}))))
 
 (defn memo-search-result [state body]
   (if (:ok body)
-    (guarded (assoc state :memos (vec (or (:memos body) [])) :memo-before-id nil :flash nil))
+    (guarded (assoc state
+                    :memo-search-results (vec (or (:memos body) []))
+                    :memo-search-active? true
+                    :flash nil))
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))
                                  :near "memo-search-section"})]
       {:state s :fx [[:html (render s)]]})))
@@ -4131,12 +4302,21 @@
     "memo-search"
     (let [q (str/trim (as-text (:q form)))
           adv (select-keys form [:exclude :from :to :author])
-          s (assoc state :memo-search-q q :memo-search-form adv :memo-before-id nil :flash nil)]
+          s (assoc state :memo-search-q q :memo-search-form adv
+                   :memo-search-active? true :flash nil)]
       {:state s :fx [[:api "GET" (memo-search-path q adv) nil :memo-search-result]]})
 
     "memo-search-advanced-toggle"
     (guarded (assoc state
                     :memo-search-advanced? (not (boolean (:memo-search-advanced? state)))
+                    :flash nil))
+
+    "memo-search-clear"
+    (guarded (assoc state
+                    :memo-search-active? false
+                    :memo-search-results nil
+                    :memo-search-q ""
+                    :memo-search-form {}
                     :flash nil))
 
     "memo-select"
@@ -4147,6 +4327,9 @@
             fx (memo-thread-fx s)]
         (if (seq fx) {:state s :fx fx} (guarded s)))
       (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
+    "memo-close-thread"
+    (guarded (assoc state :memo-selected nil :memo-selected-row nil :memo-replies [] :flash nil))
 
     "memo-delete"
     (if-let [id (memo-id-of form)]
@@ -4166,6 +4349,15 @@
        :fx [[:api "PUT" (str "/api/memos/" id) (memo-content-body form) :memo-save-result]]}
       (flash-html-state state (m :memo-not-found) (memo-list-near state)))
 
+    "memo-update"
+    (if-let [id (memo-id-of form)]
+      (let [near (if (nil? (:memo-selected state))
+                   "memo-timeline"
+                   "memo-thread-section")]
+        {:state (assoc state :pending-flash-near near)
+         :fx [[:api "PUT" (str "/api/memos/" id) (memo-content-body form) :memo-save-result]]})
+      (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
     "memo-bookmark"
     (if-let [id (memo-id-of form)]
       {:state (assoc state :pending-flash-near (memo-list-near state))
@@ -4180,12 +4372,25 @@
 
     "memo-attach"
     (if-let [id (memo-id-of form)]
-      {:state (assoc state :pending-flash-near (if (= :memos (:page state))
-                                                 "memo-thread-section"
-                                                 (memo-list-near state)))
-       :fx [[:upload "POST" (str "/api/memos/" id "/attachments")
-             (dissoc form :id) :memo-attach-result]]}
+      (let [near (if (not= :memos (:page state))
+                   (memo-list-near state)
+                   (if (nil? (:memo-selected state))
+                     "memo-compose-section"
+                     "memo-thread-section"))]
+        {:state (assoc state :pending-flash-near near)
+         :fx [[:upload "POST" (str "/api/memos/" id "/attachments")
+               (dissoc form :id) :memo-attach-result]]})
       (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
+    "memo-detach"
+    (let [id (memo-id-of form)
+          aid (str/trim (as-text (:attachment_id form)))]
+      (if (str/blank? (str id))
+        (flash-html-state state (m :memo-not-found) (memo-list-near state))
+        (if (str/blank? aid)
+          (flash-html-state state (m :memo-not-found) (memo-list-near state))
+          {:state (assoc state :pending-flash-near (memo-list-near state))
+           :fx [[:api "DELETE" (str "/api/memos/" id "/attachments/" aid) nil :memo-attach-result]]})))
 
     "memo-more"
     (let [bid (str/trim (as-text (:before_id form)))]
@@ -4546,6 +4751,8 @@
                 (assoc s :memos [] :memo-selected nil :memo-selected-row nil :memo-replies []
                        :memo-drafts [] :memo-bookmarks [] :memo-compose {}
                        :memo-search-q "" :memo-search-form {} :memo-search-advanced? false
+                       :memo-search-results nil :memo-search-active? false
+                       :memo-last-saved nil
                        :memo-before-id nil :memo-admin-tried? nil :form {})
 
                 :else s)]

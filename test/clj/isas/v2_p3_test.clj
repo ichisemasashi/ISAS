@@ -30,7 +30,7 @@
   (testing "V2P3-2.1-01 /memos タイムライン・投稿・検索"
     (let [h (html {:page :memos})]
       (is (re-find #"memo-compose-section" h))
-      (is (re-find #"memo-search-section|高度な検索|検索" h))
+      (is (re-find #"memo-search-section|高度な条件|この条件で検索|検索" h))
       (is (re-find #"タイムライン|memos-timeline" h))
       (is (nil? (re-find #"ガント紐づけ|gantt.?link" h)))))
   (testing "V2P3-2.1-02 /memos/drafts"

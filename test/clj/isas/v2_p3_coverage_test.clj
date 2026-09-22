@@ -289,7 +289,50 @@
       (is (re-find #"#東" h))
       (is (re-find #"https://example.com" h))
       (is (re-find #"a\.pdf" h))
-      (is (re-find #"（2）" h)))
+      (is (re-find #"（2）" h))
+      ;; UTC 01:00 → 東京 10:00
+      (is (re-find #"10:00" h)))
+    (let [h (html {:page :memos
+                   :memos [{:id 1 :body "編集可" :status "published" :can_edit true
+                            :editable_until "2026-09-22T03:40:00Z"
+                            :author_email "a@example.com" :tags [] :links []
+                            :attachments [{:id 9 :filename "a.pdf"}]}]})]
+      (is (re-find #"編集する|memo-edit|data-act=\"memo-update\"" h))
+      (is (re-find #"添付を追加|memo-attach" h))
+      (is (re-find #"添付を外す|memo-detach" h)))
+    (let [h (html {:page :memos
+                   :memo-last-saved {:id 7 :body "直前投稿" :status "published" :can_edit true
+                                     :author_email "a@example.com"
+                                     :attachments [{:id 1 :filename "x.txt"}]}})]
+      (is (re-find #"memo-compose-saved" h))
+      (is (re-find #"直前投稿" h)))
+    (is (re-find #"10:00" (ui/format-display-instant "2026-09-22T01:00:00Z")))
+    (is (re-find #"2026" (ui/format-display-instant "2026-09-22T10:30")))
+    (is (= "nope" (ui/format-display-instant "nope")))
+    (is (nil? (ui/format-display-instant "")))
+    (is (nil? (ui/format-display-instant nil)))
+    (is (= "bogusZ" (ui/format-display-instant "bogusZ")))
+    (let [h (html {:page :memos
+                   :memo-search-active? true
+                   :memo-search-q "防除"
+                   :memo-search-results [{:id 3 :body "ヒット" :status "published"
+                                          :author_email "a@example.com"}]
+                   :memos [{:id 1 :body "タイムライン用" :status "published"
+                            :author_email "a@example.com"}]})]
+      (is (re-find #"検索文字列は「防除」" h))
+      (is (re-find #"検索結果" h))
+      (is (re-find #"ヒット" h))
+      (is (re-find #"タイムライン用" h))
+      (is (re-find #"タイムライン" h)))
+    (let [h (html {:page :memos
+                   :memo-selected 1
+                   :memo-selected-row {:id 1 :body "親" :status "published" :can_edit true
+                                       :author_email "a@example.com"}
+                   :memo-replies [{:id 2 :body "子返信" :status "published"
+                                   :author_email "a@example.com"}]})]
+      (is (re-find #"スレッドを閉じる|memo-close-thread" h))
+      (is (re-find #"子返信" h))
+      (is (re-find #">スレッド<" h)))
     (is (re-find #"下書きはありません" (html {:page :memos-drafts :memo-drafts []})))
     (is (re-find #"ブックマークはありません" (html {:page :memos-bookmarks :memo-bookmarks []})))
     (is (re-find #"メモはパソコン" (html {:page :memos :kind "admin" :narrow? true}))))
@@ -382,7 +425,60 @@
                                                                       :from "2020-01-01" :to "2020-01-02"
                                                                       :author "a@b.c"}}]))))))
       (is (vector? (get-in (ui/handle base [:memo-search-result {:ok true}])
-                           [:state :memos])))
+                           [:state :memo-search-results])))
+      (is (true? (get-in (ui/handle base [:memo-search-result {:ok true :memos [{:id 9}]}])
+                         [:state :memo-search-active?])))
+      (is (nil? (get-in (ui/handle (assoc base :memo-search-active? true
+                                          :memo-search-results [{:id 1}])
+                                    [:submit {:act "memo-search-clear" :form {}}])
+                        [:state :memo-search-results])))
+      (is (nil? (get-in (ui/handle (assoc base :memo-selected 1 :memo-replies [{:id 2}])
+                                    [:submit {:act "memo-close-thread" :form {}}])
+                        [:state :memo-selected])))
+      (is (= :api (first (first (:fx (ui/handle base [:submit {:act "memo-update"
+                                                               :form {:id "1" :body "直"}}]))))))
+      (is (get-in (ui/handle base [:submit {:act "memo-update" :form {}}])
+                  [:state :flash :error?]))
+      (is (= "memo-thread-section"
+             (get-in (ui/handle (assoc base :memo-selected 1)
+                                [:submit {:act "memo-update" :form {:id "1" :body "直"}}])
+                     [:state :pending-flash-near])))
+      (is (= :api (first (first (:fx (ui/handle base [:submit {:act "memo-detach"
+                                                               :form {:id "1" :attachment_id "2"}}]))))))
+      (is (get-in (ui/handle base [:submit {:act "memo-detach" :form {:id "1"}}])
+                  [:state :flash :error?]))
+      (is (get-in (ui/handle base [:submit {:act "memo-detach" :form {:attachment_id "2"}}])
+                  [:state :flash :error?]))
+      (is (= "memo-compose-section"
+             (get-in (ui/handle (dissoc base :memo-selected)
+                                [:submit {:act "memo-attach" :form {:id "1" :file "x"}}])
+                     [:state :pending-flash-near])))
+      (is (= "memo-thread-section"
+             (get-in (ui/handle (assoc base :memo-selected 1)
+                                [:submit {:act "memo-attach" :form {:id "1" :file "x"}}])
+                     [:state :pending-flash-near])))
+      (is (= "memo-drafts-list"
+             (get-in (ui/handle (assoc base :page :memos-drafts)
+                                [:submit {:act "memo-attach" :form {:id "1" :file "x"}}])
+                     [:state :pending-flash-near])))
+      (is (= "memo-timeline"
+             (get-in (ui/handle (dissoc base :memo-selected)
+                                [:submit {:act "memo-update" :form {:id "1" :body "直"}}])
+                     [:state :pending-flash-near])))
+      (is (= "memo-thread-section"
+             (get-in (ui/handle (assoc base :memo-selected 1)
+                                [:submit {:act "memo-update" :form {:id "1" :body "直"}}])
+                     [:state :pending-flash-near])))
+      (let [r (ui/handle (assoc base :memo-search-results [{:id 88 :body "検索経由"}]
+                                :memos [])
+                         [:submit {:act "memo-select" :form {:id "88"}}])]
+        (is (= "88" (str (get-in r [:state :memo-selected])))))
+      (let [r (ui/handle (assoc base :memo-last-saved {:id 77 :body "保存済" :can_edit true}
+                                :memos [])
+                         [:submit {:act "memo-select" :form {:id "77"}}])]
+        (is (= "77" (str (get-in r [:state :memo-selected])))))
+      (is (map? (:state (ui/handle base [:memo-attach-result
+                                         {:ok true :memo {:id 1 :body "x" :can_edit true}}]))))
       (let [r (ui/handle {:page :memos :kind "admin" :session nil :ui-lang "ja"}
                          [:session-loaded {:ok false}])]
         (is (= "user" (get-in r [:state :kind]))))
