@@ -16,15 +16,20 @@
     (throw (ex-info "起動できませんでした"
                     {:isas/exit-code code}))))
 
-(defn open-system [{:keys [conf-path db-path basemap-dir]
-                    :or {basemap-dir "data/basemaps"}}]
+(defn open-system [{:keys [conf-path db-path basemap-dir memo-dir]
+                    :or {basemap-dir "data/basemaps"
+                         memo-dir "data/memo-files"}}]
   (let [conf (config/load-conf conf-path)
         ds (db/migrate! (db/datasource (db/sqlite-url db-path)))
-        dir (io/file basemap-dir)]
+        dir (io/file basemap-dir)
+        mdir (io/file memo-dir)]
     (.mkdirs dir)
+    (.mkdirs mdir)
     (accounts/bootstrap-admin! ds conf)
-    (log/info "ISAS を用意しました" :db db-path :log-file "data/isas.log" :basemaps (.getPath dir))
-    {:conf conf :ds ds :conf-path conf-path :db-path db-path :basemap-dir (.getPath dir)}))
+    (log/info "ISAS を用意しました" :db db-path :log-file "data/isas.log"
+              :basemaps (.getPath dir) :memo-files (.getPath mdir))
+    {:conf conf :ds ds :conf-path conf-path :db-path db-path
+     :basemap-dir (.getPath dir) :memo-dir (.getPath mdir)}))
 
 (defn make-app [sys]
   (http/make-app sys))
@@ -35,13 +40,15 @@
 
 (defn start!
   ([] (start! {}))
-  ([{:keys [conf-path db-path port join? basemap-dir]
+  ([{:keys [conf-path db-path port join? basemap-dir memo-dir]
      :or {conf-path "data/isas.conf"
           db-path "data/isas.sqlite"
           port 8080
           join? true
-          basemap-dir "data/basemaps"}}]
-   (let [sys (open-system {:conf-path conf-path :db-path db-path :basemap-dir basemap-dir})
+          basemap-dir "data/basemaps"
+          memo-dir "data/memo-files"}}]
+   (let [sys (open-system {:conf-path conf-path :db-path db-path
+                           :basemap-dir basemap-dir :memo-dir memo-dir})
          app (make-app sys)
          server (start-server app {:port port :join? join?})]
      (assoc sys :app app :server server))))

@@ -54,6 +54,11 @@
                   (.delete d)
                   (.mkdirs d)
                   (.deleteOnExit d)
+                  (.getPath d))
+           mdir (let [d (File/createTempFile "memo" "dir")]
+                  (.delete d)
+                  (.mkdirs d)
+                  (.deleteOnExit d)
                   (.getPath d))]
        (accounts/bootstrap-admin! ds conf)
        {:conf conf
@@ -62,7 +67,8 @@
         :sent sent
         :send-fn send!
         :now now
-        :basemap-dir bdir}))))
+        :basemap-dir bdir
+        :memo-dir mdir}))))
 
 (defn with-sys
   ([f] (with-sys {} f))

@@ -1,6 +1,7 @@
 (ns isas.v2-p1-test
   "詳細試験仕様書_第2版_工程1 の項番に対応する自動試験。"
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [isas.db :as db]
             [isas.gantt :as gantt]
             [isas.http :as http]
@@ -335,8 +336,10 @@
     (is (= ["a"] (#'ui/form-status-list {:status "a"})))
     (is (= ["a" "b"] (#'ui/form-status-list {:status ["a" "b"]}))))
   (testing "V2P1-6-01 / V2P1-6-02 禁止機能が日次に無い"
-    (let [h (html {:page :daily :fields [{:id 1}] :daily-statuses ["not_started"]
-                   :daily-rows []})]
+    ;; 第2版工程3でナビにメモの出口が付いたので、日次の本体だけを見る。
+    (let [h (str/replace (html {:page :daily :fields [{:id 1}] :daily-statuses ["not_started"]
+                                :daily-rows []})
+                         #"(?s)<nav>.*?</nav>" "")]
       (is (not (re-find #"メモ|担当|繰り返し|通知" h)))
       (is (nil? (http/match-api :get "/api/user/memos")))))
   (testing "time windows"

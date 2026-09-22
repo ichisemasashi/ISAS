@@ -34,7 +34,10 @@
                             ["/admin/fields" :fields "user"]
                             ["/admin/map" :map "user"]
                             ["/admin/map/place/" :map-place "user"]
-                            ["/admin/home/" :home "admin"]]]
+                            ["/admin/home/" :home "admin"]
+                            ["/memos" :memos nil]
+                            ["/memos/drafts" :memos-drafts nil]
+                            ["/memos/bookmarks" :memos-bookmarks nil]]]
     (let [r (ui/route-for path)]
       (is (= page (:page r)))
       (is (= kind (:kind r)))))

@@ -184,6 +184,51 @@
       PRIMARY KEY (user_lo, user_hi),
       FOREIGN KEY (user_lo) REFERENCES users(id),
       FOREIGN KEY (user_hi) REFERENCES users(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS memos (
+      id INTEGER PRIMARY KEY,
+      parent_id INTEGER,
+      author_kind TEXT NOT NULL,
+      author_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      body TEXT NOT NULL,
+      published_at TEXT,
+      content_saved_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      FOREIGN KEY (parent_id) REFERENCES memos(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS memo_tags (
+      memo_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      PRIMARY KEY (memo_id, label),
+      FOREIGN KEY (memo_id) REFERENCES memos(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS memo_links (
+      id INTEGER PRIMARY KEY,
+      memo_id INTEGER NOT NULL,
+      url TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      FOREIGN KEY (memo_id) REFERENCES memos(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS memo_attachments (
+      id INTEGER PRIMARY KEY,
+      memo_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      body_ref TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      deleted_at TEXT,
+      FOREIGN KEY (memo_id) REFERENCES memos(id)
+    )"
+   "CREATE TABLE IF NOT EXISTS memo_bookmarks (
+      memo_id INTEGER NOT NULL,
+      bookmarker_kind TEXT NOT NULL,
+      bookmarker_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (memo_id, bookmarker_kind, bookmarker_id),
+      FOREIGN KEY (memo_id) REFERENCES memos(id)
     )"])
 
 (defn datasource [jdbc-url]
@@ -873,3 +918,235 @@
 
 (defn find-field-any [ds field-id]
   (jdbc/execute-one! ds ["SELECT * FROM fields WHERE id = ?" field-id]))
+
+;;; memos (v2 phase 3)
+
+(defn insert-memo! [ds {:keys [parent-id author-kind author-id status body published-at content-saved-at]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO memos (parent_id, author_kind, author_id, status, body,
+                       published_at, content_saved_at, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+                      parent-id author-kind author-id status (or body "")
+                      published-at content-saved-at (time/now-utc) (time/now-utc)]))
+
+(defn find-memo [ds id]
+  (jdbc/execute-one! ds ["SELECT * FROM memos WHERE id = ?" id]))
+
+(defn update-memo-body! [ds id body content-saved-at]
+  (jdbc/execute-one! ds
+                     ["UPDATE memos SET body = ?, content_saved_at = ?, updated_at = ? WHERE id = ?"
+                      body content-saved-at (time/now-utc) id]))
+
+(defn publish-memo! [ds id published-at content-saved-at]
+  (jdbc/execute-one! ds
+                     ["UPDATE memos SET status = 'published', published_at = ?, content_saved_at = ?, updated_at = ?
+                       WHERE id = ?"
+                      published-at content-saved-at (time/now-utc) id]))
+
+(defn list-memo-descendant-ids
+  "深さ上限なしで子孫の id を集める。削除済みの節も辿る（下に未削除が残り得るため）。"
+  [ds root-id]
+  (loop [frontier [root-id] seen #{}]
+    (if (empty? frontier)
+      (vec (disj seen root-id))
+      (let [id (first frontier)
+            kids (mapv :id (jdbc/execute! ds ["SELECT id FROM memos WHERE parent_id = ?" id]))
+            new-ids (remove seen kids)]
+        (recur (into (vec (rest frontier)) new-ids)
+               (into seen (conj new-ids id)))))))
+
+(defn soft-delete-memo-tree!
+  "対象とすべての子孫に deleted_at を立てる（まだ無いものだけ）。"
+  [ds root-id]
+  (let [desc (list-memo-descendant-ids ds root-id)
+        now (time/now-utc)
+        ids (into [root-id] desc)]
+    (run! (fn [id]
+            (jdbc/execute-one! ds ["UPDATE memos SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL"
+                                   now now id]))
+          ids)
+    {:root root-id :descendants (count desc)}))
+
+(defn list-timeline-memos
+  "公開済み・未削除の親メモを新しい順に返す。before-id はその行より古い側を続きとして返す。"
+  [ds limit before-id]
+  (if before-id
+    (jdbc/execute! ds
+                   ["SELECT * FROM memos
+                     WHERE deleted_at IS NULL AND status = 'published' AND parent_id IS NULL
+                       AND (published_at, id) < ((SELECT published_at FROM memos WHERE id = ?), ?)
+                     ORDER BY published_at DESC, id DESC LIMIT ?"
+                    before-id before-id limit])
+    (jdbc/execute! ds
+                   ["SELECT * FROM memos
+                     WHERE deleted_at IS NULL AND status = 'published' AND parent_id IS NULL
+                     ORDER BY published_at DESC, id DESC LIMIT ?"
+                    limit])))
+
+(defn list-memo-replies
+  "直下の未削除返信。公開分と、見ている本人の下書きを返す（他人の下書きは出さない）。"
+  [ds parent-id viewer-kind viewer-id]
+  (jdbc/execute! ds
+                 ["SELECT * FROM memos
+                   WHERE deleted_at IS NULL AND parent_id = ?
+                     AND (status = 'published' OR (author_kind = ? AND author_id = ?))
+                   ORDER BY COALESCE(published_at, created_at) ASC, id ASC"
+                  parent-id viewer-kind viewer-id]))
+
+(defn count-memo-replies
+  "直下の未削除・公開返信の数。"
+  [ds parent-id]
+  (:c (jdbc/execute-one! ds
+                         ["SELECT COUNT(*) AS c FROM memos
+                           WHERE deleted_at IS NULL AND status = 'published' AND parent_id = ?"
+                          parent-id])))
+
+(defn list-draft-memos [ds author-kind author-id]
+  (jdbc/execute! ds
+                 ["SELECT * FROM memos
+                   WHERE deleted_at IS NULL AND status = 'draft'
+                     AND author_kind = ? AND author_id = ?
+                   ORDER BY updated_at DESC, id DESC"
+                  author-kind author-id]))
+
+(defn replace-memo-tags! [ds memo-id labels]
+  (jdbc/execute! ds ["DELETE FROM memo_tags WHERE memo_id = ?" memo-id])
+  (run! (fn [lab]
+          (jdbc/execute-one! ds ["INSERT INTO memo_tags (memo_id, label) VALUES (?, ?)" memo-id lab]))
+        labels))
+
+(defn list-memo-tags
+  "書いた順（rowid 順）で返す。"
+  [ds memo-id]
+  (mapv :label (jdbc/execute! ds ["SELECT label FROM memo_tags WHERE memo_id = ? ORDER BY rowid" memo-id])))
+
+(defn replace-memo-links! [ds memo-id urls]
+  (jdbc/execute! ds ["DELETE FROM memo_links WHERE memo_id = ?" memo-id])
+  (run! (fn [[i url]]
+          (jdbc/execute-one! ds ["INSERT INTO memo_links (memo_id, url, position) VALUES (?, ?, ?)"
+                                 memo-id url i]))
+        (map-indexed vector urls)))
+
+(defn list-memo-links [ds memo-id]
+  (mapv :url (jdbc/execute! ds
+                            ["SELECT url FROM memo_links WHERE memo_id = ? ORDER BY position, id"
+                             memo-id])))
+
+(defn insert-memo-attachment! [ds {:keys [memo-id filename content-type body-ref]}]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO memo_attachments (memo_id, filename, content_type, body_ref, created_at)
+                       VALUES (?, ?, ?, ?, ?) RETURNING *"
+                      memo-id filename content-type body-ref (time/now-utc)]))
+
+(defn update-memo-attachment-body-ref! [ds aid body-ref]
+  (jdbc/execute-one! ds ["UPDATE memo_attachments SET body_ref = ? WHERE id = ?" body-ref aid]))
+
+(defn find-memo-attachment [ds memo-id aid]
+  (jdbc/execute-one! ds
+                     ["SELECT * FROM memo_attachments
+                       WHERE id = ? AND memo_id = ? AND deleted_at IS NULL"
+                      aid memo-id]))
+
+(defn list-memo-attachments [ds memo-id]
+  (jdbc/execute! ds
+                 ["SELECT * FROM memo_attachments
+                   WHERE memo_id = ? AND deleted_at IS NULL ORDER BY id"
+                  memo-id]))
+
+(defn count-memo-attachments [ds memo-id]
+  (:c (jdbc/execute-one! ds
+                         ["SELECT COUNT(*) AS c FROM memo_attachments
+                           WHERE memo_id = ? AND deleted_at IS NULL"
+                          memo-id])))
+
+(defn soft-delete-memo-attachment! [ds aid]
+  (jdbc/execute-one! ds
+                     ["UPDATE memo_attachments SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL"
+                      (time/now-utc) aid]))
+
+(defn upsert-memo-bookmark! [ds memo-id kind id]
+  (jdbc/execute-one! ds
+                     ["INSERT INTO memo_bookmarks (memo_id, bookmarker_kind, bookmarker_id, created_at)
+                       VALUES (?, ?, ?, ?)
+                       ON CONFLICT (memo_id, bookmarker_kind, bookmarker_id) DO NOTHING"
+                      memo-id kind id (time/now-utc)]))
+
+(defn find-memo-bookmark [ds memo-id kind id]
+  (jdbc/execute-one! ds
+                     ["SELECT * FROM memo_bookmarks
+                       WHERE memo_id = ? AND bookmarker_kind = ? AND bookmarker_id = ?"
+                      memo-id kind id]))
+
+(defn delete-memo-bookmark! [ds memo-id kind id]
+  (jdbc/execute-one! ds
+                     ["DELETE FROM memo_bookmarks
+                       WHERE memo_id = ? AND bookmarker_kind = ? AND bookmarker_id = ?"
+                      memo-id kind id]))
+
+(defn list-bookmarked-memos [ds]
+  (jdbc/execute! ds
+                 ["SELECT m.*, MAX(b.created_at) AS bookmark_latest
+                   FROM memos m
+                   JOIN memo_bookmarks b ON b.memo_id = m.id
+                   WHERE m.deleted_at IS NULL AND m.status = 'published'
+                   GROUP BY m.id
+                   ORDER BY bookmark_latest DESC, m.id DESC"]))
+
+(defn author-has-bookmarked? [ds memo-id kind id]
+  (boolean (find-memo-bookmark ds memo-id kind id)))
+
+(defn count-memo-bookmarks [ds memo-id]
+  (:c (jdbc/execute-one! ds ["SELECT COUNT(*) AS c FROM memo_bookmarks WHERE memo_id = ?" memo-id])))
+
+(def ^:private memo-match-sql
+  "本文・タグ・添付ファイル名のいずれかに部分一致するか（大小無視）。? は3つ要る。"
+  "(LOWER(m.body) LIKE ?
+     OR EXISTS (SELECT 1 FROM memo_tags t WHERE t.memo_id = m.id AND LOWER(t.label) LIKE ?)
+     OR EXISTS (SELECT 1 FROM memo_attachments a
+                WHERE a.memo_id = m.id AND a.deleted_at IS NULL AND LOWER(a.filename) LIKE ?))")
+
+(defn- conj-where [acc sql args]
+  (-> acc
+      (update :where conj sql)
+      (update :args into args)))
+
+(defn search-memos
+  "検索・高度な検索。from-utc/to-utc は published_at と比べる UTC 文字列（to-utc は含まない）。
+  authors は [kind id] の組の並び。空の並びを渡すと結果は空になる。"
+  [ds {:keys [q-like exclude-like from-utc to-utc authors scope drafts?
+              viewer-kind viewer-id limit]}]
+  (let [acc (cond-> {:where ["m.deleted_at IS NULL"] :args []}
+              drafts?
+              (conj-where "(m.status = 'published' OR (m.author_kind = ? AND m.author_id = ?))"
+                          [viewer-kind viewer-id])
+
+              (not drafts?)
+              (conj-where "m.status = 'published'" [])
+
+              (= "parents" scope)
+              (conj-where "m.parent_id IS NULL" [])
+
+              (some? q-like)
+              (conj-where memo-match-sql [q-like q-like q-like])
+
+              (some? exclude-like)
+              (conj-where (str "NOT " memo-match-sql) [exclude-like exclude-like exclude-like])
+
+              (some? from-utc)
+              (conj-where "m.published_at IS NOT NULL AND m.published_at >= ?" [from-utc])
+
+              (some? to-utc)
+              (conj-where "m.published_at IS NOT NULL AND m.published_at < ?" [to-utc])
+
+              (some? authors)
+              (conj-where (str "("
+                               (str/join " OR "
+                                         (cons "0 = 1"
+                                               (repeat (count authors)
+                                                       "(m.author_kind = ? AND m.author_id = ?)")))
+                               ")")
+                          (vec (mapcat identity authors))))
+        sql (str "SELECT * FROM memos m WHERE "
+                 (str/join " AND " (:where acc))
+                 " ORDER BY COALESCE(m.published_at, m.created_at) DESC, m.id DESC LIMIT ?")]
+    (jdbc/execute! ds (into [sql] (conj (:args acc) limit)))))

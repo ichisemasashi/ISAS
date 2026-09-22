@@ -7,6 +7,7 @@
             [isas.fields :as fields]
             [isas.gantt :as gantt]
             [isas.log :as log]
+            [isas.memos :as memos]
             [isas.orders :as orders]
             [isas.paints :as paints]
             [ring.middleware.cookies :as cookies]
@@ -202,6 +203,140 @@
       (get-in req [:multipart-params "file"])
       (get-in req [:multipart-params :file])))
 
+(defn query-params [req]
+  (let [q (or (:query-string req) "")]
+    (if (str/blank? q)
+      {}
+      (->> (str/split q #"&")
+           (remove str/blank?)
+           (map (fn [part]
+                  (let [i (str/index-of part "=")
+                        [k v] (if i
+                                [(subs part 0 i) (subs part (inc i))]
+                                [part ""])]
+                    [(keyword k)
+                     (try
+                       (java.net.URLDecoder/decode (str v) "UTF-8")
+                       (catch Exception _ (str v)))])))
+           (into {})))))
+
+(defn memo-session [sys req]
+  (or (when-let [ctx (require-session sys req "user")]
+        {:kind "user" :id (get-in ctx [:account :id]) :account (:account ctx)})
+      (when-let [ctx (require-session sys req "admin")]
+        {:kind "admin" :id (get-in ctx [:account :id]) :account (:account ctx)})))
+
+(defn with-memo-session [sys req f]
+  (if-let [actor (memo-session sys req)]
+    (f actor)
+    (do
+      (log/warn "メモAPIに未ログインで来ました"
+                :method (:request-method req) :uri (:uri req))
+      (fail "unauthorized"))))
+
+(defn memo-ok [r]
+  (if (:ok r)
+    (ok (dissoc r :ok))
+    (fail (:code r))))
+
+(defn memos-get [sys req]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/list-timeline sys actor (query-params req))))))
+
+(defn memos-post [sys req]
+  (with-memo-session sys req
+    (fn [actor]
+      (try
+        (memo-ok (memos/create-memo sys actor (read-body req)))
+        (catch Exception e
+          (log/warn "メモ作成を読めませんでした" :error (.getMessage e))
+          (fail "body_required"))))))
+
+(defn memos-search-get [sys req]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/search sys actor (query-params req))))))
+
+(defn memos-drafts-get [sys req]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/list-drafts sys actor)))))
+
+(defn memos-bookmarks-get [sys req]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/list-bookmarks sys actor)))))
+
+(defn memo-get [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/get-memo sys actor id)))))
+
+(defn memo-put [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (try
+        (memo-ok (memos/update-memo sys actor id (read-body req)))
+        (catch Exception e
+          (log/warn "メモ更新を読めませんでした" :error (.getMessage e))
+          (fail "body_required"))))))
+
+(defn memo-delete [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/soft-delete-memo sys actor id)))))
+
+(defn memo-publish [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/publish-memo sys actor id)))))
+
+(defn memo-replies-get [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/list-replies sys actor id)))))
+
+(defn memo-attachment-post [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/add-attachment sys actor id (upload-of req))))))
+
+(defn attachment-disposition
+  "元ファイル名は日本語もあるので RFC 5987 で渡す。ASCII だけの控えも付ける。"
+  [filename]
+  (let [raw (str filename)
+        ascii (let [s (str/replace raw #"[^\x20-\x7E]" "_")]
+                (str/replace s #"[\"\\]" "_"))
+        encoded (str/replace (java.net.URLEncoder/encode raw "UTF-8") "+" "%20")]
+    (str "attachment; filename=\"" ascii "\"; filename*=UTF-8''" encoded)))
+
+(defn memo-attachment-get [sys req mid aid]
+  (with-memo-session sys req
+    (fn [actor]
+      (let [r (memos/get-attachment sys actor mid aid)]
+        (if (:ok r)
+          {:status 200
+           :headers {"Content-Type" (:content-type r)
+                     "Content-Disposition" (attachment-disposition (:filename r))}
+           :body (:file r)}
+          (fail (:code r)))))))
+
+(defn memo-attachment-delete [sys req mid aid]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/delete-attachment sys actor mid aid)))))
+
+(defn memo-bookmark-post [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/add-bookmark sys actor id)))))
+
+(defn memo-bookmark-delete [sys req id]
+  (with-memo-session sys req
+    (fn [actor]
+      (memo-ok (memos/remove-bookmark sys actor id)))))
+
 (defn place-get [sys req]
   (with-farm sys req
     (fn [uid]
@@ -348,23 +483,6 @@
     (fn [uid]
       (let [r (fields/import-geojson sys uid (upload-of req))]
         (if (:ok r) (ok {:fields (:fields r)}) (fail (:code r)))))))
-
-(defn query-params [req]
-  (let [q (or (:query-string req) "")]
-    (if (str/blank? q)
-      {}
-      (->> (str/split q #"&")
-           (remove str/blank?)
-           (map (fn [part]
-                  (let [i (str/index-of part "=")
-                        [k v] (if i
-                                [(subs part 0 i) (subs part (inc i))]
-                                [part ""])]
-                    [(keyword k)
-                     (try
-                       (java.net.URLDecoder/decode (str v) "UTF-8")
-                       (catch Exception _ (str v)))])))
-           (into {})))))
 
 (defn work-names-get [sys req]
   (with-farm sys req
@@ -700,10 +818,37 @@
    [:post "/api/user/orders"] [:orders-post]
    [:get "/api/user/others/fields"] [:others-fields-get]
    [:get "/api/user/others/work-names"] [:others-work-names-get]
-   [:get "/api/user/others/paints"] [:others-paints-get]})
+   [:get "/api/user/others/paints"] [:others-paints-get]
+   [:get "/api/memos"] [:memos-get]
+   [:post "/api/memos"] [:memos-post]
+   [:get "/api/memos/search"] [:memos-search-get]
+   [:get "/api/memos/drafts"] [:memos-drafts-get]
+   [:get "/api/memos/bookmarks"] [:memos-bookmarks-get]})
 
 (defn match-api [method uri]
   (or (get api-routes [method uri])
+      (when-let [[_ mid aid] (re-matches #"/api/memos/(\d+)/attachments/(\d+)" (str uri))]
+        (cond
+          (= method :get) [:memo-attachment-get mid aid]
+          (= method :delete) [:memo-attachment-delete mid aid]
+          :else nil))
+      (when-let [[_ id] (re-matches #"/api/memos/(\d+)/attachments" (str uri))]
+        (when (= method :post) [:memo-attachment-post id]))
+      (when-let [[_ id] (re-matches #"/api/memos/(\d+)/bookmark" (str uri))]
+        (cond
+          (= method :post) [:memo-bookmark-post id]
+          (= method :delete) [:memo-bookmark-delete id]
+          :else nil))
+      (when-let [[_ id] (re-matches #"/api/memos/(\d+)/publish" (str uri))]
+        (when (= method :post) [:memo-publish id]))
+      (when-let [[_ id] (re-matches #"/api/memos/(\d+)/replies" (str uri))]
+        (when (= method :get) [:memo-replies-get id]))
+      (when-let [[_ id] (re-matches #"/api/memos/(\d+)" (str uri))]
+        (cond
+          (= method :get) [:memo-get id]
+          (= method :put) [:memo-put id]
+          (= method :delete) [:memo-delete id]
+          :else nil))
       (when-let [[_ kind] (re-matches #"/api/user/basemaps/([^/]+)" (str uri))]
         (cond
           (= method :put) [:basemap-put kind]
@@ -840,6 +985,21 @@
         :others-fields-get (others-fields-get sys req)
         :others-work-names-get (others-work-names-get sys req)
         :others-paints-get (others-paints-get sys req)
+        :memos-get (memos-get sys req)
+        :memos-post (memos-post sys req)
+        :memos-search-get (memos-search-get sys req)
+        :memos-drafts-get (memos-drafts-get sys req)
+        :memos-bookmarks-get (memos-bookmarks-get sys req)
+        :memo-get (memo-get sys req (second spec))
+        :memo-put (memo-put sys req (second spec))
+        :memo-delete (memo-delete sys req (second spec))
+        :memo-publish (memo-publish sys req (second spec))
+        :memo-replies-get (memo-replies-get sys req (second spec))
+        :memo-attachment-post (memo-attachment-post sys req (second spec))
+        :memo-attachment-get (memo-attachment-get sys req (second spec) (nth spec 2))
+        :memo-attachment-delete (memo-attachment-delete sys req (second spec) (nth spec 2))
+        :memo-bookmark-post (memo-bookmark-post sys req (second spec))
+        :memo-bookmark-delete (memo-bookmark-delete sys req (second spec))
         (fail "unauthorized")))))
 
 (defn index-html []

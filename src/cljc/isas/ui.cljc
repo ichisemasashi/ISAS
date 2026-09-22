@@ -359,7 +359,59 @@
    :basemap-uploaded "下地を取り込みました"
    :page-not-found "このページはありません。"
    :label-counterpart-email "相手のメールアドレス"
-   :lang-invalid "言語の指定が正しくありません"})
+   :lang-invalid "言語の指定が正しくありません"
+   :nav-memos "メモ"
+   :memos-title "メモ"
+   :memos-timeline "タイムライン"
+   :memos-drafts "下書き"
+   :memos-bookmarks "ブックマーク"
+   :memos-compose "投稿"
+   :memos-body-label "本文"
+   :memos-tags-label "タグ（改行またはカンマ区切り）"
+   :memos-links-label "リンク（1行に1つ）"
+   :memos-save-draft "下書き保存"
+   :memos-publish "公開する"
+   :memos-reply "返信"
+   :memos-search "検索"
+   :memos-advanced-search "高度な検索"
+   :memos-exclude "除外語"
+   :memos-from "開始日"
+   :memos-to "終了日"
+   :memos-author "作成者メール"
+   :memos-body-required "本文を入力してください"
+   :memos-body-limit "本文は2000文字までです"
+   :memos-edit-until "編集期限: "
+   :memos-edit-window-closed "編集できる期限を過ぎています"
+   :memos-star-on "★"
+   :memos-star-off "☆"
+   :memos-bookmark-add "ブックマーク"
+   :memos-bookmark-remove "ブックマークを外す"
+   :memos-select-thread "スレッドを開く"
+   :memos-more "続きを読み込む"
+   :memos-empty "メモはまだありません"
+   :memos-drafts-empty "下書きはありません"
+   :memos-bookmarks-empty "ブックマークはありません"
+   :memos-attach "添付を追加"
+   :memos-draft-label "下書き"
+   :phone-memos "メモはパソコンで開いてください"
+   :home-link-memos "共有メモのタイムライン"
+   :memos-posted "投稿しました"
+   :memos-draft-saved "下書きを保存しました"
+   :memos-published "公開しました"
+   :memos-deleted "削除しました"
+   :memos-bookmarked "ブックマークしました"
+   :memos-unbookmarked "ブックマークを外しました"
+   :memo-not-found "そのメモはありません"
+   :body-required "本文を入力してください"
+   :tag-limit "タグは20件までにしてください"
+   :tag-invalid "タグは1文字以上100文字以内にしてください"
+   :link-limit "リンクは20件までにしてください"
+   :link-invalid "リンクは http:// か https:// で始めてください"
+   :attachment-limit "添付は20件までです"
+   :forbidden-memo "この操作は作成者だけができます"
+   :parent-not-found "返信先のメモがありません"
+   :not-draft "このメモはすでに公開されています"
+   :bookmark-not-found "外すブックマークがありません"})
 
 (def messages-en
   {:user-login-title "User login"
@@ -717,7 +769,59 @@
    :basemap-uploaded "Basemap imported"
    :page-not-found "This page does not exist."
    :label-counterpart-email "Counterpart email"
-   :lang-invalid "Invalid language"})
+   :lang-invalid "Invalid language"
+   :nav-memos "Memos"
+   :memos-title "Memos"
+   :memos-timeline "Timeline"
+   :memos-drafts "Drafts"
+   :memos-bookmarks "Bookmarks"
+   :memos-compose "Compose"
+   :memos-body-label "Body"
+   :memos-tags-label "Tags (newline or comma)"
+   :memos-links-label "Links (one per line)"
+   :memos-save-draft "Save draft"
+   :memos-publish "Publish"
+   :memos-reply "Reply"
+   :memos-search "Search"
+   :memos-advanced-search "Advanced search"
+   :memos-exclude "Exclude"
+   :memos-from "From"
+   :memos-to "To"
+   :memos-author "Author email"
+   :memos-body-required "Enter a body"
+   :memos-body-limit "Body must be 2000 characters or fewer"
+   :memos-edit-until "Editable until: "
+   :memos-edit-window-closed "Edit window has closed"
+   :memos-star-on "★"
+   :memos-star-off "☆"
+   :memos-bookmark-add "Bookmark"
+   :memos-bookmark-remove "Remove bookmark"
+   :memos-select-thread "Open thread"
+   :memos-more "Load more"
+   :memos-empty "No memos yet"
+   :memos-drafts-empty "No drafts"
+   :memos-bookmarks-empty "No bookmarks"
+   :memos-attach "Add attachment"
+   :memos-draft-label "Draft"
+   :phone-memos "Open memos on a computer"
+   :home-link-memos "Shared memo timeline"
+   :memos-posted "Posted"
+   :memos-draft-saved "Draft saved"
+   :memos-published "Published"
+   :memos-deleted "Deleted"
+   :memos-bookmarked "Bookmarked"
+   :memos-unbookmarked "Bookmark removed"
+   :memo-not-found "That memo does not exist"
+   :body-required "Enter a body"
+   :tag-limit "Use 20 tags or fewer"
+   :tag-invalid "Each tag must be 1 to 100 characters"
+   :link-limit "Use 20 links or fewer"
+   :link-invalid "Links must start with http:// or https://"
+   :attachment-limit "Up to 20 attachments"
+   :forbidden-memo "Only the author can do this"
+   :parent-not-found "The memo you are replying to does not exist"
+   :not-draft "This memo is already published"
+   :bookmark-not-found "There is no bookmark of yours to remove"})
 
 
 (defn normalize-lang [lang]
@@ -856,6 +960,18 @@
     "relation_not_found" (m :relation-not-found)
     "relation_idle" (m :relation-idle)
     "lang_invalid" (m :lang-invalid)
+    "memo_not_found" (m :memo-not-found)
+    "body_required" (m :memos-body-required)
+    "tag_limit" (m :tag-limit)
+    "tag_invalid" (m :tag-invalid)
+    "link_limit" (m :link-limit)
+    "link_invalid" (m :link-invalid)
+    "attachment_limit" (m :attachment-limit)
+    "edit_window_closed" (m :memos-edit-window-closed)
+    "forbidden_memo" (m :forbidden-memo)
+    "parent_not_found" (m :parent-not-found)
+    "not_draft" (m :not-draft)
+    "bookmark_not_found" (m :bookmark-not-found)
     (m :api-error)))
 
 (defn encode-q [s]
@@ -954,6 +1070,9 @@
           "/orders" {:page :orders :kind "user"}
           "/orders/new" {:page :orders-new :kind "user"}
           "/others" {:page :others :kind "user"}
+          "/memos" {:page :memos}
+          "/memos/drafts" {:page :memos-drafts}
+          "/memos/bookmarks" {:page :memos-bookmarks}
           "/admin" {:page :login :kind "admin"}
           "/admin/reset/request" {:page :reset-request :kind "admin"}
           "/admin/reset" {:page :reset :kind "admin"}
@@ -979,7 +1098,8 @@
 
 (defn needs-auth? [page]
   (contains? #{:home :invite :password :users :fields :map :map-place :works :gantt :daily
-               :orders :orders-new :order :others :relations :gantt-progress} page))
+               :orders :orders-new :order :others :relations :gantt-progress
+               :memos :memos-drafts :memos-bookmarks} page))
 
 (defn init-state []
   {:path "/"
@@ -1024,7 +1144,18 @@
    :order-id nil
    :others-fields []
    :others-work-names []
-   :others-paint-data nil})
+   :others-paint-data nil
+   :memos []
+   :memo-selected nil
+   :memo-selected-row nil
+   :memo-replies []
+   :memo-drafts []
+   :memo-bookmarks []
+   :memo-search-q ""
+   :memo-search-form {}
+   :memo-search-advanced? false
+   :memo-compose {}
+   :memo-before-id nil})
 
 (defn map-mode [state]
   (let [mm (:map-mode state)
@@ -1122,7 +1253,8 @@
                 "<a data-nav href=\"/works\">" (esc (m :nav-works)) "</a>"
                 "<a data-nav href=\"/gantt\">" (esc (m :nav-gantt)) "</a>"
                 "<a data-nav href=\"/fields\">" (esc (m :nav-fields)) "</a>"
-                "<a data-nav href=\"/map\">" (esc (m :nav-map)) "</a>"))
+                "<a data-nav href=\"/map\">" (esc (m :nav-map)) "</a>"
+                "<a data-nav href=\"/memos\">" (esc (m :nav-memos)) "</a>"))
          "<a data-nav href=\"/orders\">" (esc (m :nav-orders)) "</a>"
          "<a data-nav href=\"/invite\">" (esc (m :nav-invite)) "</a>"
          "<a data-nav href=\"/password\">" (esc (m :nav-password)) "</a>"
@@ -1130,16 +1262,19 @@
          (esc (m :nav-logout)) "</button></form></nav>")))
 
 (defn nav-admin [state]
-  (str "<nav>"
-       (lang-switcher state)
-       "<a data-nav href=\"/admin/home\">" (esc (m :nav-home)) "</a>"
-       "<a data-nav href=\"/admin/invite\">" (esc (m :nav-invite)) "</a>"
-       "<a data-nav href=\"/admin/users\">" (esc (m :nav-users)) "</a>"
-       "<a data-nav href=\"/admin/relations\">" (esc (m :nav-relations)) "</a>"
-       "<a data-nav href=\"/admin/gantt-progress\">" (esc (m :nav-gantt-progress)) "</a>"
-       "<a data-nav href=\"/admin/password\">" (esc (m :nav-password)) "</a>"
-       "<form data-act=\"logout\" method=\"post\"><button type=\"submit\">"
-       (esc (m :nav-logout)) "</button></form></nav>"))
+  (let [narrow? (boolean (:narrow? state))]
+    (str "<nav>"
+         (lang-switcher state)
+         "<a data-nav href=\"/admin/home\">" (esc (m :nav-home)) "</a>"
+         "<a data-nav href=\"/admin/invite\">" (esc (m :nav-invite)) "</a>"
+         "<a data-nav href=\"/admin/users\">" (esc (m :nav-users)) "</a>"
+         "<a data-nav href=\"/admin/relations\">" (esc (m :nav-relations)) "</a>"
+         "<a data-nav href=\"/admin/gantt-progress\">" (esc (m :nav-gantt-progress)) "</a>"
+         (when-not narrow?
+           (str "<a data-nav href=\"/memos\">" (esc (m :nav-memos)) "</a>"))
+         "<a data-nav href=\"/admin/password\">" (esc (m :nav-password)) "</a>"
+         "<form data-act=\"logout\" method=\"post\"><button type=\"submit\">"
+         (esc (m :nav-logout)) "</button></form></nav>")))
 
 (defn login-view [state]
   (let [admin? (= "admin" (:kind state))
@@ -1193,7 +1328,10 @@
                  (when (not admin?)
                    (str "<p><a data-nav href=\"/orders\">" (esc (m :orders-title)) "</a></p>"
                         (when-not narrow?
-                          (str "<p><a data-nav href=\"/others\">" (esc (m :others-title)) "</a></p>"))))))))
+                          (str "<p><a data-nav href=\"/others\">" (esc (m :others-title)) "</a></p>"))))
+                 (when-not narrow?
+                   (str "<p><a data-nav href=\"/memos\">" (esc (m :memos-title)) "</a>"
+                        " — " (esc (m :home-link-memos)) "</p>"))))))
 
 (defn invite-view [state]
   (layout (m :invite-title)
@@ -1246,6 +1384,11 @@
 
 (defn phone-view [state]
   (cond
+    (contains? #{:memos :memos-drafts :memos-bookmarks} (:page state))
+    (layout (m :memos-title)
+            (str (if (= "admin" (:kind state)) (nav-admin state) (nav-user state))
+                 (flash-html state) "<p>" (esc (m :phone-memos)) "</p>"))
+
     (= :orders-new (:page state))
     (layout (m :orders-title)
             (str (nav-user state) (flash-html state) "<p>" (esc (m :phone-orders-edit)) "</p>"))
@@ -2582,10 +2725,295 @@
                           "</section>"
                           "</section>")))))))))
 
+(defn- split-lines-csv [s]
+  (->> (str/split (str s) #"[\n,]+")
+       (map str/trim)
+       (remove str/blank?)
+       vec))
+
+(defn- memo-page? [page]
+  (contains? #{:memos :memos-drafts :memos-bookmarks} page))
+
+(defn- memo-top-nav [state]
+  (if (= "admin" (:kind state)) (nav-admin state) (nav-user state)))
+
+(defn- memo-list-near [state]
+  (case (:page state)
+    :memos-drafts "memo-drafts-list"
+    :memos-bookmarks "memo-bookmarks-list"
+    "memo-timeline"))
+
+(defn- memo-nav [state]
+  (str "<nav class=\"memo-nav\" id=\"memo-nav\">"
+       (apply str
+              (for [[page href key] [[:memos "/memos" :memos-timeline]
+                                     [:memos-drafts "/memos/drafts" :memos-drafts]
+                                     [:memos-bookmarks "/memos/bookmarks" :memos-bookmarks]]]
+                (str "<a data-nav href=\"" href "\""
+                     (when (= page (:page state)) " class=\"current\"")
+                     ">" (esc (m key)) "</a>")))
+       "</nav>"))
+
+(defn- memo-by-id [state id]
+  (let [sid (str id)]
+    (some (fn [x] (when (= sid (str (:id x))) x))
+          (concat (:memos state) (:memo-replies state)
+                  (:memo-drafts state) (:memo-bookmarks state)))))
+
+(defn- memo-selected-memo
+  "開いているスレッドの先頭。取り直した1件があればそれを使う。"
+  [state]
+  (let [sid (str (:memo-selected state))
+        row (:memo-selected-row state)]
+    (cond
+      (str/blank? sid) nil
+      (and row (= sid (str (:id row)))) row
+      :else (memo-by-id state sid))))
+
+(defn- memo-code-message [code]
+  (if (= "body_too_long" (str code))
+    (m :memos-body-limit)
+    (code-message code)))
+
+(defn- memo-draft? [memo]
+  (= "draft" (str (:status memo))))
+
+(defn- memo-meta-html [memo]
+  (str "<p class=\"memo-meta\">"
+       (esc (:author_email memo))
+       (when-not (str/blank? (str (:published_at memo)))
+         (str " · " (esc (:published_at memo))))
+       (when (memo-draft? memo)
+         (str " · " (esc (m :memos-draft-label))))
+       (when-not (str/blank? (str (:editable_until memo)))
+         (str " · " (esc (m :memos-edit-until)) (esc (:editable_until memo))))
+       "</p>"))
+
+(defn- memo-tags-html [memo]
+  (when (seq (:tags memo))
+    (str "<p class=\"memo-tags\">"
+         (esc (str/join " " (map (fn [t] (str "#" t)) (:tags memo))))
+         "</p>")))
+
+(defn- memo-links-html [memo]
+  (when (seq (:links memo))
+    (str "<ul class=\"memo-links\">"
+         (apply str
+                (for [u (:links memo)]
+                  (str "<li><a href=\"" (esc u) "\" target=\"_blank\" rel=\"noreferrer noopener\">"
+                       (esc u) "</a></li>")))
+         "</ul>")))
+
+(defn- memo-attachments-html [memo]
+  (when (seq (:attachments memo))
+    (str "<ul class=\"memo-attachments\">"
+         (apply str
+                (for [a (:attachments memo)]
+                  (str "<li><a href=\"/api/memos/" (esc (:id memo))
+                       "/attachments/" (esc (:id a)) "\">"
+                       (esc (:filename a)) "</a></li>")))
+         "</ul>")))
+
+(defn- memo-attach-form [memo]
+  (str "<form data-act=\"memo-attach\" method=\"post\" enctype=\"multipart/form-data\" class=\"memo-attach\">"
+       "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+       "<label>" (esc (m :memos-attach))
+       "<input type=\"file\" name=\"file\"></label>"
+       "<button type=\"submit\">" (esc (m :memos-attach)) "</button></form>"))
+
+(defn- memo-star-form [memo]
+  (let [on? (boolean (:bookmarked memo))]
+    (str "<form data-act=\"" (if on? "memo-unbookmark" "memo-bookmark")
+         "\" method=\"post\" class=\"inline\">"
+         "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+         "<button type=\"submit\" class=\"memo-star\" title=\""
+         (esc (if on? (m :memos-bookmark-remove) (m :memos-bookmark-add))) "\">"
+         (esc (if on? (m :memos-star-on) (m :memos-star-off)))
+         "</button></form>")))
+
+(defn- memo-select-form [memo]
+  (str "<form data-act=\"memo-select\" method=\"post\" class=\"inline\">"
+       "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+       "<button type=\"submit\">" (esc (m :memos-select-thread))
+       (when (pos? (or (:reply_count memo) 0))
+         (str "（" (esc (:reply_count memo)) "）"))
+       "</button></form>"))
+
+(defn- memo-delete-form [memo]
+  (str "<form data-act=\"memo-delete\" method=\"post\" class=\"inline\">"
+       "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
+       "<button type=\"submit\">" (esc (m :btn-delete)) "</button></form>"))
+
+(defn- memo-status-fieldset [selected]
+  (str "<fieldset class=\"memo-status\"><legend>" (esc (m :memos-compose)) "</legend>"
+       (apply str
+              (for [[v key] [["published" :memos-publish]
+                             ["draft" :memos-save-draft]]]
+                (str "<label><input type=\"radio\" name=\"status\" value=\"" v "\""
+                     (when (= v (str selected)) " checked")
+                     "> " (esc (m key)) "</label>")))
+       "</fieldset>"))
+
+(defn- memo-item-html [state memo]
+  (str "<li class=\"memo-item\" id=\"memo-item-" (esc (:id memo)) "\">"
+       "<p class=\"memo-body\">" (esc (:body memo)) "</p>"
+       (memo-meta-html memo)
+       (memo-tags-html memo)
+       (memo-links-html memo)
+       (memo-attachments-html memo)
+       "<p class=\"memo-actions\">"
+       (when-not (memo-draft? memo) (memo-star-form memo))
+       (when (= :memos (:page state)) (memo-select-form memo))
+       (when (:can_delete memo) (memo-delete-form memo))
+       "</p></li>"))
+
+(defn- memo-compose-section [state]
+  (let [c (or (:memo-compose state) {})]
+    (str "<section class=\"form-section\" id=\"memo-compose-section\">"
+         (section-title-html :memos-compose)
+         (flash-at state "memo-compose-section")
+         "<form data-act=\"memo-publish-new\" method=\"post\" id=\"memo-compose-form\">"
+         "<label>" (esc (m :memos-body-label))
+         "<textarea name=\"body\" rows=\"4\">" (esc (:body c)) "</textarea>"
+         (field-hint (m :memos-body-limit)) "</label>"
+         "<label>" (esc (m :memos-tags-label))
+         "<textarea name=\"tags\" rows=\"2\">" (esc (:tags c)) "</textarea></label>"
+         "<label>" (esc (m :memos-links-label))
+         "<textarea name=\"links\" rows=\"2\">" (esc (:links c)) "</textarea></label>"
+         (memo-status-fieldset "published")
+         "<button type=\"submit\" id=\"memo-compose-btn\" class=\"btn-primary\">"
+         (esc (m :btn-save)) "</button></form>"
+         "</section>")))
+
+(defn- memo-search-section [state]
+  (let [adv? (boolean (:memo-search-advanced? state))
+        f (or (:memo-search-form state) {})]
+    (str "<section class=\"form-section\" id=\"memo-search-section\">"
+         (section-title-html :memos-search)
+         (flash-at state "memo-search-section")
+         "<form data-act=\"memo-search\" method=\"post\" id=\"memo-search-form\">"
+         "<label>" (esc (m :memos-search))
+         "<input name=\"q\" value=\"" (esc (:memo-search-q state)) "\"></label>"
+         (when adv?
+           (str "<label>" (esc (m :memos-exclude))
+                "<input name=\"exclude\" value=\"" (esc (:exclude f)) "\"></label>"
+                "<label>" (esc (m :memos-from))
+                "<input name=\"from\" value=\"" (esc (:from f)) "\" placeholder=\"YYYY-MM-DD\"></label>"
+                "<label>" (esc (m :memos-to))
+                "<input name=\"to\" value=\"" (esc (:to f)) "\" placeholder=\"YYYY-MM-DD\"></label>"
+                "<label>" (esc (m :memos-author))
+                "<input name=\"author\" value=\"" (esc (:author f)) "\"></label>"))
+         "<button type=\"submit\" id=\"memo-search-btn\">" (esc (m :memos-search)) "</button></form>"
+         "<form data-act=\"memo-search-advanced-toggle\" method=\"post\" class=\"inline\">"
+         "<button type=\"submit\" id=\"memo-search-advanced-btn\">"
+         (esc (m :memos-advanced-search)) "</button></form>"
+         "</section>")))
+
+(defn- memo-thread-section [state]
+  (when-let [sel (memo-selected-memo state)]
+    (str "<section class=\"form-section\" id=\"memo-thread-section\">"
+         (section-title-html :memos-select-thread)
+         (flash-at state "memo-thread-section")
+         "<ul class=\"memo-list memo-thread\">"
+         (memo-item-html state sel)
+         (apply str (for [r (:memo-replies state)] (memo-item-html state r)))
+         "</ul>"
+         (when (:can_edit sel) (memo-attach-form sel))
+         "<form data-act=\"memo-reply\" method=\"post\" id=\"memo-reply-form\">"
+         "<input type=\"hidden\" name=\"parent_id\" value=\"" (esc (:id sel)) "\">"
+         "<label>" (esc (m :memos-body-label))
+         "<textarea name=\"body\" rows=\"3\"></textarea></label>"
+         "<label>" (esc (m :memos-tags-label))
+         "<textarea name=\"tags\" rows=\"2\"></textarea></label>"
+         "<label>" (esc (m :memos-links-label))
+         "<textarea name=\"links\" rows=\"2\"></textarea></label>"
+         (memo-status-fieldset "published")
+         "<button type=\"submit\" id=\"memo-reply-btn\" class=\"btn-primary\">"
+         (esc (m :memos-reply)) "</button></form>"
+         "</section>")))
+
+(defn memos-view [state]
+  (let [rows (into [] (:memos state))]
+    (layout (m :memos-title)
+            (str (memo-top-nav state)
+                 (memo-nav state)
+                 (flash-html state)
+                 (memo-compose-section state)
+                 (memo-search-section state)
+                 "<section class=\"form-section memo-timeline\" id=\"memo-timeline\">"
+                 (section-title-html :memos-timeline)
+                 (flash-at state "memo-timeline")
+                 (if (empty? rows)
+                   (str "<p class=\"empty-hint\">" (esc (m :memos-empty)) "</p>")
+                   (str "<ul class=\"memo-list\">"
+                        (apply str (for [r rows] (memo-item-html state r)))
+                        "</ul>"
+                        "<form data-act=\"memo-more\" method=\"post\" class=\"inline\">"
+                        "<input type=\"hidden\" name=\"before_id\" value=\""
+                        (esc (:id (last rows))) "\">"
+                        "<button type=\"submit\" id=\"memo-more-btn\">"
+                        (esc (m :memos-more)) "</button></form>"))
+                 "</section>"
+                 (memo-thread-section state)))))
+
+(defn- memo-draft-item-html [d]
+  (str "<li class=\"memo-item\" id=\"memo-draft-" (esc (:id d)) "\">"
+       "<form data-act=\"memo-update-draft\" method=\"post\">"
+       "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id d)) "\">"
+       "<label>" (esc (m :memos-body-label))
+       "<textarea name=\"body\" rows=\"3\">" (esc (:body d)) "</textarea></label>"
+       "<label>" (esc (m :memos-tags-label))
+       "<textarea name=\"tags\" rows=\"2\">" (esc (str/join "\n" (:tags d))) "</textarea></label>"
+       "<label>" (esc (m :memos-links-label))
+       "<textarea name=\"links\" rows=\"2\">" (esc (str/join "\n" (:links d))) "</textarea></label>"
+       "<button type=\"submit\">" (esc (m :btn-save)) "</button></form>"
+       (memo-meta-html d)
+       (memo-attachments-html d)
+       (memo-attach-form d)
+       "<p class=\"memo-actions\">"
+       "<form data-act=\"memo-publish-draft\" method=\"post\" class=\"inline\">"
+       "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id d)) "\">"
+       "<button type=\"submit\">" (esc (m :memos-publish)) "</button></form>"
+       (memo-delete-form d)
+       "</p></li>"))
+
+(defn memos-drafts-view [state]
+  (let [rows (into [] (:memo-drafts state))]
+    (layout (m :memos-title)
+            (str (memo-top-nav state)
+                 (memo-nav state)
+                 (flash-html state)
+                 "<section class=\"form-section\" id=\"memo-drafts-list\">"
+                 (section-title-html :memos-drafts)
+                 (flash-at state "memo-drafts-list")
+                 (if (empty? rows)
+                   (str "<p class=\"empty-hint\">" (esc (m :memos-drafts-empty)) "</p>")
+                   (str "<ul class=\"memo-list\">"
+                        (apply str (for [d rows] (memo-draft-item-html d)))
+                        "</ul>"))
+                 "</section>"))))
+
+(defn memos-bookmarks-view [state]
+  (let [rows (into [] (:memo-bookmarks state))]
+    (layout (m :memos-title)
+            (str (memo-top-nav state)
+                 (memo-nav state)
+                 (flash-html state)
+                 "<section class=\"form-section\" id=\"memo-bookmarks-list\">"
+                 (section-title-html :memos-bookmarks)
+                 (flash-at state "memo-bookmarks-list")
+                 (if (empty? rows)
+                   (str "<p class=\"empty-hint\">" (esc (m :memos-bookmarks-empty)) "</p>")
+                   (str "<ul class=\"memo-list\">"
+                        (apply str (for [b rows] (memo-item-html state b)))
+                        "</ul>"))
+                 "</section>"))))
+
 (defn render [state]
   (with-ui-lang state
     (fn []
-      (if (and (:narrow? state) (contains? #{:fields :map :map-place :works :gantt :daily :orders-new :others} (:page state)))
+      (if (and (:narrow? state) (contains? #{:fields :map :map-place :works :gantt :daily :orders-new :others
+                                             :memos :memos-drafts :memos-bookmarks} (:page state)))
         (phone-view state)
         (case (:page state)
           :login (login-view state)
@@ -2607,6 +3035,9 @@
           :others (others-view state)
           :relations (relations-view state)
           :gantt-progress (gantt-progress-admin-view state)
+          :memos (memos-view state)
+          :memos-drafts (memos-drafts-view state)
+          :memos-bookmarks (memos-bookmarks-view state)
           (unknown-view state))))))
 
 (defn apply-route [state path search]
@@ -2615,7 +3046,7 @@
            :path path
            :search (or search "")
            :page (:page r)
-           :kind (:kind r)
+           :kind (or (:kind r) (:kind state) "user")
            :order-id (:order-id r)
            :initial-password nil)))
 
@@ -2641,6 +3072,27 @@
         token (:token (parse-query search))]
     {:state (assoc s :form (if token {:token token} {}))
      :fx [[:session (:kind s)]]}))
+
+(defn- memos-load-fx
+  "いま開いているメモの画面に要る一覧を読み直す。"
+  [state]
+  (case (:page state)
+    :memos-drafts [[:api "GET" "/api/memos/drafts" nil :memo-drafts-loaded]]
+    :memos-bookmarks [[:api "GET" "/api/memos/bookmarks" nil :memo-bookmarks-loaded]]
+    [[:api "GET" "/api/memos" nil :memos-loaded]]))
+
+(defn- memo-thread-fx
+  "開いているスレッドの先頭と返信を読み直す。"
+  [state]
+  (let [id (str (:memo-selected state))]
+    (when (and (= :memos (:page state)) (not (str/blank? id)))
+      [[:api "GET" (str "/api/memos/" id) nil :memo-loaded]
+       [:api "GET" (str "/api/memos/" id "/replies") nil :memo-replies-loaded]])))
+
+(defn- memo-refresh-fx
+  "一覧と、開いているスレッドを読み直す。"
+  [state]
+  (into (memos-load-fx state) (memo-thread-fx state)))
 
 (defn session-loaded [state body]
   (let [s (if (:ok body)
@@ -2676,6 +3128,19 @@
 
       (and (= :others (:page s)) (:session s) (:narrow? s))
       (guarded s)
+
+      (memo-page? (:page s))
+      (if (:session s)
+        (if (:narrow? s)
+          (guarded s)
+          {:state s :fx (memos-load-fx s)})
+        ;; 経路が利用者・管理者で同じなので、直接開いたときは管理者の入場も試す。
+        (if (= "user" (:kind s))
+          (if-not (:memo-admin-tried? s)
+            {:state (assoc s :kind "admin" :memo-admin-tried? true)
+             :fx [[:session "admin"]]}
+            (guarded (assoc s :kind "user" :memo-admin-tried? nil)))
+          (guarded (assoc s :kind "user" :memo-admin-tried? nil))))
 
       (= :home (:page s))
       (if (and (= "user" (:kind s)) (some? (:session s)))
@@ -3081,6 +3546,104 @@
     (let [s (assoc state :flash {:error? false :text (m :relations-cut-ok)})]
       {:state s :fx [[:html (render s)]]})
     (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn memos-loaded [state body]
+  (let [append? (not (str/blank? (str (:memo-before-id state))))
+        rows (vec (or (:memos body) []))]
+    (if (:ok body)
+      (guarded (assoc state
+                      :memos (if append? (into (vec (:memos state)) rows) rows)
+                      :memo-before-id nil))
+      (let [s (assoc state
+                     :memos (if append? (vec (:memos state)) [])
+                     :memo-before-id nil
+                     :flash {:error? true :text (code-message (:code body)) :near "memo-timeline"})]
+        {:state s :fx [[:html (render s)]]}))))
+
+(defn memo-drafts-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :memo-drafts (vec (or (:memos body) []))))
+    (let [s (assoc state :memo-drafts []
+                   :flash {:error? true :text (code-message (:code body)) :near "memo-drafts-list"})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn memo-bookmarks-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :memo-bookmarks (vec (or (:memos body) []))))
+    (let [s (assoc state :memo-bookmarks []
+                   :flash {:error? true :text (code-message (:code body)) :near "memo-bookmarks-list"})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn memo-replies-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :memo-replies (vec (or (:replies body) []))))
+    (let [s (assoc state :memo-replies []
+                   :flash {:error? true :text (code-message (:code body)) :near "memo-thread-section"})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn memo-loaded [state body]
+  (if (:ok body)
+    (guarded (assoc state :memo-selected-row (:memo body)))
+    (let [s (assoc state :memo-selected nil :memo-selected-row nil :memo-replies []
+                   :flash {:error? true :text (code-message (:code body)) :near "memo-timeline"})]
+      {:state s :fx [[:html (render s)]]})))
+
+(defn memo-save-result [state body]
+  (let [near (or (:pending-flash-near state) "memo-compose-section")
+        state (dissoc state :pending-flash-near)]
+    (if (:ok body)
+      (let [memo (:memo body)
+            text (if (memo-draft? memo) (m :memos-draft-saved) (m :memos-posted))
+            s (flash-ok-state (assoc state :memo-compose {}) text near)]
+        {:state s :fx (memo-refresh-fx s)})
+      (let [s (assoc state :flash {:error? true :text (memo-code-message (:code body)) :near near})]
+        {:state s :fx [[:html (render s)]]}))))
+
+(defn memo-publish-result [state body]
+  (let [near (or (:pending-flash-near state) (memo-list-near state))
+        state (dissoc state :pending-flash-near)]
+    (if (:ok body)
+      (let [s (flash-ok-state state (m :memos-published) near)]
+        {:state s :fx (memo-refresh-fx s)})
+      (let [s (assoc state :flash {:error? true :text (memo-code-message (:code body)) :near near})]
+        {:state s :fx [[:html (render s)]]}))))
+
+(defn memo-delete-result [state body]
+  (let [near (or (:pending-flash-near state) (memo-list-near state))
+        state (dissoc state :pending-flash-near)]
+    (if (:ok body)
+      (let [s (flash-ok-state (assoc state :memo-selected nil :memo-selected-row nil
+                                     :memo-replies [])
+                              (m :memos-deleted) near)]
+        {:state s :fx (memo-refresh-fx s)})
+      (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
+        {:state s :fx [[:html (render s)]]}))))
+
+(defn memo-bookmark-result [state body]
+  (let [near (or (:pending-flash-near state) (memo-list-near state))
+        state (dissoc state :pending-flash-near)]
+    (if (:ok body)
+      (let [text (if (:memo body) (m :memos-bookmarked) (m :memos-unbookmarked))
+            s (flash-ok-state state text near)]
+        {:state s :fx (memo-refresh-fx s)})
+      (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
+        {:state s :fx [[:html (render s)]]}))))
+
+(defn memo-attach-result [state body]
+  (let [near (or (:pending-flash-near state) (memo-list-near state))
+        state (dissoc state :pending-flash-near)]
+    (if (:ok body)
+      (let [s (flash-ok-state state (m :saved-ok) near)]
+        {:state s :fx (memo-refresh-fx s)})
+      (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
+        {:state s :fx [[:html (render s)]]}))))
+
+(defn memo-search-result [state body]
+  (if (:ok body)
+    (guarded (assoc state :memos (vec (or (:memos body) [])) :memo-before-id nil :flash nil))
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))
+                                 :near "memo-search-section"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn- parse-recipient-emails [s]
@@ -3502,6 +4065,382 @@
                :checklist-item-delete-result]]}))
     nil))
 
+(defn- memo-id-of [form]
+  (let [v (str/trim (as-text (:id form)))]
+    (when-not (str/blank? v) v)))
+
+(defn- memo-status-of [form default]
+  (let [st (str/trim (as-text (:status form)))]
+    (if (#{"draft" "published"} st) st default)))
+
+(defn- memo-compose-of [form]
+  {:body (as-text (:body form))
+   :tags (as-text (:tags form))
+   :links (as-text (:links form))})
+
+(defn- memo-content-body [form]
+  {:body (as-text (:body form))
+   :tags (split-lines-csv (:tags form))
+   :links (split-lines-csv (:links form))})
+
+(defn- memo-search-path [q adv]
+  (str "/api/memos/search?scope=all&q=" (encode-q q)
+       (apply str
+              (for [[k nm] [[:exclude "exclude"] [:from "from"] [:to "to"] [:author "author"]]
+                    :let [v (str/trim (as-text (get adv k)))]
+                    :when (not (str/blank? v))]
+                (str "&" nm "=" (encode-q v))))))
+
+(defn- submit-memo-new [state form status]
+  (let [content (memo-content-body form)
+        s (assoc state :memo-compose (memo-compose-of form))]
+    (if (= "published" status)
+      (if (str/blank? (str/trim (:body content)))
+        (flash-html-state s (m :memos-body-required) "memo-compose-section")
+        {:state (assoc s :pending-flash-near "memo-compose-section")
+         :fx [[:api "POST" "/api/memos" (assoc content :status status) :memo-save-result]]})
+      {:state (assoc s :pending-flash-near "memo-compose-section")
+       :fx [[:api "POST" "/api/memos" (assoc content :status status) :memo-save-result]]})))
+
+(defn- submit-memo-act [state form act]
+  (case act
+    "memo-publish-new"
+    (submit-memo-new state form (memo-status-of form "published"))
+
+    "memo-draft-new"
+    (submit-memo-new state form (memo-status-of form "draft"))
+
+    "memo-reply"
+    (let [pid (str/trim (as-text (:parent_id form)))
+          status (memo-status-of form "published")
+          content (memo-content-body form)]
+      (if (str/blank? pid)
+        (flash-html-state state (m :memo-not-found) "memo-thread-section")
+        (if (= "published" status)
+          (if (str/blank? (str/trim (:body content)))
+            (flash-html-state state (m :memos-body-required) "memo-thread-section")
+            {:state (assoc state :pending-flash-near "memo-thread-section")
+             :fx [[:api "POST" "/api/memos"
+                   (assoc content :status status :parent_id pid)
+                   :memo-save-result]]})
+          {:state (assoc state :pending-flash-near "memo-thread-section")
+           :fx [[:api "POST" "/api/memos"
+                 (assoc content :status status :parent_id pid)
+                 :memo-save-result]]})))
+
+    "memo-search"
+    (let [q (str/trim (as-text (:q form)))
+          adv (select-keys form [:exclude :from :to :author])
+          s (assoc state :memo-search-q q :memo-search-form adv :memo-before-id nil :flash nil)]
+      {:state s :fx [[:api "GET" (memo-search-path q adv) nil :memo-search-result]]})
+
+    "memo-search-advanced-toggle"
+    (guarded (assoc state
+                    :memo-search-advanced? (not (boolean (:memo-search-advanced? state)))
+                    :flash nil))
+
+    "memo-select"
+    (if-let [id (memo-id-of form)]
+      (let [s (assoc state :memo-selected id
+                     :memo-selected-row (memo-by-id state id)
+                     :memo-replies [] :flash nil)
+            fx (memo-thread-fx s)]
+        (if (seq fx) {:state s :fx fx} (guarded s)))
+      (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
+    "memo-delete"
+    (if-let [id (memo-id-of form)]
+      {:state (assoc state :pending-flash-near (memo-list-near state))
+       :fx [[:api "DELETE" (str "/api/memos/" id) nil :memo-delete-result]]}
+      (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
+    "memo-publish-draft"
+    (if-let [id (memo-id-of form)]
+      {:state (assoc state :pending-flash-near (memo-list-near state))
+       :fx [[:api "POST" (str "/api/memos/" id "/publish") {} :memo-publish-result]]}
+      (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
+    "memo-update-draft"
+    (if-let [id (memo-id-of form)]
+      {:state (assoc state :pending-flash-near (memo-list-near state))
+       :fx [[:api "PUT" (str "/api/memos/" id) (memo-content-body form) :memo-save-result]]}
+      (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
+    "memo-bookmark"
+    (if-let [id (memo-id-of form)]
+      {:state (assoc state :pending-flash-near (memo-list-near state))
+       :fx [[:api "POST" (str "/api/memos/" id "/bookmark") {} :memo-bookmark-result]]}
+      (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
+    "memo-unbookmark"
+    (if-let [id (memo-id-of form)]
+      {:state (assoc state :pending-flash-near (memo-list-near state))
+       :fx [[:api "DELETE" (str "/api/memos/" id "/bookmark") nil :memo-bookmark-result]]}
+      (flash-html-state state (m :bookmark-not-found) (memo-list-near state)))
+
+    "memo-attach"
+    (if-let [id (memo-id-of form)]
+      {:state (assoc state :pending-flash-near (if (= :memos (:page state))
+                                                 "memo-thread-section"
+                                                 (memo-list-near state)))
+       :fx [[:upload "POST" (str "/api/memos/" id "/attachments")
+             (dissoc form :id) :memo-attach-result]]}
+      (flash-html-state state (m :memo-not-found) (memo-list-near state)))
+
+    "memo-more"
+    (let [bid (str/trim (as-text (:before_id form)))]
+      (if (str/blank? bid)
+        (guarded state)
+        {:state (assoc state :memo-before-id bid :flash nil)
+         :fx [[:api "GET" (str "/api/memos?before_id=" (encode-q bid)) nil :memos-loaded]]}))
+
+    nil))
+
+(defn- submit-auth-act
+  "入場・招待・パスワードの操作。利用者と管理者で経路だけ違う。"
+  [state form act kind]
+  (case act
+    "login" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/login" "/api/user/login") form :login-result]]}
+    "logout" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/logout" "/api/user/logout") {} :logout-result]]}
+    "reset-request" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password/reset/request" "/api/user/password/reset/request") (assoc form :ui_lang (ui-lang state)) :reset-request-result]]}
+    "reset-complete" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password/reset" "/api/user/password/reset")
+                                        (assoc form :token (or (:token form) (:token (parse-query (:search state)))))
+                                        :reset-complete-result]]}
+    "invite" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/invite" "/api/user/invite") form :invite-result]]}
+    "password" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password" "/api/user/password") form :password-result]]}
+    "revoke" {:state state :fx [[:api "POST" "/api/admin/users/revoke" form :revoke-result]]}
+    nil))
+
+(defn- submit-place-act
+  "所在地・下地地図・農地ナビ取り込みと地図の操作の切り替え。"
+  [state form act]
+  (case act
+    "preview-place"
+    (if (:place-busy state)
+      {:state state :fx [[:html (render state)]]}
+      (let [s (assoc state :form (merge (or (:form state) {}) form) :flash nil)]
+        {:state s :fx [[:api "POST" "/api/user/place/preview" form :place-preview-result]]}))
+    "cancel-place-preview"
+    (let [s (assoc state :place-preview nil :flash nil :place-busy nil
+                   :form (merge (or (:form state) {}) (select-keys form [:west :south :east :north])))]
+      {:state s :fx [[:html (render s)]]})
+    "save-place"
+    (if (:place-busy state)
+      {:state state :fx [[:html (render state)]]}
+      (let [s (assoc state :place-busy true
+                     :form (merge (or (:form state) {}) form)
+                     :flash {:error? false :text (m :place-saving)})]
+        {:state s
+         :fx [[:html (render s)]
+              [:api "PUT" "/api/user/place" form :place-save-result]]}))
+    "emaff-import"
+    (if (:place-busy state)
+      {:state state :fx [[:html (render state)]]}
+      (let [s (assoc state :place-busy true
+                     :flash {:error? false :text (m :place-saving)})]
+        {:state s
+         :fx [[:html (render s)]
+              [:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}))
+    "set-map-mode"
+    (let [mode (str/trim (str (or (:mode form) "")))
+          cur (map-mode state)
+          parent (or (:map-mode-parent state) "browse")]
+      (cond
+        (= mode "cancel")
+        (let [next (if (= cur "basemap") parent "browse")
+              s (assoc state :map-mode next :map-mode-parent nil :flash nil
+                       :form (dissoc (:form state) :geojson :line :polygons :ids :keep_id :paint-geojson))]
+          {:state s :fx [[:html (render s)]]})
+        (= mode "basemap")
+        (let [s (assoc state :map-mode "basemap" :map-mode-parent cur :flash nil)]
+          {:state s :fx [[:html (render s)]]})
+        (#{"browse" "paint" "draw" "edit" "split" "merge" "import"} mode)
+        (let [s (assoc state :map-mode mode :flash nil)]
+          {:state s :fx [[:html (render s)]]})
+        :else
+        {:state state :fx [[:html (render state)]]}))
+    "save-image-extent" {:state state :fx [[:api "PUT" "/api/user/place/image" form :image-save-result]]}
+    "upload-basemap" {:state state :fx [[:upload "PUT" (str "/api/user/basemaps/" (:kind form)) form :basemap-upload-result]]}
+    nil))
+
+(defn- submit-field-act
+  "ほ場の作成・更新・削除・分割・結合・取り込み。"
+  [state form act]
+  (case act
+    "create-field" {:state state :fx [[:api "POST" "/api/user/fields"
+                                      {:name (:name form)
+                                       :geojson (read-json-str (:geojson form))}
+                                      :field-save-result]]}
+    "update-field" {:state state :fx [[:api "PUT" (str "/api/user/fields/" (:id form))
+                                      (cond-> {}
+                                        (contains? form :name) (assoc :name (:name form))
+                                        (contains? form :area_ha) (assoc :area_ha (:area_ha form))
+                                        (contains? form :area_m2) (assoc :area_m2 (:area_m2 form))
+                                        (contains? form :memo) (assoc :memo (:memo form))
+                                        (not (str/blank? (str (:geojson form))))
+                                        (assoc :geojson (read-json-str (:geojson form))))
+                                      :field-save-result]]}
+    "delete-field" {:state state :fx [[:api "DELETE" (str "/api/user/fields/" (:id form)) nil :field-delete-result]]}
+    "split-field"
+    (let [id (str (:id form))
+          polys (let [v (read-json-str (:polygons form))]
+                  (if (sequential? v) v []))
+          line (read-json-str (:line form))]
+      (cond
+        (str/blank? id)
+        (let [s (assoc state :flash {:error? true :text (code-message "field_not_found")})]
+          {:state s :fx [[:html (render s)]]})
+        (and (< (count polys) 2) (nil? line))
+        (let [s (assoc state :flash {:error? true :text (code-message "split_too_few")})]
+          {:state s :fx [[:html (render s)]]})
+        :else
+        {:state (assoc state :last-field-act "split")
+         :fx [[:api "POST" (str "/api/user/fields/" id "/split")
+               (cond-> {:polygons polys}
+                 line (assoc :line line))
+               :field-save-result]]}))
+    "merge-fields"
+    (let [ids (let [v (read-json-str (:ids form))]
+                (if (sequential? v) v []))]
+      (if (< (count ids) 2)
+        (let [s (assoc state :flash {:error? true :text (code-message "merge_too_few")})]
+          {:state s :fx [[:html (render s)]]})
+        {:state (assoc state :last-field-act "merge")
+         :fx [[:api "POST" "/api/user/fields/merge"
+               {:keep_id (:keep_id form) :ids ids}
+               :field-save-result]]}))
+    "import-fields" {:state state :fx [[:upload "POST" "/api/user/fields/import" form :field-save-result]]}
+    nil))
+
+(defn- submit-paint-act
+  "作業名の選択と塗りの確定・削除。"
+  [state form act]
+  (case act
+    "select-work-name"
+    (let [wn (str/trim (str (or (:work_name form) "")))]
+      (if (str/blank? wn)
+        (let [s (assoc state :form (assoc (:form state) :work_name "") :paint-data nil
+                       :map-mode "paint"
+                       :flash {:error? true :text (m :work-name-needed)})]
+          {:state s :fx [[:html (render s)]]})
+        {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil
+                       :map-mode "paint")
+         :fx [[:api "GET" (paints-query wn) nil :paints-loaded]]}))
+    "confirm-paint"
+    (let [fid (field-id-of form state)
+          wn (work-name-of form state)
+          gj (paint-geojson-of form state)]
+      (cond
+        (blank-work-name? form state)
+        (flash-html-state state (m :work-name-needed))
+        (nil? fid)
+        (flash-html-state state (code-message "field_not_found"))
+        (nil? gj)
+        (flash-html-state state (code-message "paint_empty"))
+        :else
+        {:state (assoc state :form (assoc (:form state)
+                                         :work_name wn
+                                         :field_id fid
+                                         :id fid
+                                         :paint-geojson ""))
+         :fx [[:api "POST" "/api/user/paints"
+               {:field_id fid
+                :work_name wn
+                :geojson gj}
+               :paint-save-result]]}))
+    "complete-field"
+    (let [fid (field-id-of form state)
+          wn (work-name-of form state)]
+      (cond
+        (blank-work-name? form state)
+        (flash-html-state state (m :work-name-needed))
+        (nil? fid)
+        (flash-html-state state (code-message "field_not_found"))
+        :else
+        {:state (assoc state :form (assoc (:form state) :work_name wn :field_id fid :id fid))
+         :fx [[:api "POST" (str "/api/user/fields/" fid "/complete")
+               {:work_name wn}
+               :paint-save-result]]}))
+    "delete-paint"
+    (if-let [pid (paint-id-of form state)]
+      {:state state
+       :fx [[:api "DELETE" (str "/api/user/paints/" pid) nil :paint-save-result]]}
+      (flash-html-state state (code-message "paint_not_found")))
+    "delete-field-paints"
+    (let [fid (field-id-of form state)
+          wn (work-name-of form state)]
+      (cond
+        (blank-work-name? form state)
+        (flash-html-state state (m :work-name-needed))
+        (nil? fid)
+        (flash-html-state state (code-message "field_not_found"))
+        :else
+        {:state (assoc state :form (assoc (:form state) :work_name wn :field_id fid :id fid))
+         :fx [[:api "DELETE" (field-paints-query fid wn) nil :paint-save-result]]}))
+    "discard-drafts"
+    (let [s (assoc state
+                   :form (dissoc (:form state) :paint-geojson)
+                   :flash {:error? false :text (m :paint-discard)})]
+      {:state s :fx [[:html (render s)]]})
+    nil))
+
+(defn- submit-order-act
+  "作業依頼・作業日誌・他人の塗り・関係の切断。"
+  [state form act]
+  (case act
+    "create-order"
+    (let [emails (parse-recipient-emails (:recipient_emails form))
+          fids (parse-field-ids-form form)
+          body {:work_date (str/trim (as-text (:work_date form)))
+                :start_time (str/trim (as-text (:start_time form)))
+                :end_time (str/trim (as-text (:end_time form)))
+                :work_name (str/trim (as-text (:work_name form)))
+                :body (as-text (:body form))
+                :recipient_emails emails
+                :field_ids fids}
+          s (assoc state :form (merge (or (:form state) {}) form
+                                      {:recipient_emails (:recipient_emails form)
+                                       :field_ids fids}))]
+      {:state s
+       :fx [[:api "POST" "/api/user/orders" body :order-save-result]]})
+    "update-order"
+    (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))
+          body {:work_date (str/trim (as-text (:work_date form)))
+                :start_time (str/trim (as-text (:start_time form)))
+                :end_time (str/trim (as-text (:end_time form)))
+                :body (as-text (:body form))}]
+      (if (str/blank? id)
+        (flash-html-state state (m :order-not-found))
+        {:state state
+         :fx [[:api "PUT" (str "/api/user/orders/" id) body :order-save-result]]}))
+    "close-order"
+    (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))]
+      (if (str/blank? id)
+        (flash-html-state state (m :order-not-found))
+        {:state state
+         :fx [[:api "POST" (str "/api/user/orders/" id "/close") {} :order-save-result]]}))
+    "post-journal"
+    (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))]
+      (if (str/blank? id)
+        (flash-html-state state (m :order-not-found))
+        {:state state
+         :fx [[:api "POST" (str "/api/user/orders/" id "/journal")
+               {:body (:body form)}
+               :journal-save-result]]}))
+    "select-others-work-name"
+    (let [wn (str/trim (as-text (:work_name form)))]
+      (if (str/blank? wn)
+        (flash-html-state (assoc state :form (assoc (:form state) :work_name "")
+                                 :others-paint-data nil)
+                          (m :work-name-needed))
+        {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil)
+         :fx [[:api "GET" (str "/api/user/others/paints?work_name=" (encode-q wn))
+               nil :others-paints-loaded]]}))
+    "cut-relation"
+    {:state state
+     :fx [[:api "POST" "/api/admin/relations/cut" form :relation-cut-result]]}
+    nil))
+
 (defn handle [state msg]
   (with-ui-lang state
     (fn []
@@ -3542,6 +4481,17 @@
       :others-work-names-loaded (others-work-names-loaded state arg)
       :others-paints-loaded (others-paints-loaded state arg)
       :relation-cut-result (relation-cut-result state arg)
+      :memos-loaded (memos-loaded state arg)
+      :memo-drafts-loaded (memo-drafts-loaded state arg)
+      :memo-bookmarks-loaded (memo-bookmarks-loaded state arg)
+      :memo-replies-loaded (memo-replies-loaded state arg)
+      :memo-loaded (memo-loaded state arg)
+      :memo-save-result (memo-save-result state arg)
+      :memo-publish-result (memo-publish-result state arg)
+      :memo-delete-result (memo-delete-result state arg)
+      :memo-bookmark-result (memo-bookmark-result state arg)
+      :memo-attach-result (memo-attach-result state arg)
+      :memo-search-result (memo-search-result state arg)
       :place-preview-result (after-place-preview state arg)
       :place-save-result (after-place-save state arg)
       :emaff-import-result (after-emaff-import state arg)
@@ -3592,6 +4542,12 @@
                 (assoc s :order nil :order-map nil :others-paint-data nil
                        :form {} :orders-sent [] :orders-received [] :others-fields [])
 
+                (memo-page? (:page s))
+                (assoc s :memos [] :memo-selected nil :memo-selected-row nil :memo-replies []
+                       :memo-drafts [] :memo-bookmarks [] :memo-compose {}
+                       :memo-search-q "" :memo-search-form {} :memo-search-advanced? false
+                       :memo-before-id nil :memo-admin-tried? nil :form {})
+
                 :else s)]
         (if (and (:session s) (= (:kind s) (:kind state)))
           (session-loaded s {:ok true :email (get-in s [:session :email])})
@@ -3600,232 +4556,15 @@
                 [:session (:kind s)]]}))
       :submit
       (let [act (:act arg)
-            form (:form arg)
-            kind (:kind state)]
-        (case act
-          "login" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/login" "/api/user/login") form :login-result]]}
-          "logout" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/logout" "/api/user/logout") {} :logout-result]]}
-          "reset-request" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password/reset/request" "/api/user/password/reset/request") (assoc form :ui_lang (ui-lang state)) :reset-request-result]]}
-          "reset-complete" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password/reset" "/api/user/password/reset")
-                                              (assoc form :token (or (:token form) (:token (parse-query (:search state)))))
-                                              :reset-complete-result]]}
-          "invite" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/invite" "/api/user/invite") form :invite-result]]}
-          "password" {:state state :fx [[:api "POST" (if (= kind "admin") "/api/admin/password" "/api/user/password") form :password-result]]}
-          "revoke" {:state state :fx [[:api "POST" "/api/admin/users/revoke" form :revoke-result]]}
-          "preview-place"
-          (if (:place-busy state)
-            {:state state :fx [[:html (render state)]]}
-            (let [s (assoc state :form (merge (or (:form state) {}) form) :flash nil)]
-              {:state s :fx [[:api "POST" "/api/user/place/preview" form :place-preview-result]]}))
-          "cancel-place-preview"
-          (let [s (assoc state :place-preview nil :flash nil :place-busy nil
-                         :form (merge (or (:form state) {}) (select-keys form [:west :south :east :north])))]
-            {:state s :fx [[:html (render s)]]})
-          "save-place"
-          (if (:place-busy state)
-            {:state state :fx [[:html (render state)]]}
-            (let [s (assoc state :place-busy true
-                           :form (merge (or (:form state) {}) form)
-                           :flash {:error? false :text (m :place-saving)})]
-              {:state s
-               :fx [[:html (render s)]
-                    [:api "PUT" "/api/user/place" form :place-save-result]]}))
-          "emaff-import"
-          (if (:place-busy state)
-            {:state state :fx [[:html (render state)]]}
-            (let [s (assoc state :place-busy true
-                           :flash {:error? false :text (m :place-saving)})]
-              {:state s
-               :fx [[:html (render s)]
-                    [:api "POST" "/api/user/emaff/import" {} :emaff-import-result]]}))
-          "set-map-mode"
-          (let [mode (str/trim (str (or (:mode form) "")))
-                cur (map-mode state)
-                parent (or (:map-mode-parent state) "browse")]
-            (cond
-              (= mode "cancel")
-              (let [next (if (= cur "basemap") parent "browse")
-                    s (assoc state :map-mode next :map-mode-parent nil :flash nil
-                             :form (dissoc (:form state) :geojson :line :polygons :ids :keep_id :paint-geojson))]
-                {:state s :fx [[:html (render s)]]})
-              (= mode "basemap")
-              (let [s (assoc state :map-mode "basemap" :map-mode-parent cur :flash nil)]
-                {:state s :fx [[:html (render s)]]})
-              (#{"browse" "paint" "draw" "edit" "split" "merge" "import"} mode)
-              (let [s (assoc state :map-mode mode :flash nil)]
-                {:state s :fx [[:html (render s)]]})
-              :else
-              {:state state :fx [[:html (render state)]]}))
-          "create-field" {:state state :fx [[:api "POST" "/api/user/fields"
-                                            {:name (:name form)
-                                             :geojson (read-json-str (:geojson form))}
-                                            :field-save-result]]}
-          "update-field" {:state state :fx [[:api "PUT" (str "/api/user/fields/" (:id form))
-                                            (cond-> {}
-                                              (contains? form :name) (assoc :name (:name form))
-                                              (contains? form :area_ha) (assoc :area_ha (:area_ha form))
-                                              (contains? form :area_m2) (assoc :area_m2 (:area_m2 form))
-                                              (contains? form :memo) (assoc :memo (:memo form))
-                                              (not (str/blank? (str (:geojson form))))
-                                              (assoc :geojson (read-json-str (:geojson form))))
-                                            :field-save-result]]}
-          "delete-field" {:state state :fx [[:api "DELETE" (str "/api/user/fields/" (:id form)) nil :field-delete-result]]}
-          "split-field"
-          (let [id (str (:id form))
-                polys (let [v (read-json-str (:polygons form))]
-                        (if (sequential? v) v []))
-                line (read-json-str (:line form))]
-            (cond
-              (str/blank? id)
-              (let [s (assoc state :flash {:error? true :text (code-message "field_not_found")})]
-                {:state s :fx [[:html (render s)]]})
-              (and (< (count polys) 2) (nil? line))
-              (let [s (assoc state :flash {:error? true :text (code-message "split_too_few")})]
-                {:state s :fx [[:html (render s)]]})
-              :else
-              {:state (assoc state :last-field-act "split")
-               :fx [[:api "POST" (str "/api/user/fields/" id "/split")
-                     (cond-> {:polygons polys}
-                       line (assoc :line line))
-                     :field-save-result]]}))
-          "merge-fields"
-          (let [ids (let [v (read-json-str (:ids form))]
-                      (if (sequential? v) v []))]
-            (if (< (count ids) 2)
-              (let [s (assoc state :flash {:error? true :text (code-message "merge_too_few")})]
-                {:state s :fx [[:html (render s)]]})
-              {:state (assoc state :last-field-act "merge")
-               :fx [[:api "POST" "/api/user/fields/merge"
-                     {:keep_id (:keep_id form) :ids ids}
-                     :field-save-result]]}))
-          "select-work-name"
-          (let [wn (str/trim (str (or (:work_name form) "")))]
-            (if (str/blank? wn)
-              (let [s (assoc state :form (assoc (:form state) :work_name "") :paint-data nil
-                             :map-mode "paint"
-                             :flash {:error? true :text (m :work-name-needed)})]
-                {:state s :fx [[:html (render s)]]})
-              {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil
-                             :map-mode "paint")
-               :fx [[:api "GET" (paints-query wn) nil :paints-loaded]]}))
-          "confirm-paint"
-          (let [fid (field-id-of form state)
-                wn (work-name-of form state)
-                gj (paint-geojson-of form state)]
-            (cond
-              (blank-work-name? form state)
-              (flash-html-state state (m :work-name-needed))
-              (nil? fid)
-              (flash-html-state state (code-message "field_not_found"))
-              (nil? gj)
-              (flash-html-state state (code-message "paint_empty"))
-              :else
-              {:state (assoc state :form (assoc (:form state)
-                                               :work_name wn
-                                               :field_id fid
-                                               :id fid
-                                               :paint-geojson ""))
-               :fx [[:api "POST" "/api/user/paints"
-                     {:field_id fid
-                      :work_name wn
-                      :geojson gj}
-                     :paint-save-result]]}))
-          "complete-field"
-          (let [fid (field-id-of form state)
-                wn (work-name-of form state)]
-            (cond
-              (blank-work-name? form state)
-              (flash-html-state state (m :work-name-needed))
-              (nil? fid)
-              (flash-html-state state (code-message "field_not_found"))
-              :else
-              {:state (assoc state :form (assoc (:form state) :work_name wn :field_id fid :id fid))
-               :fx [[:api "POST" (str "/api/user/fields/" fid "/complete")
-                     {:work_name wn}
-                     :paint-save-result]]}))
-          "delete-paint"
-          (if-let [pid (paint-id-of form state)]
-            {:state state
-             :fx [[:api "DELETE" (str "/api/user/paints/" pid) nil :paint-save-result]]}
-            (flash-html-state state (code-message "paint_not_found")))
-          "delete-field-paints"
-          (let [fid (field-id-of form state)
-                wn (work-name-of form state)]
-            (cond
-              (blank-work-name? form state)
-              (flash-html-state state (m :work-name-needed))
-              (nil? fid)
-              (flash-html-state state (code-message "field_not_found"))
-              :else
-              {:state (assoc state :form (assoc (:form state) :work_name wn :field_id fid :id fid))
-               :fx [[:api "DELETE" (field-paints-query fid wn) nil :paint-save-result]]}))
-          "discard-drafts"
-          (let [s (assoc state
-                         :form (dissoc (:form state) :paint-geojson)
-                         :flash {:error? false :text (m :paint-discard)})]
-            {:state s :fx [[:html (render s)]]})
-          "import-fields" {:state state :fx [[:upload "POST" "/api/user/fields/import" form :field-save-result]]}
-          "save-image-extent" {:state state :fx [[:api "PUT" "/api/user/place/image" form :image-save-result]]}
-          "upload-basemap" {:state state :fx [[:upload "PUT" (str "/api/user/basemaps/" (:kind form)) form :basemap-upload-result]]}
-          ("set-gantt-axis" "set-gantt-orient" "select-gantt-title" "add-gantt-title"
-           "save-gantt-title" "delete-gantt-title" "select-gantt-row" "add-gantt-row"
-           "save-gantt-row" "delete-gantt-row" "review-gantt-row" "finalize-gantt-progress"
-           "set-daily-range" "set-daily-statuses" "set-daily-row-status"
-           "add-work-time" "save-work-time" "delete-work-time"
-           "add-checklist-item" "save-checklist-item" "delete-checklist-item")
-          (submit-gantt-act state form act)
-          "create-order"
-          (let [emails (parse-recipient-emails (:recipient_emails form))
-                fids (parse-field-ids-form form)
-                body {:work_date (str/trim (as-text (:work_date form)))
-                      :start_time (str/trim (as-text (:start_time form)))
-                      :end_time (str/trim (as-text (:end_time form)))
-                      :work_name (str/trim (as-text (:work_name form)))
-                      :body (as-text (:body form))
-                      :recipient_emails emails
-                      :field_ids fids}
-                s (assoc state :form (merge (or (:form state) {}) form
-                                            {:recipient_emails (:recipient_emails form)
-                                             :field_ids fids}))]
-            {:state s
-             :fx [[:api "POST" "/api/user/orders" body :order-save-result]]})
-          "update-order"
-          (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))
-                body {:work_date (str/trim (as-text (:work_date form)))
-                      :start_time (str/trim (as-text (:start_time form)))
-                      :end_time (str/trim (as-text (:end_time form)))
-                      :body (as-text (:body form))}]
-            (if (str/blank? id)
-              (flash-html-state state (m :order-not-found))
-              {:state state
-               :fx [[:api "PUT" (str "/api/user/orders/" id) body :order-save-result]]}))
-          "close-order"
-          (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))]
-            (if (str/blank? id)
-              (flash-html-state state (m :order-not-found))
-              {:state state
-               :fx [[:api "POST" (str "/api/user/orders/" id "/close") {} :order-save-result]]}))
-          "post-journal"
-          (let [id (str/trim (as-text (or (:id form) (:order-id state) (get-in state [:order :id]))))]
-            (if (str/blank? id)
-              (flash-html-state state (m :order-not-found))
-              {:state state
-               :fx [[:api "POST" (str "/api/user/orders/" id "/journal")
-                     {:body (:body form)}
-                     :journal-save-result]]}))
-          "select-others-work-name"
-          (let [wn (str/trim (as-text (:work_name form)))]
-            (if (str/blank? wn)
-              (flash-html-state (assoc state :form (assoc (:form state) :work_name "")
-                                       :others-paint-data nil)
-                                (m :work-name-needed))
-              {:state (assoc state :form (assoc (:form state) :work_name wn) :flash nil)
-               :fx [[:api "GET" (str "/api/user/others/paints?work_name=" (encode-q wn))
-                     nil :others-paints-loaded]]}))
-          "cut-relation"
-          {:state state
-           :fx [[:api "POST" "/api/admin/relations/cut" form :relation-cut-result]]}
-          {:state state :fx [[:html (render state)]]}))
+            form (:form arg)]
+        (or (submit-auth-act state form act (:kind state))
+            (submit-place-act state form act)
+            (submit-field-act state form act)
+            (submit-paint-act state form act)
+            (submit-gantt-act state form act)
+            (submit-memo-act state form act)
+            (submit-order-act state form act)
+            {:state state :fx [[:html (render state)]]}))
       :set-lang
       (let [lang (normalize-lang (if (map? arg) (:lang arg) arg))
             s (assoc state :ui-lang lang :flash nil)]
