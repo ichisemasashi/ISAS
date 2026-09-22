@@ -394,9 +394,12 @@
    :memos-empty "メモはまだありません"
    :memos-drafts-empty "下書きはありません"
    :memos-bookmarks-empty "ブックマークはありません"
-   :memos-attach "添付を追加"
+   :memos-attach "ファイルを選ぶ"
    :memos-detach "添付を外す"
    :memos-attach-after-save "添付は、下書き保存または公開のあとに追加できます。"
+   :memos-uploading "アップロード中…"
+   :memos-upload-done "アップロード完了"
+   :memos-upload-failed "アップロードに失敗しました"
    :memos-draft-label "下書き"
    :memos-search-results "検索結果"
    :memos-search-query-prefix "検索文字列は「"
@@ -817,9 +820,12 @@
    :memos-empty "No memos yet"
    :memos-drafts-empty "No drafts"
    :memos-bookmarks-empty "No bookmarks"
-   :memos-attach "Add attachment"
+   :memos-attach "Choose file"
    :memos-detach "Remove attachment"
    :memos-attach-after-save "Add attachments after saving a draft or publishing."
+   :memos-uploading "Uploading…"
+   :memos-upload-done "Upload complete"
+   :memos-upload-failed "Upload failed"
    :memos-draft-label "Draft"
    :memos-search-results "Search results"
    :memos-search-query-prefix "Search text: \""
@@ -2916,15 +2922,16 @@
     ""
     (str "<form data-act=\"memo-attach\" method=\"post\" enctype=\"multipart/form-data\" class=\"memo-attach\">"
          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
-         "<label>" (esc (m :memos-attach))
-         "<input type=\"file\" name=\"file\"></label>"
-         "<button type=\"submit\">" (esc (m :memos-attach)) "</button></form>")))
+         "<input type=\"file\" name=\"file\" data-auto-upload=\"1\" aria-label=\""
+         (esc (m :memos-attach)) "\">"
+         "<span class=\"memo-upload-status\" aria-live=\"polite\"></span>"
+         "</form>")))
 
 (defn- memo-edit-form [memo]
   (if-not (:can_edit memo)
     ""
-    (str "<details class=\"memo-edit\" open>"
-         "<summary>" (esc (m :memos-edit)) "</summary>"
+    (str "<div class=\"memo-edit\">"
+         "<p class=\"memo-edit-title\">" (esc (m :memos-edit)) "</p>"
          "<form data-act=\"memo-update\" method=\"post\" class=\"memo-edit-form\">"
          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id memo)) "\">"
          "<label>" (esc (m :memos-body-label))
@@ -2937,7 +2944,7 @@
          (esc (str/join "\n" (or (:links memo) []))) "</textarea></label>"
          "<button type=\"submit\">" (esc (m :btn-save)) "</button></form>"
          (memo-attach-form memo)
-         "</details>")))
+         "</div>")))
 
 (defn- memo-star-form [memo]
   (let [on? (boolean (:bookmarked memo))]
@@ -3013,7 +3020,7 @@
                 "<p class=\"memo-body\">" (esc (:body last)) "</p>"
                 (memo-meta-html last)
                 (memo-attachments-html last)
-                (memo-attach-form last)
+                (memo-edit-form last)
                 "</div>")
            "")
          "</section>")))
@@ -3797,14 +3804,36 @@
       (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
         {:state s :fx [[:html (render s)]]}))))
 
+(defn- replace-memo-in-list [rows memo]
+  (let [id (str (:id memo))]
+    (mapv (fn [m] (if (= id (str (:id m))) memo m)) (or rows []))))
+
+(defn- upsert-memo-everywhere [state memo]
+  (let [id (str (:id memo))
+        sel? (and (:memo-selected-row state)
+                  (= id (str (:id (:memo-selected-row state)))))]
+    (cond-> (-> state
+                (update :memos replace-memo-in-list memo)
+                (update :memo-replies replace-memo-in-list memo)
+                (update :memo-drafts replace-memo-in-list memo)
+                (update :memo-bookmarks replace-memo-in-list memo)
+                (update :memo-search-results replace-memo-in-list memo)
+                (assoc :memo-last-saved memo))
+      sel? (assoc :memo-selected-row memo))))
+
 (defn memo-attach-result [state body]
   (let [near (or (:pending-flash-near state) (memo-list-near state))
-        state (dissoc state :pending-flash-near)]
+        state (dissoc state :pending-flash-near :memo-upload-status)]
     (if (:ok body)
-      (let [s (cond-> (flash-ok-state state (m :saved-ok) near)
-                (:memo body) (assoc :memo-last-saved (:memo body)))]
-        {:state s :fx (memo-refresh-fx s)})
-      (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near near})]
+      (let [s (-> (flash-ok-state state (m :memos-upload-done) near)
+                  (cond-> (:memo body) (upsert-memo-everywhere (:memo body)))
+                  (assoc :memo-upload-status :done))]
+        {:state s :fx [[:html (render s)]]})
+      (let [s (assoc state
+                     :memo-upload-status :failed
+                     :flash {:error? true
+                             :text (code-message (:code body))
+                             :near near})]
         {:state s :fx [[:html (render s)]]}))))
 
 (defn memo-search-result [state body]
@@ -4377,8 +4406,9 @@
                    (if (nil? (:memo-selected state))
                      "memo-compose-section"
                      "memo-thread-section"))]
-        {:state (assoc state :pending-flash-near near)
-         :fx [[:upload "POST" (str "/api/memos/" id "/attachments")
+        {:state (assoc state :pending-flash-near near :memo-upload-status :uploading)
+         :fx [[:upload-status (m :memos-uploading)]
+              [:upload "POST" (str "/api/memos/" id "/attachments")
                (dissoc form :id) :memo-attach-result]]})
       (flash-html-state state (m :memo-not-found) (memo-list-near state)))
 

@@ -248,6 +248,8 @@
   (with-memo-session sys req
     (fn [actor]
       (try
+        (log/info "メモ作成 API を受けました"
+                  :actor-kind (:kind actor) :actor-id (:id actor))
         (memo-ok (memos/create-memo sys actor (read-body req)))
         (catch Exception e
           (log/warn "メモ作成を読めませんでした" :error (.getMessage e))
@@ -256,6 +258,9 @@
 (defn memos-search-get [sys req]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモ検索 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor)
+                :q (:q (query-params req)))
       (memo-ok (memos/search sys actor (query-params req))))))
 
 (defn memos-drafts-get [sys req]
@@ -271,12 +276,16 @@
 (defn memo-get [sys req id]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモ取得 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
       (memo-ok (memos/get-memo sys actor id)))))
 
 (defn memo-put [sys req id]
   (with-memo-session sys req
     (fn [actor]
       (try
+        (log/info "メモ更新 API を受けました"
+                  :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
         (memo-ok (memos/update-memo sys actor id (read-body req)))
         (catch Exception e
           (log/warn "メモ更新を読めませんでした" :error (.getMessage e))
@@ -285,21 +294,30 @@
 (defn memo-delete [sys req id]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモ削除 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
       (memo-ok (memos/soft-delete-memo sys actor id)))))
 
 (defn memo-publish [sys req id]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモ公開 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
       (memo-ok (memos/publish-memo sys actor id)))))
 
 (defn memo-replies-get [sys req id]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモ返信一覧 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
       (memo-ok (memos/list-replies sys actor id)))))
 
 (defn memo-attachment-post [sys req id]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモ添付 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id)
+                :has-file (some? (upload-of req)))
       (memo-ok (memos/add-attachment sys actor id (upload-of req))))))
 
 (defn attachment-disposition
@@ -314,6 +332,9 @@
 (defn memo-attachment-get [sys req mid aid]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモ添付取得 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor)
+                :memo-id (str mid) :attachment-id (str aid))
       (let [r (memos/get-attachment sys actor mid aid)]
         (if (:ok r)
           {:status 200
@@ -325,16 +346,23 @@
 (defn memo-attachment-delete [sys req mid aid]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモ添付削除 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor)
+                :memo-id (str mid) :attachment-id (str aid))
       (memo-ok (memos/delete-attachment sys actor mid aid)))))
 
 (defn memo-bookmark-post [sys req id]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモブックマーク API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
       (memo-ok (memos/add-bookmark sys actor id)))))
 
 (defn memo-bookmark-delete [sys req id]
   (with-memo-session sys req
     (fn [actor]
+      (log/info "メモブックマーク解除 API を受けました"
+                :actor-kind (:kind actor) :actor-id (:id actor) :memo-id (str id))
       (memo-ok (memos/remove-bookmark sys actor id)))))
 
 (defn place-get [sys req]

@@ -36,10 +36,15 @@
 (defn- actor-info [actor]
   {:actor-kind (actor-kind actor) :actor-id (actor-id actor)})
 
+(defn- log-info!
+  "操作ログを keyword 引数で残す（マップ1個渡しだと出ない実装・環境差を避ける）。"
+  [msg data]
+  (apply log/info msg (mapcat identity (seq data))))
+
 (defn- deny
   "拒否を日本語でログに残し、失敗応答を返す。"
   [msg code data]
-  (log/warn msg (assoc data :code code))
+  (apply log/warn msg (mapcat identity (seq (assoc data :code code))))
   {:ok false :code code})
 
 ;;; 権限・状態・編集窓
@@ -64,12 +69,25 @@
        (not (deleted? memo))
        (or (published? memo) (author? memo actor))))
 
-(defn- edit-deadline [memo]
-  (time/format-instant (.plus (time/parse-instant (:content_saved_at memo))
-                              (Duration/ofMinutes edit-window-minutes))))
+(defn- edit-deadline-instant
+  "content_saved_at + 30分。読めない・無いときは nil（編集窓は閉じたとみなす）。"
+  [memo]
+  (when-let [cs (:content_saved_at memo)]
+    (try
+      (.plus (time/parse-instant (str cs)) (Duration/ofMinutes edit-window-minutes))
+      (catch Exception _
+        nil))))
 
-(defn- edit-window-open? [memo]
-  (not (time/before? (edit-deadline memo) (time/now-utc))))
+(defn- edit-deadline [memo]
+  (when-let [inst (edit-deadline-instant memo)]
+    (time/format-instant inst)))
+
+(defn- edit-window-open?
+  "サーバ時計の Instant 同士で比較する（文字列往復の誤差を避ける）。"
+  [memo]
+  (if-let [dl (edit-deadline-instant memo)]
+    (not (.isBefore dl (time/now-instant)))
+    false))
 
 (defn- can-edit?
   "§3.4 下書きは作成者がいつでも、公開済みは作成者かつ編集窓内のみ。"
@@ -189,14 +207,13 @@
   (let [lim (page-limit limit)
         before (geo/as-int before_id)
         rows (db/list-timeline-memos (:ds sys) lim before)]
-    (log/info "メモのタイムラインを返しました"
-              (assoc (actor-info actor) :count (count rows) :limit lim :before-id before))
+    (log-info! "メモのタイムラインを返しました" (assoc (actor-info actor) :count (count rows) :limit lim :before-id before))
     {:ok true :memos (mapv #(present-memo sys % actor) rows)}))
 
 (defn get-memo [sys actor id]
   (if-let [memo (find-visible sys actor id)]
     (do
-      (log/info "メモを返しました" (assoc (actor-info actor) :memo-id (:id memo)))
+      (log-info! "メモを返しました" (assoc (actor-info actor) :memo-id (:id memo)))
       {:ok true :memo (present-memo sys memo actor)})
     (deny "メモがありません" "memo_not_found" (assoc (actor-info actor) :memo-id (str id)))))
 
@@ -205,8 +222,7 @@
   [sys actor id]
   (if-let [memo (find-visible sys actor id)]
     (let [rows (db/list-memo-replies (:ds sys) (:id memo) (actor-kind actor) (actor-id actor))]
-      (log/info "メモの返信を一覧しました"
-                (assoc (actor-info actor) :memo-id (:id memo) :count (count rows)))
+      (log-info! "メモの返信を一覧しました" (assoc (actor-info actor) :memo-id (:id memo) :count (count rows)))
       {:ok true :replies (mapv #(present-memo sys % actor) rows)})
     (deny "返信を見るメモがありません" "memo_not_found"
           (assoc (actor-info actor) :memo-id (str id)))))
@@ -215,7 +231,7 @@
   "§2.3 ログイン中の本人の未削除の下書きだけ。"
   [sys actor]
   (let [rows (db/list-draft-memos (:ds sys) (actor-kind actor) (actor-id actor))]
-    (log/info "メモの下書きを一覧しました" (assoc (actor-info actor) :count (count rows)))
+    (log-info! "メモの下書きを一覧しました" (assoc (actor-info actor) :count (count rows)))
     {:ok true :memos (mapv #(present-memo sys % actor) rows)}))
 
 ;;; 作成・更新・公開・削除
@@ -263,8 +279,7 @@
             mid (:id row)]
         (db/replace-memo-tags! ds mid (:tags nt))
         (db/replace-memo-links! ds mid (:links nl))
-        (log/info "メモを作りました"
-                  (assoc (actor-info actor)
+        (log-info! "メモを作りました" (assoc (actor-info actor)
                          :memo-id mid :status status :parent-id parent-id
                          :tags (count (:tags nt)) :links (count (:links nl))
                          :body-length (code-points (:body nb))))
@@ -299,8 +314,7 @@
           (db/update-memo-body! ds mid (:body nb) now)
           (db/replace-memo-tags! ds mid (:tags nt))
           (db/replace-memo-links! ds mid (:links nl))
-          (log/info "メモを直しました"
-                    (assoc (actor-info actor)
+          (log-info! "メモを直しました" (assoc (actor-info actor)
                            :memo-id mid :status (:status memo)
                            :tags (count (:tags nt)) :links (count (:links nl))
                            :content-saved-at now))
@@ -310,8 +324,7 @@
         (db/update-memo-body! ds mid (:body nb) now)
         (db/replace-memo-tags! ds mid (:tags nt))
         (db/replace-memo-links! ds mid (:links nl))
-        (log/info "メモを直しました"
-                  (assoc (actor-info actor)
+        (log-info! "メモを直しました" (assoc (actor-info actor)
                          :memo-id mid :status (:status memo)
                          :tags (count (:tags nt)) :links (count (:links nl))
                          :content-saved-at now))
@@ -366,8 +379,7 @@
       (let [now (time/now-utc)
             mid (:id memo)]
         (db/publish-memo! ds mid now now)
-        (log/info "メモを公開しました"
-                  (assoc (actor-info actor) :memo-id mid :parent-id (:parent_id memo)
+        (log-info! "メモを公開しました" (assoc (actor-info actor) :memo-id mid :parent-id (:parent_id memo)
                          :published-at now))
         {:ok true :memo (present-memo sys (db/find-memo ds mid) actor)}))))
 
@@ -387,8 +399,7 @@
 
       :else
       (let [r (db/soft-delete-memo-tree! (:ds sys) (:id memo))]
-        (log/info "メモをソフト削除しました"
-                  (assoc (actor-info actor) :memo-id (:id memo)
+        (log-info! "メモをソフト削除しました" (assoc (actor-info actor) :memo-id (:id memo)
                          :descendants (:descendants r)))
         {:ok true}))))
 
@@ -429,11 +440,11 @@
         to-utc (when (given? to) (tokyo-day-start-utc to 1))
         authors (when (given? author) (resolve-authors ds author))]
     (when (and (given? from) (nil? from-utc))
-      (log/warn "検索の開始日を読めないので無視します" (assoc (actor-info actor) :from (str from))))
+      (apply log/warn "検索の開始日を読めないので無視します" (mapcat identity (seq (assoc (actor-info actor) :from (str from))))))
     (when (and (given? to) (nil? to-utc))
-      (log/warn "検索の終了日を読めないので無視します" (assoc (actor-info actor) :to (str to))))
+      (apply log/warn "検索の終了日を読めないので無視します" (mapcat identity (seq (assoc (actor-info actor) :to (str to))))))
     (when (and (given? author) (empty? authors))
-      (log/warn "検索の作成者が見つかりません" (assoc (actor-info actor) :author (str author))))
+      (apply log/warn "検索の作成者が見つかりません" (mapcat identity (seq (assoc (actor-info actor) :author (str author))))))
     (let [rows (db/search-memos ds {:q-like (like-term q)
                                     :exclude-like (like-term exclude)
                                     :from-utc from-utc
@@ -444,8 +455,7 @@
                                     :viewer-kind (actor-kind actor)
                                     :viewer-id (actor-id actor)
                                     :limit lim})]
-      (log/info "メモを検索しました"
-                (assoc (actor-info actor)
+      (log-info! "メモを検索しました" (assoc (actor-info actor)
                        :count (count rows) :q (str q) :exclude (str exclude)
                        :from (str from) :to (str to) :author (str author)
                        :scope scope' :drafts drafts? :limit lim))
@@ -488,6 +498,11 @@
         memo (find-visible sys actor id)
         u (upload-map upload)
         tf (upload-file u)]
+    (log-info! "メモ添付の要求を受けました"
+               (assoc (actor-info actor)
+                      :memo-id (str id)
+                      :has-upload (some? u)
+                      :filename (when u (base-name (:filename u)))))
     (cond
       (nil? memo)
       (deny "添付するメモがありません" "memo_not_found" (assoc (actor-info actor) :memo-id (str id)))
@@ -525,8 +540,7 @@
         (io/copy (io/file tf) dest)
         (db/update-memo-attachment-body-ref! ds (:id row) rel)
         (db/update-memo-body! ds mid (:body memo) now)
-        (log/info "メモに添付しました"
-                  (assoc (actor-info actor)
+        (log-info! "メモに添付しました" (assoc (actor-info actor)
                          :memo-id mid :attachment-id (:id row) :filename filename
                          :content-type ctype :path rel :content-saved-at now))
         {:ok true
@@ -553,8 +567,7 @@
 
       :else
       (do
-        (log/info "メモの添付を返しました"
-                  (assoc (actor-info actor) :memo-id (:id memo) :attachment-id (:id att)
+        (log-info! "メモの添付を返しました" (assoc (actor-info actor) :memo-id (:id memo) :attachment-id (:id att)
                          :filename (:filename att)))
         {:ok true
          :file (attachment-file sys att)
@@ -589,8 +602,7 @@
         (db/soft-delete-memo-attachment! ds (:id att))
         (io/delete-file (attachment-file sys att) true)
         (db/update-memo-body! ds mid (:body memo) now)
-        (log/info "メモの添付を消しました"
-                  (assoc (actor-info actor) :memo-id mid :attachment-id (:id att)
+        (log-info! "メモの添付を消しました" (assoc (actor-info actor) :memo-id mid :attachment-id (:id att)
                          :filename (:filename att) :content-saved-at now))
         {:ok true :memo (present-memo sys (db/find-memo ds mid) actor)}))))
 
@@ -614,8 +626,7 @@
       (let [mid (:id memo)
             already? (db/author-has-bookmarked? ds mid (actor-kind actor) (actor-id actor))]
         (db/upsert-memo-bookmark! ds mid (actor-kind actor) (actor-id actor))
-        (log/info "メモにブックマークを付けました"
-                  (assoc (actor-info actor) :memo-id mid :already already?))
+        (log-info! "メモにブックマークを付けました" (assoc (actor-info actor) :memo-id mid :already already?))
         {:ok true :memo (present-memo sys (db/find-memo ds mid) actor)}))))
 
 (defn remove-bookmark
@@ -629,13 +640,12 @@
             (assoc (actor-info actor) :memo-id (str id)))
       (do
         (db/delete-memo-bookmark! ds mid (actor-kind actor) (actor-id actor))
-        (log/info "メモのブックマークを外しました" (assoc (actor-info actor) :memo-id mid))
+        (log-info! "メモのブックマークを外しました" (assoc (actor-info actor) :memo-id mid))
         {:ok true}))))
 
 (defn list-bookmarks
   "§2.4 1件以上ブックマークが付いている未削除の公開メモ。最新の created_at 降順。"
   [sys actor]
   (let [rows (db/list-bookmarked-memos (:ds sys))]
-    (log/info "メモのブックマーク一覧を返しました"
-              (assoc (actor-info actor) :count (count rows)))
+    (log-info! "メモのブックマーク一覧を返しました" (assoc (actor-info actor) :count (count rows)))
     {:ok true :memos (mapv #(present-memo sys % actor) rows)}))

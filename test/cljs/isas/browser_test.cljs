@@ -97,15 +97,37 @@
       (is (some? @synced))
       (b/register-map-sync! nil)
       (b/apply-fx! [:html "<p>2</p>"]))
-    (let [appended (atom [])]
-      (set! js/FormData (fn [] (js-obj "append" (fn [k v] (swap! appended conj [k v])))))
+    (let [appended (atom [])
+          store (atom {})]
+      (set! js/FormData (fn []
+                          (js-obj "append" (fn [k v] (swap! store assoc k v)
+                                                   (swap! appended conj [k v]))
+                                  "has" (fn [k] (contains? @store k))
+                                  "delete" (fn [k] (swap! store dissoc k)))))
       (set! js/fetch (fn [url opts]
                        (swap! fetch-calls conj [url opts])
                        (js/Promise.resolve (clj->js {:text (fn [] (js/Promise.resolve "{\"ok\":true}"))}))))
       (b/apply-fx! [:upload "PUT" "/api/user/basemaps/aerial" {:kind "aerial" :file "x" :skip nil} :basemap-upload-result])
       (is (= [["kind" "aerial"] ["file" "x"]] @appended))
       (set! js/fetch (fn [_ _] (js/Promise.reject (js/Error. "net"))))
-      (b/apply-fx! [:upload "POST" "/api/user/fields/import" {:file "y"} :field-save-result]))
+      (b/apply-fx! [:upload "POST" "/api/user/fields/import" {:file "y"} :field-save-result])
+      (b/apply-fx! [:upload-status "アップロード中…"]))
+    (b/on-change (clj->js {:target (clj->js {:type "file"
+                                             :getAttribute (fn [a]
+                                                             (case a
+                                                               "data-auto-upload" "1"
+                                                               "data-select" nil
+                                                               nil))
+                                             :files #js [#js {:name "a.txt"}]
+                                             :closest (fn [_]
+                                                        (clj->js {:getAttribute
+                                                                  (fn [a]
+                                                                    (when (= a "data-act") "memo-attach"))
+                                                                  :requestSubmit (fn [])}))
+                                             :value "x"})}))
+    (b/on-change (clj->js {:target (clj->js {:type "text"
+                                             :getAttribute (fn [_] nil)
+                                             :value "x"})}))
     (b/apply-fx! [:guest-lang "user" "en"])
     (is (= "en" (b/read-guest-lang "user")))
     (b/apply-fx! [:guest-lang "admin" "ja"])

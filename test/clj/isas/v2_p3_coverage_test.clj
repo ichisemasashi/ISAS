@@ -93,6 +93,18 @@
                                                     [:submit {:act "memo-search"
                                                               :form {:q "x"}}]))))))
           (is (:ok (memos/search sys actor {:author "admin@example.com"})))
+          (let [mid (get-in (memos/create-memo sys actor {:body "壊れた時刻" :status "published"})
+                            [:memo :id])]
+            (jdbc/execute-one! (:ds sys)
+                               ["UPDATE memos SET content_saved_at = ? WHERE id = ?" "not-an-instant" mid])
+            (let [g (memos/get-memo sys actor mid)]
+              (is (false? (get-in g [:memo :can_edit])))
+              (is (nil? (get-in g [:memo :editable_until]))))
+            (jdbc/execute-one! (:ds sys)
+                               ["UPDATE memos SET content_saved_at = NULL WHERE id = ?" mid])
+            (is (false? (get-in (memos/get-memo sys actor mid) [:memo :can_edit])))
+            (is (= "edit_window_closed"
+                   (:code (memos/update-memo sys actor mid {:body "だめ"})))))
           (let [mid (get-in (memos/create-memo sys actor {:body "窓閉" :status "published"}) [:memo :id])]
             (db/update-memo-body! (:ds sys) mid "窓閉"
                                   (time/format-instant (.minus (Instant/parse (time/now-utc))
@@ -298,14 +310,15 @@
                             :author_email "a@example.com" :tags [] :links []
                             :attachments [{:id 9 :filename "a.pdf"}]}]})]
       (is (re-find #"編集する|memo-edit|data-act=\"memo-update\"" h))
-      (is (re-find #"添付を追加|memo-attach" h))
+      (is (re-find #"memo-attach|data-auto-upload|ファイルを選ぶ" h))
       (is (re-find #"添付を外す|memo-detach" h)))
     (let [h (html {:page :memos
                    :memo-last-saved {:id 7 :body "直前投稿" :status "published" :can_edit true
                                      :author_email "a@example.com"
                                      :attachments [{:id 1 :filename "x.txt"}]}})]
       (is (re-find #"memo-compose-saved" h))
-      (is (re-find #"直前投稿" h)))
+      (is (re-find #"直前投稿" h))
+      (is (re-find #"memo-edit|data-act=\"memo-update\"" h)))
     (is (re-find #"10:00" (ui/format-display-instant "2026-09-22T01:00:00Z")))
     (is (re-find #"2026" (ui/format-display-instant "2026-09-22T10:30")))
     (is (= "nope" (ui/format-display-instant "nope")))
@@ -493,8 +506,10 @@
       (is (get-in (ui/handle base [:submit {:act "memo-bookmark" :form {}}]) [:state :flash :error?]))
       (is (= :api (first (first (:fx (ui/handle base [:submit {:act "memo-unbookmark" :form {:id "1"}}]))))))
       (is (get-in (ui/handle base [:submit {:act "memo-unbookmark" :form {}}]) [:state :flash :error?]))
-      (is (= :upload (first (first (:fx (ui/handle base [:submit {:act "memo-attach"
-                                                                  :form {:id "1" :file "x"}}]))))))
+      (is (= :upload-status (first (first (:fx (ui/handle base [:submit {:act "memo-attach"
+                                                                         :form {:id "1" :file "x"}}]))))))
+      (is (= :upload (first (second (:fx (ui/handle base [:submit {:act "memo-attach"
+                                                                   :form {:id "1" :file "x"}}]))))))
       (is (get-in (ui/handle base [:submit {:act "memo-attach" :form {}}]) [:state :flash :error?]))
       (is (= :api (first (first (:fx (ui/handle base [:submit {:act "memo-more"
                                                                :form {:before_id "9"}}]))))))
@@ -505,9 +520,29 @@
       ;; 残りの partial / not-covered
       (is (get-in (ui/handle base [:submit {:act "memo-select" :form {}}])
                   [:state :flash :error?]))
-      (is (= :upload (first (first (:fx (ui/handle (assoc base :page :memos-drafts)
-                                                   [:submit {:act "memo-attach"
-                                                             :form {:id "1" :file "x"}}]))))))
+      (is (= :upload-status (first (first (:fx (ui/handle (assoc base :page :memos-drafts)
+                                                          [:submit {:act "memo-attach"
+                                                                    :form {:id "1" :file "x"}}]))))))
+      (is (re-find #"アップロード完了"
+                   (get-in (ui/handle base [:memo-attach-result
+                                            {:ok true :memo {:id 1 :body "x" :can_edit true}}])
+                           [:state :flash :text])))
+      (is (= "x" (get-in (ui/handle (assoc base :memos [{:id 1 :body "old"}])
+                                    [:memo-attach-result
+                                     {:ok true :memo {:id 1 :body "x" :can_edit true}}])
+                         [:state :memos 0 :body])))
+      (let [r (ui/handle (assoc base
+                                :memos nil :memo-replies nil :memo-drafts nil
+                                :memo-bookmarks nil :memo-search-results nil
+                                :memo-selected 1
+                                :memo-selected-row {:id 1 :body "old"})
+                         [:memo-attach-result
+                          {:ok true :memo {:id 1 :body "差し替え" :can_edit true}}])]
+        (is (= "差し替え" (get-in r [:state :memo-selected-row :body])))
+        (is (= "差し替え" (get-in r [:state :memo-last-saved :body]))))
+      (is (true? (get-in (ui/handle base [:memo-attach-result
+                                          {:ok false :code "attachment_limit"}])
+                         [:state :flash :error?])))
       (is (re-find #"本文は2000"
                    (get-in (ui/handle (assoc base :pending-flash-near "memo-compose-section")
                                       [:memo-save-result {:ok false :code "body_too_long"}])

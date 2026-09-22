@@ -10,6 +10,8 @@
 
 (defonce pending-form-draft (atom nil))
 
+(defonce pending-upload-form (atom nil))
+
 (defn register-map-sync! [f]
   (reset! map-sync-fn f))
 
@@ -171,10 +173,17 @@
       (.catch (fn [_] (cb {:ok false :error true})))))
 
 (defn fetch-upload [method path form cb]
-  (let [fd (js/FormData.)]
-    (doseq [[k v] form]
-      (when (and k v)
-        (.append fd (name k) v)))
+  (let [el @pending-upload-form
+        _ (reset! pending-upload-form nil)
+        fd (if el
+             (js/FormData. el)
+             (let [built (js/FormData.)]
+               (doseq [[k v] form]
+                 (when (and k v)
+                   (.append built (name k) v)))
+               built))]
+    (when (.has fd "id")
+      (.delete fd "id"))
     (-> (js/fetch (api-url path)
                   (clj->js {:method method
                             :credentials "same-origin"
@@ -182,6 +191,18 @@
         (.then (fn [res] (.text res)))
         (.then (fn [text] (cb (parse-json text))))
         (.catch (fn [_] (cb {:ok false :error true}))))))
+
+(defn set-upload-status! [text]
+  (try
+    (let [nodes (.querySelectorAll js/document ".memo-upload-status")
+          n (.-length nodes)]
+      (dotimes [i n]
+        (set! (.-textContent (.item nodes i)) (str (or text "")))))
+    (catch :default _
+      nil)))
+
+(defn- msg [k]
+  (get (ui/messages-for (ui/ui-lang @app-state)) k))
 
 (declare dispatch!)
 
@@ -197,6 +218,8 @@
                 (when-not (str/blank? near)
                   (when-let [el (.getElementById js/document (str "flash-" near))]
                     (.scrollIntoView el #js {:block "nearest" :behavior "smooth"}))))
+              (when (= :done (:memo-upload-status @app-state))
+                (set-upload-status! (msg :memos-upload-done)))
               (when-let [f @map-sync-fn]
                 (f @app-state dispatch!))
               (when-let [f @gantt-sync-fn]
@@ -211,9 +234,11 @@
                               (if (:error body)
                                 (dispatch! [:api-error])
                                 (dispatch! [d body]))))
+      :upload-status (set-upload-status! a)
       :upload (fetch-upload a b c (fn [body]
                                     (if (:error body)
-                                      (dispatch! [:api-error])
+                                      (do (set-upload-status! (msg :memos-upload-failed))
+                                          (dispatch! [:api-error]))
                                       (dispatch! [d body]))))
       :guest-lang (write-guest-lang! a b)
       :restore-guest-lang
@@ -230,10 +255,12 @@
   (when-let [form (.-target ev)]
     (when (.getAttribute form "data-act")
       (.preventDefault ev)
-      (let [msg (.getAttribute form "data-confirm")]
+      (let [msg (.getAttribute form "data-confirm")
+            act (.getAttribute form "data-act")]
         (when (or (str/blank? (str msg)) (js/confirm msg))
-          (dispatch! [:submit {:act (.getAttribute form "data-act")
-                               :form (form->map form)}]))))))
+          (when (= "memo-attach" act)
+            (reset! pending-upload-form form))
+          (dispatch! [:submit {:act act :form (form->map form)}]))))))
 
 (defn on-click [ev]
   (let [t (.-target ev)
@@ -249,6 +276,13 @@
   (let [t (.-target ev)
         kind (when t (.getAttribute t "data-select"))
         v (when t (.-value t))]
+    (when (and t
+               (= "file" (str/lower-case (str (or (.-type t) ""))))
+               (.getAttribute t "data-auto-upload"))
+      (when-let [form (.closest t "form[data-act]")]
+        (when (= "memo-attach" (.getAttribute form "data-act"))
+          (when (pos? (or (some-> t .-files .-length) 0))
+            (.requestSubmit form)))))
     (when kind
       (case kind
         "lang" (do (queue-form-draft!)
