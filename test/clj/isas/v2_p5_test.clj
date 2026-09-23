@@ -128,7 +128,8 @@
     (is (= "紐づけを外す" (get ui/messages :memos-gantt-unlink)))
     (is (= "別の作業に付け替える" (get ui/messages :memos-gantt-retarget)))
     (is (= "削除済み" (get ui/messages :memos-gantt-deleted)))
-    (is (= "付けられる作業がありません" (get ui/messages :memos-gantt-empty)))
+    (is (= "付けられる作業がありません。作業／ガント画面で作業を登録してください"
+           (get ui/messages :memos-gantt-empty)))
     (is (= "Link work" (get ui/messages-en :memos-gantt-link))))
   (testing "V2P5-6-01 daily/gantt/works に付け外し必須無し"
     (doseq [p [:daily :gantt :works]]
@@ -431,9 +432,13 @@
     (is (= "" (#'ui/memo-gantt-option-label {:title nil} false)))
     (is (= "t" (#'ui/memo-gantt-option-label {:title "t" :user_email "  "} true)))
     (is (= "t" (#'ui/memo-gantt-option-label {:title "t"} false)))
+    (is (= "t（wn）" (#'ui/memo-gantt-option-label {:title "t" :work_name "wn"} false)))
+    (is (= "a@x — t（wn）" (#'ui/memo-gantt-option-label {:title "t" :work_name "wn" :user_email "a@x"} true)))
     (is (nil? (#'ui/memo-gantt-summary-html nil)))
     (is (re-find #"紐づいた作業" (#'ui/memo-gantt-summary-html {:title nil :deleted false})))
     (is (re-find #"削除済み" (#'ui/memo-gantt-summary-html {:title "x" :deleted true})))
+    (is (re-find #"要約表示" (#'ui/memo-gantt-summary-html {:title "x" :deleted false})))
+    (is (= "一覧から消す" (get ui/messages :gantt-row-delete)))
     (let [h (html {:page :memos :memo-selected 1
                    :memo-selected-row {:id 1 :body "親" :can_link_gantt true
                                        :gantt {:id nil :title "x" :deleted false}

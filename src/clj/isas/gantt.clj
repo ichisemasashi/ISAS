@@ -279,6 +279,7 @@
         rows (mapv (fn [row]
                      {:id (:id row)
                       :title (:title row)
+                      :work_name (:work_name row)
                       :user_id (:user_id row)
                       :user_email (get email-by-id (:user_id row))
                       :start_at (:start_at row)

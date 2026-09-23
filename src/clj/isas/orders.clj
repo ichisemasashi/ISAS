@@ -170,9 +170,11 @@
      :journals (present-journals ds (:id order))}))
 
 (defn- present-order-summary [ds order user-id]
-  (let [full (present-order ds order user-id)]
-    (select-keys full [:id :role :status :work_date :start_time :end_time
-                       :work_name :body :issuer_email :recipient_emails])))
+  (let [full (present-order ds order user-id)
+        mine? (some? (db/find-journal ds (:id order) user-id))]
+    (-> (select-keys full [:id :role :status :work_date :start_time :end_time
+                           :work_name :body :issuer_email :recipient_emails])
+        (assoc :my_journal mine?))))
 
 (defn- find-accessible-order [sys user-id id]
   (let [oid (geo/as-int id)

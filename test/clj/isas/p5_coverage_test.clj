@@ -192,6 +192,27 @@
                  (ui/render {:page :orders :kind "user" :session {:email "a"} :narrow? false
                              :fields [{:id 1 :name "北"}]
                              :orders-sent [] :orders-received []})))
+    (let [h (ui/render {:page :orders :kind "user" :session {:email "b@example.com"}
+                        :narrow? false :fields []
+                        :orders-sent [{:id 9 :role "issuer" :status "open"
+                                       :work_date "2026-09-12" :work_name "出"}]
+                        :orders-received
+                        [{:id 1 :role "recipient" :status "open" :my_journal false
+                          :work_date "2026-09-12" :work_name "未"}
+                         {:id 2 :role "recipient" :status "open" :my_journal true
+                          :work_date "2026-09-12" :work_name "済"}
+                         {:id 3 :role "recipient" :status "closed" :my_journal false
+                          :work_date "2026-09-12" :work_name "閉"}]})]
+      (is (re-find #"日誌未記入" h))
+      (is (re-find #"日誌済" h))
+      (is (re-find #"orders-lead" h)))
+    ;; 役割が無い詳細（日誌 cond の :else）
+    (is (re-find #"order-journals-heading"
+                 (ui/render {:page :order :kind "user" :session {:email "x"}
+                             :order {:id 1 :role nil :status "open"
+                                     :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
+                                     :work_name "x" :body "" :recipient_emails []
+                                     :fields [] :journals []}})))
     (is (re-find #"日付"
                  (ui/render {:page :order :kind "user" :session {:email "a"}
                              :order {:id 1 :role "issuer" :status "open"
@@ -214,17 +235,17 @@
                                 :fields [{:id 1 :name "北" :visible true}] :journals []}
                         :order-map {:work_name "田植え"
                                     :fields [{:id 1 :name "北" :status "done" :geojson {}}]}})]
-      (is (re-find #"日誌を書く" h))
+      (is (re-find #"日誌を投稿する" h))
       (is (re-find #"data-order-mode" h)))
     ;; 受け手だが閉じ済み → can-journal? の open? が false
-    (is (not (re-find #"日誌を書く"
+    (is (not (re-find #"日誌を投稿する|data-act=\"post-journal\""
                       (ui/render {:page :order :kind "user" :session {:email "b@example.com"}
                                   :order {:id 1 :role "recipient" :status "closed"
                                           :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
                                           :work_name "田植え" :body "" :recipient_emails ["b@example.com"]
                                           :fields [] :journals nil}}))))
     ;; journals が nil の受け手（or の [] 枝と can-journal?）
-    (is (re-find #"日誌を書く"
+    (is (re-find #"日誌を投稿する"
                  (ui/render {:page :order :kind "user" :session {:email "b@example.com"}
                              :order {:id 1 :role "recipient" :status "open"
                                      :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"
@@ -248,7 +269,7 @@
       (is (re-find #"済" h))
       (is (not (re-find #"data-act=\"post-journal\"" h))))
     ;; 他人の日誌だけある受け手（some 述語が false の枝）
-    (is (re-find #"日誌を書く"
+    (is (re-find #"日誌を投稿する"
                  (ui/render {:page :order :kind "user" :session {:email "b@example.com"}
                              :order {:id 1 :role "recipient" :status "open"
                                      :work_date "2026-09-12" :start_time "08:00" :end_time "17:00"

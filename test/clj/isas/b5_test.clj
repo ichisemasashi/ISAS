@@ -64,7 +64,7 @@
                              :order-map {:work_name "田植え"
                                          :fields [{:id 1 :name "北" :status "partial"
                                                    :geojson tu/square}]}})]
-            (is (re-find #"日誌を書く" phone))
+            (is (re-find #"日誌を投稿する|日誌を書く" phone))
             (is (re-find #"id=\"ol-map\"" phone))
             (is (re-find #"data-order-mode=\"1\"" phone))
             (is (re-find #"北（一部）" phone)))

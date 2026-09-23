@@ -131,6 +131,7 @@
    :works-section-add "新しい作業を登録"
    :works-section-edit "2. 基本情報を直す"
    :works-section-children "3. 作業時間とチェック項目"
+   :works-section-delete "4. 一覧から消す（ソフト削除）"
    :works-children-lead "この作業に紐づく明細です。上の一覧で作業を選んだあとに足せます"
    :works-pick-hint "上の一覧で作業名のボタンを押すと、ここに編集欄と「作業時間・チェック項目」が出ます"
    :works-editing-prefix "編集中: "
@@ -138,7 +139,7 @@
    :works-open-selected "（いま編集中）"
    :works-basics-lead "題名・時刻・実行状態・作業名・対象圃場を直し「基本情報を保存」を押します"
    :works-basics-save "基本情報を保存"
-   :works-delete-lead "この作業そのものを一覧から消します（作業時間・チェックも一緒に見えなくなります）"
+   :works-delete-lead "パソコンの作業／ガント画面で、選んだ作業を一覧から消します（ソフト削除）。作業時間・チェックも通常の一覧から消えます。メモに付けていた場合は、スレッドの「紐づいた作業」に「削除済み」と出ます"
    :nav-works "作業"
    :nav-gantt "ガント"
    :nav-daily "日次"
@@ -174,7 +175,7 @@
    :fields-lead "圃場の名前・面積・メモを直します。新しい圃場は地図画面で作ります"
    :invite-lead "相手のメールアドレスを入れると、初期パスワード付きで招待できます"
    :password-lead "今のパスワードを確認してから、新しいパスワードに換えます"
-   :work-name-hint "地図の塗りや進捗％と結びつける名前です。無くてもかまいません"
+   :work-name-hint "地図の塗りや進捗％と結びつける名前です。無くてもかまいません。塗り・作業・ガント・指示で使った名前は候補から選べます"
    :execution-status "実行状態"
    :exec-not-started "未着手"
    :exec-in-progress "着手中"
@@ -236,8 +237,9 @@
    :gantt-percent-unit "％"
    :gantt-dim-color "#e8e8e8"
    :gantt-delete "削除"
-   :gantt-delete-confirm "この作業を一覧から消します。よろしいですか？"
-   :gantt-deleted "作業を消しました"
+   :gantt-row-delete "一覧から消す"
+   :gantt-delete-confirm "この作業を一覧から消します（ソフト削除）。よろしいですか？"
+   :gantt-deleted "作業を一覧から消しました"
    :gantt-review "振り返り"
    :gantt-review-empty "確定した日次％はまだありません"
    :gantt-progress-na "—"
@@ -257,6 +259,17 @@
    :orders-create "指示を出す"
    :orders-close "この指示を閉じる"
    :orders-journal "日誌を書く"
+   :orders-lead "日誌は「受けた指示」を開き、進行中かつ未記入のときだけ書けます。出した指示では日誌は書けません"
+   :journal-lead "受け手として「やった」内容を1通だけ残せます。書いたら直せません"
+   :journal-body-label "日誌の本文"
+   :journal-submit "日誌を投稿する"
+   :journal-saved "日誌を書きました"
+   :journal-done-hint "この指示へのあなたの日誌は投稿済みです（訂正できません）"
+   :journal-closed-hint "閉じた指示には日誌を書けません"
+   :journal-issuer-hint "出した人は日誌を書けません。受け手の日誌は下に表示されます"
+   :journal-need-open "日誌を書くには、受けた指示の詳細を開いてください"
+   :order-journal-pending "日誌未記入"
+   :order-journal-done "日誌済"
    :others-title "他人の対象圃場"
    :relations-title "関係を切る"
    :order-no-fields "圃場が1枚以上あるときだけ、指示を出せます"
@@ -425,14 +438,16 @@
    :memos-bookmarked "ブックマークしました"
    :memos-unbookmarked "ブックマークを外しました"
    :memos-gantt-label "紐づいた作業"
+   :memos-gantt-summary-hint "ここに出る「紐づいた作業」が、設計上の要約表示です（別の「要約」欄はありません）"
    :memos-gantt-link "作業を紐づける"
    :memos-gantt-retarget "別の作業に付け替える"
    :memos-gantt-unlink "紐づけを外す"
    :memos-gantt-deleted "削除済み"
-   :memos-gantt-empty "付けられる作業がありません"
+   :memos-gantt-empty "付けられる作業がありません。作業／ガント画面で作業を登録してください"
    :memos-gantt-select "作業を選ぶ"
    :memos-gantt-linked "作業を紐づけました"
    :memos-gantt-unlinked "紐づけを外しました"
+   :work-name-shared-hint "塗り・作業・ガント・指示で使った名前は、どの画面の作業名入力でも候補から選べます"
    :link-not-allowed "下書きや返信には作業を付けられません"
    :gantt-id-required "紐づける作業を選んでください"
    :memo-not-found "そのメモはありません"
@@ -575,6 +590,7 @@
    :works-section-add "Register a new work"
    :works-section-edit "2. Edit basics"
    :works-section-children "3. Work times and checklist"
+   :works-section-delete "4. Remove from list (soft delete)"
    :works-children-lead "Details for this work. Available after you pick a work above"
    :works-pick-hint "Press a work name above to open editing and “work times / checklist” here"
    :works-editing-prefix "Editing: "
@@ -582,7 +598,7 @@
    :works-open-selected " (editing now)"
    :works-basics-lead "Change title, times, status, work name, and fields, then press “Save basics”"
    :works-basics-save "Save basics"
-   :works-delete-lead "Removes this work from the list (its work times and checklist also disappear from normal views)"
+   :works-delete-lead "On Works or Gantt (computer), soft-delete the selected work from the list. Its work times and checklist disappear from normal views. If a memo was linked, the thread shows “Linked work: … (Deleted)”"
    :nav-works "Works"
    :nav-gantt "Gantt"
    :nav-daily "Daily"
@@ -618,7 +634,7 @@
    :fields-lead "Edit field names, areas, and memos. Create new fields on the map"
    :invite-lead "Enter the counterpart’s email to invite them with an initial password"
    :password-lead "Confirm your current password, then set a new one"
-   :work-name-hint "Links to map paint and progress %. Optional"
+   :work-name-hint "Links to map paint and progress %. Optional. Names from paints, works, gantt, and orders appear as choices"
    :execution-status "Execution status"
    :exec-not-started "Not started"
    :exec-in-progress "In progress"
@@ -680,8 +696,9 @@
    :gantt-percent-unit "%"
    :gantt-dim-color "#e8e8e8"
    :gantt-delete "Delete"
-   :gantt-delete-confirm "Remove this work from the list?"
-   :gantt-deleted "Work removed"
+   :gantt-row-delete "Remove from list"
+   :gantt-delete-confirm "Remove this work from the list (soft delete)?"
+   :gantt-deleted "Work removed from the list"
    :gantt-review "Review"
    :gantt-review-empty "No finalized daily percent yet"
    :gantt-progress-na "—"
@@ -701,6 +718,17 @@
    :orders-create "Create order"
    :orders-close "Close this order"
    :orders-journal "Write journal"
+   :orders-lead "Open a received order to write a journal when it is still open and you have not written one. Issuers cannot write journals"
+   :journal-lead "As a recipient you may leave one “done” note. You cannot edit it afterward"
+   :journal-body-label "Journal body"
+   :journal-submit "Post journal"
+   :journal-saved "Journal saved"
+   :journal-done-hint "You already posted a journal for this order (it cannot be edited)"
+   :journal-closed-hint "Closed orders cannot accept journals"
+   :journal-issuer-hint "Issuers cannot write journals. Recipient journals appear below"
+   :journal-need-open "Open a received order’s detail to write a journal"
+   :order-journal-pending "Journal pending"
+   :order-journal-done "Journal done"
    :others-title "Others' target fields"
    :relations-title "Cut relation"
    :order-no-fields "Orders can be created only when you have at least one field"
@@ -869,14 +897,16 @@
    :memos-bookmarked "Bookmarked"
    :memos-unbookmarked "Bookmark removed"
    :memos-gantt-label "Linked work"
+   :memos-gantt-summary-hint "“Linked work” below is the design’s summary display (there is no separate Summary field)"
    :memos-gantt-link "Link work"
    :memos-gantt-retarget "Link a different work"
    :memos-gantt-unlink "Unlink work"
    :memos-gantt-deleted "Deleted"
-   :memos-gantt-empty "No work available to link"
+   :memos-gantt-empty "No work available to link. Register a work on Works or Gantt first"
    :memos-gantt-select "Choose work"
    :memos-gantt-linked "Work linked"
    :memos-gantt-unlinked "Work unlinked"
+   :work-name-shared-hint "Names used in paints, works, gantt, or orders appear as choices wherever you enter a work name"
    :link-not-allowed "Drafts and replies cannot be linked to work"
    :gantt-id-required "Choose a work to link"
    :memo-not-found "That memo does not exist"
@@ -1598,10 +1628,20 @@
 (defn- order-list-items [rows]
   (apply str
          (for [o rows]
-           (str "<li><a data-nav href=\"/orders/" (esc (:id o)) "\">"
-                (esc (or (format-display-date (:work_date o)) (:work_date o))) " "
-                (esc (:work_name o)) "（" (esc (order-status-label (:status o))) "）"
-                "</a></li>"))))
+           (let [journal-badge
+                 (when (= "recipient" (:role o))
+                   (cond
+                     (= "closed" (:status o))
+                     nil
+                     (:my_journal o)
+                     (str "［" (esc (m :order-journal-done)) "］")
+                     :else
+                     (str "［" (esc (m :order-journal-pending)) "］")))]
+             (str "<li><a data-nav href=\"/orders/" (esc (:id o)) "\">"
+                  (esc (or (format-display-date (:work_date o)) (:work_date o))) " "
+                  (esc (:work_name o)) "（" (esc (order-status-label (:status o))) "）"
+                  (or journal-badge "")
+                  "</a></li>")))))
 
 (defn orders-view [state]
   (layout (m :orders-title)
@@ -1611,10 +1651,13 @@
                  (str "<p id=\"orders-admin-hint\">" (esc (m :orders-admin-phone)) "</p>")
                  (str (when (and (not (:narrow? state)) (seq (:fields state)))
                         (str "<p><a data-nav href=\"/orders/new\">" (esc (m :orders-create)) "</a></p>"))
+                      "<p class=\"page-lead\" id=\"orders-lead\">" (esc (m :orders-lead)) "</p>"
                       "<h2>" (esc (m :order-sent)) "</h2>"
                       "<ul>" (order-list-items (:orders-sent state)) "</ul>"
                       "<h2>" (esc (m :order-received)) "</h2>"
-                      "<ul>" (order-list-items (:orders-received state)) "</ul>")))))
+                      "<ul id=\"orders-received-list\">" (order-list-items (:orders-received state)) "</ul>"
+                      "<p class=\"field-hint\" id=\"orders-journal-howto\">"
+                      (esc (m :journal-need-open)) "</p>")))))
 
 (defn orders-new-view [state]
   (if (empty? (:fields state))
@@ -1726,18 +1769,34 @@
                           "<form data-act=\"close-order\" method=\"post\">"
                           "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id o)) "\">"
                           "<button type=\"submit\">" (esc (m :orders-close)) "</button></form>"))
-                   "<h2>" (esc (m :order-journals)) "</h2>"
-                   "<ul>"
+                   "<h2 id=\"order-journals-heading\">" (esc (m :order-journals)) "</h2>"
+                   "<p class=\"section-lead\" id=\"order-journal-lead\">" (esc (m :journal-lead)) "</p>"
+                   "<ul id=\"order-journals-list\">"
                    (apply str
                           (for [j (:journals o)]
                             (str "<li>" (esc (:author_email j)) ": " (esc (:body j)) "</li>")))
                    "</ul>"
-                   (when can-journal?
-                     (str "<form data-act=\"post-journal\" method=\"post\">"
+                   (cond
+                     can-journal?
+                     (str "<section class=\"form-section\" id=\"order-journal-form-section\">"
+                          (flash-at state "order-journal-form-section")
+                          "<form data-act=\"post-journal\" method=\"post\" id=\"order-journal-form\">"
                           "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id o)) "\">"
-                          "<label>" (esc (m :orders-journal))
-                          "<textarea name=\"body\"></textarea></label>"
-                          "<button type=\"submit\">" (esc (m :orders-journal)) "</button></form>")))))))
+                          "<label>" (esc (m :journal-body-label))
+                          "<textarea name=\"body\" id=\"order-journal-body\" required"
+                          " placeholder=\"" (esc (m :journal-body-label)) "\"></textarea></label>"
+                          "<button type=\"submit\" id=\"order-journal-submit\" class=\"btn-primary\">"
+                          (esc (m :journal-submit)) "</button></form></section>")
+                     (and recipient? open?)
+                     (str "<p class=\"field-hint\" id=\"order-journal-done\">"
+                          (esc (m :journal-done-hint)) "</p>")
+                     (and recipient? (not open?))
+                     (str "<p class=\"field-hint\" id=\"order-journal-closed\">"
+                          (esc (m :journal-closed-hint)) "</p>")
+                     issuer?
+                     (str "<p class=\"field-hint\" id=\"order-journal-issuer\">"
+                          (esc (m :journal-issuer-hint)) "</p>")
+                     :else nil))))))
 
 (defn others-view [state]
   (let [form (or (:form state) {})
@@ -2639,13 +2698,14 @@
                          "<button type=\"submit\" id=\"works-save-btn\" class=\"btn-primary\">"
                          (esc (m :works-basics-save)) "</button></form>"
                          (gantt-children-edit-html state (:id sel) "works")
-                         "<div class=\"danger-zone\">"
+                         "<div class=\"danger-zone\" id=\"works-delete-section\">"
+                         (section-title-html :works-section-delete)
                          "<p class=\"section-lead\">" (esc (m :works-delete-lead)) "</p>"
                          "<form data-act=\"delete-gantt-row\" method=\"post\" id=\"works-delete-form\""
                          " data-confirm=\"" (esc (m :gantt-delete-confirm)) "\">"
                          "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                          "<button type=\"submit\" id=\"works-delete-btn\">"
-                         (esc (m :gantt-delete)) "</button></form>"
+                         (esc (m :gantt-row-delete)) "</button></form>"
                          "</div>"
                          "</section>"))
                       "<section class=\"form-section\" id=\"works-add-section\">"
@@ -2664,6 +2724,13 @@
                       "<label>" (esc (m :gantt-end))
                       "<input id=\"works-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
                       "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                      "<label>" (esc (m :work-name))
+                      "<input id=\"works-new-work-name\" name=\"work_name\" list=\"works-add-work-name-list\" value=\"\">"
+                      "<datalist id=\"works-add-work-name-list\">"
+                      (apply str (for [nm (:work-names state)]
+                                   (str "<option value=\"" (esc nm) "\">")))
+                      "</datalist>"
+                      (field-hint (m :work-name-hint)) "</label>"
                       "<p class=\"field-hint\">" (esc (m :execution-status)) ": "
                       (esc (m :exec-not-started)) "</p>"
                       "<button type=\"submit\" id=\"works-add-btn\" class=\"btn-primary\">"
@@ -2890,13 +2957,14 @@
                             "<button type=\"submit\" id=\"gantt-save-btn\" class=\"btn-primary\">"
                             (esc (m :works-basics-save)) "</button></form>"
                             (gantt-children-edit-html state (:id sel) "gantt")
-                            "<div class=\"danger-zone\">"
+                            "<div class=\"danger-zone\" id=\"gantt-delete-section\">"
+                            (section-title-html :works-section-delete)
                             "<p class=\"section-lead\">" (esc (m :works-delete-lead)) "</p>"
                             "<form data-act=\"delete-gantt-row\" method=\"post\" id=\"gantt-delete-form\""
                             " data-confirm=\"" (esc (m :gantt-delete-confirm)) "\">"
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                             "<button type=\"submit\" id=\"gantt-delete-btn\">"
-                            (esc (m :gantt-delete)) "</button></form>"
+                            (esc (m :gantt-row-delete)) "</button></form>"
                             "<form data-act=\"review-gantt-row\" method=\"post\" id=\"gantt-review-form\">"
                             "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id sel)) "\">"
                             "<button type=\"submit\" id=\"gantt-review-btn\">"
@@ -2934,6 +3002,13 @@
                          "<label>" (esc (m :gantt-end))
                          "<input id=\"gantt-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
                          "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
+                         "<label>" (esc (m :work-name))
+                         "<input id=\"gantt-new-work-name\" name=\"work_name\" list=\"gantt-add-work-name-list\" value=\"\">"
+                         "<datalist id=\"gantt-add-work-name-list\">"
+                         (apply str (for [nm (:work-names state)]
+                                      (str "<option value=\"" (esc nm) "\">")))
+                         "</datalist>"
+                         (field-hint (m :work-name-hint)) "</label>"
                          "<button type=\"submit\" id=\"gantt-add-btn\" class=\"btn-primary\">"
                          (esc (m :gantt-work-add)) "</button></form>"
                          "</section>"
@@ -3106,10 +3181,14 @@
 
 (defn- memo-gantt-option-label [row admin?]
   (let [title (str (or (:title row) ""))
-        email (str (or (:user_email row) ""))]
+        wn (str/trim (str (or (:work_name row) "")))
+        email (str (or (:user_email row) ""))
+        base (if (or (str/blank? wn) (= wn title))
+               title
+               (str title "（" wn "）"))]
     (if (and admin? (not (str/blank? email)))
-      (str email " — " title)
-      title)))
+      (str email " — " base)
+      base)))
 
 (defn- memo-gantt-summary-html [gantt]
   (when gantt
@@ -3118,7 +3197,9 @@
          (esc (or (:title gantt) ""))
          (when (:deleted gantt)
            (str "（" (esc (m :memos-gantt-deleted)) "）"))
-         "</p>")))
+         "</p>"
+         "<p class=\"field-hint\" id=\"memo-gantt-summary-hint\">"
+         (esc (m :memos-gantt-summary-hint)) "</p>")))
 
 (defn- memo-gantt-link-section
   "スレッド詳細の公開済み親のみ。作成者・管理者は付け外し、閲覧者は紐づきありのときだけ要約。"
@@ -3920,9 +4001,12 @@
 
 (defn journal-save-result [state body]
   (if (:ok body)
-    {:state (assoc state :order (dissoc body :ok) :flash nil)
-     :fx [[:api "GET" (str "/api/user/orders/" (:id body)) nil :order-loaded]]}
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body))})]
+    (let [s (assoc state :order (dissoc body :ok)
+                   :flash {:error? false :text (m :journal-saved)
+                           :near "order-journal-form-section"})]
+      {:state s :fx [[:api "GET" (str "/api/user/orders/" (:id body)) nil :order-loaded]]})
+    (let [s (assoc state :flash {:error? true :text (code-message (:code body))
+                                 :near "order-journal-form-section"})]
       {:state s :fx [[:html (render s)]]})))
 
 (defn others-fields-loaded [state body]
@@ -4371,6 +4455,8 @@
           title' (if (str/blank? title) (m :gantt-work-new-placeholder) title)
           start (str/trim (as-text (:start_at form)))
           end (str/trim (as-text (:end_at form)))
+          wn-raw (str/trim (as-text (:work_name form)))
+          wn (if (str/blank? wn-raw) title' wn-raw)
           near (if (= :gantt (:page state)) "gantt-add-form" "works-add-form")]
       (cond
         (and (= :gantt (:page state)) (str/blank? tid))
@@ -4384,7 +4470,7 @@
                 :title_id (when-not (str/blank? tid) tid)
                 :start_at start
                 :end_at end
-                :work_name nil
+                :work_name wn
                 :field_ids []}
                :gantt-save-result]]}))
     "save-gantt-row"

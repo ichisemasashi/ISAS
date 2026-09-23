@@ -742,6 +742,17 @@
                          ORDER BY work_name"
                         user-id])))
 
+(defn list-gantt-row-titles
+  "作業・ガント行の表示名（title）。作業名入力の候補に含める。"
+  [ds user-id]
+  (mapv :title
+        (jdbc/execute! ds
+                       ["SELECT DISTINCT title AS title FROM gantt_rows
+                         WHERE user_id = ? AND deleted_at IS NULL
+                           AND title IS NOT NULL AND title <> ''
+                         ORDER BY title"
+                        user-id])))
+
 (defn list-issued-order-work-names [ds user-id]
   (mapv :work_name
         (jdbc/execute! ds
@@ -753,6 +764,7 @@
 (defn list-work-name-candidates [ds user-id]
   (->> (concat (list-work-names ds user-id)
                (list-gantt-work-names ds user-id)
+               (list-gantt-row-titles ds user-id)
                (list-issued-order-work-names ds user-id))
        (remove str/blank?)
        distinct
