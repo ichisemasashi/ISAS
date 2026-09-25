@@ -79,24 +79,36 @@
         end (.atStartOfDay (.plusDays d 1))]
     [(format-local-minute start) (format-local-minute end)]))
 
-(defn tokyo-days7-window
-  "Asia/Tokyo の直近7暦日（今日含む）[(今日-6日)0:00, 翌日0:00)。終端は含まない。"
+(defn tokyo-now-local-minute
+  "Asia/Tokyo の現在時刻（分まで）の local-minute 文字列。"
   []
+  (format-local-minute (LocalDateTime/ofInstant (now-instant) tokyo)))
+
+(defn- this-monday []
   (let [d (today-tokyo)
-        start (.atStartOfDay (.minusDays d 6))
-        end (.atStartOfDay (.plusDays d 1))]
-    [(format-local-minute start) (format-local-minute end)]))
+        dow (.getValue (.getDayOfWeek d))]
+    (.minusDays d (long (dec dow)))))
 
 (defn tokyo-week-window
-  "Asia/Tokyo の今週（月曜始まり）[月曜0:00, 翌月曜0:00)。終端は含まない。
-  日次一覧では使わない（ガント軸など他用途向けに残す）。"
+  "Asia/Tokyo の今週（月曜始まり）[月曜0:00, 翌月曜0:00)。終端は含まない。"
   []
-  (let [d (today-tokyo)
-        dow (.getValue (.getDayOfWeek d))
-        monday (.minusDays d (long (dec dow)))
-        start (.atStartOfDay monday)
-        end (.atStartOfDay (.plusDays monday 7))]
-    [(format-local-minute start) (format-local-minute end)]))
+  (let [monday (this-monday)]
+    [(format-local-minute (.atStartOfDay monday))
+     (format-local-minute (.atStartOfDay (.plusDays monday 7)))]))
+
+(defn tokyo-last-week-window
+  "Asia/Tokyo の先週（月曜始まり）[先週月曜0:00, 今週月曜0:00)。終端は含まない。"
+  []
+  (let [monday (this-monday)]
+    [(format-local-minute (.atStartOfDay (.minusDays monday 7)))
+     (format-local-minute (.atStartOfDay monday))]))
+
+(defn tokyo-around7-window
+  "Asia/Tokyo の前後7日（今日含む15暦日）[(今日-7日)0:00, (今日+8日)0:00)。終端は含まない。"
+  []
+  (let [d (today-tokyo)]
+    [(format-local-minute (.atStartOfDay (.minusDays d 7)))
+     (format-local-minute (.atStartOfDay (.plusDays d 8)))]))
 
 (def work-date-fmt (DateTimeFormatter/ofPattern "yyyy-MM-dd"))
 

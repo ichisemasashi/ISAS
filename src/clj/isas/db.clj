@@ -97,6 +97,7 @@
       end_at TEXT NOT NULL,
       work_name TEXT,
       execution_status TEXT NOT NULL DEFAULT 'not_started',
+      version INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       deleted_at TEXT,
@@ -277,6 +278,7 @@
   (jdbc/execute! ds ["UPDATE gantt_rows SET execution_status = 'not_started'
                       WHERE execution_status IS NULL OR TRIM(execution_status) = ''
                          OR execution_status NOT IN ('not_started', 'in_progress', 'done')"])
+  (ensure-column! ds "gantt_rows" "version" "INTEGER NOT NULL DEFAULT 1")
   (ensure-column! ds "fields" "area_m2" "INTEGER")
   (ensure-column! ds "fields" "area_ha" "REAL")
   (ensure-column! ds "fields" "memo" "TEXT")
@@ -564,12 +566,21 @@
                       (or execution-status "not_started")
                       (time/now-utc) (time/now-utc)]))
 
-(defn update-gantt-row! [ds id {:keys [title-id title start-at end-at work-name execution-status]}]
+(defn update-gantt-row!
+  "expected-version が nil 以外なら、版が一致するときだけ更新する。更新できなければ nil。"
+  [ds id {:keys [title-id title start-at end-at work-name execution-status expected-version]}]
   (jdbc/execute-one! ds
                      ["UPDATE gantt_rows SET title_id = ?, title = ?, start_at = ?, end_at = ?, work_name = ?,
-                        execution_status = ?, updated_at = ?
+                        execution_status = ?, updated_at = ?, version = version + 1
+                       WHERE id = ? AND (? IS NULL OR version = ?) RETURNING *"
+                      title-id title start-at end-at work-name execution-status (time/now-utc) id
+                      expected-version expected-version]))
+
+(defn update-gantt-row-status! [ds id execution-status]
+  (jdbc/execute-one! ds
+                     ["UPDATE gantt_rows SET execution_status = ?, updated_at = ?, version = version + 1
                        WHERE id = ? RETURNING *"
-                      title-id title start-at end-at work-name execution-status (time/now-utc) id]))
+                      execution-status (time/now-utc) id]))
 
 (defn find-gantt-row [ds user-id id]
   (jdbc/execute-one! ds ["SELECT * FROM gantt_rows WHERE id = ? AND user_id = ?" id user-id]))

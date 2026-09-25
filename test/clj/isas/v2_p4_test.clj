@@ -210,7 +210,7 @@
             (let [pw0 (tu/invite-pw app asid "v2p4-nofield@example.com")
                   usid0 (tu/user-sid app "v2p4-nofield@example.com" pw0)
                   r0 (tu/parse (tu/get-query app "/api/user/gantt/daily"
-                                             {:range "days7"} "user" usid0))]
+                                             {:range "around7"} "user" usid0))]
               (is (:ok r0))
               (is (= [] (:rows r0)))))
           (testing "V2P4-2.8-02 圃場0の作成は no_fields"

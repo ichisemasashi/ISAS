@@ -642,6 +642,16 @@
           (log/warn "ガント作業の更新を読めませんでした" :error (.getMessage e))
           (fail "title_required"))))))
 
+(defn gantt-status-put [sys req id]
+  (with-farm sys req
+    (fn [uid]
+      (try
+        (let [r (gantt/update-row-status sys uid id (read-body req))]
+          (if (:ok r) (ok {:row (:row r)}) (fail (:code r))))
+        (catch Exception e
+          (log/warn "ガント作業の実行状態を読めませんでした" :error (.getMessage e))
+          (fail "execution_status_invalid"))))))
+
 (defn gantt-titles-get [sys req]
   (with-farm sys req
     (fn [uid]
@@ -959,6 +969,8 @@
         (when (= method :get) [:gantt-progress-days id]))
       (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)/progress" (str uri))]
         (when (= method :get) [:gantt-progress id]))
+      (when-let [[_ id] (re-matches #"/api/user/gantt/(\d+)/status" (str uri))]
+        (when (= method :put) [:gantt-status-put id]))
       (when-let [[_ gid tid] (re-matches #"/api/user/gantt/(\d+)/work-times/(\d+)" (str uri))]
         (cond
           (= method :put) [:gantt-work-time-put gid tid]
@@ -1050,6 +1062,7 @@
         :gantt-daily-get (gantt-daily-get sys req)
         :gantt-post (gantt-post sys req)
         :gantt-put (gantt-put sys req (second spec))
+        :gantt-status-put (gantt-status-put sys req (second spec))
         :gantt-delete (gantt-delete sys req (second spec))
         :gantt-titles-get (gantt-titles-get sys req)
         :gantt-titles-post (gantt-titles-post sys req)

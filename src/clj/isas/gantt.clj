@@ -77,6 +77,7 @@
    :end_at (:end_at row)
    :work_name (:work_name row)
    :execution_status (:execution_status row)
+   :version (:version row)
    :field_ids (db/list-gantt-targets ds (:id row))})
 
 (defn- child-summary [ds gantt-id]
@@ -88,9 +89,14 @@
      :checklist_done (long (if (nil? done) 0 done))
      :checklist_total (long (if (nil? total) 0 total))}))
 
-(defn- present-daily-row [ds row]
+(defn- overdue? [row now]
+  (and (not= "done" (:execution_status row))
+       (not (pos? (compare (str (:end_at row)) now)))))
+
+(defn- present-daily-row [ds row now]
   (merge (present-row ds row)
-         (child-summary ds (:id row))))
+         (child-summary ds (:id row))
+         {:overdue (overdue? row now)}))
 
 (def ^:private execution-statuses #{"not_started" "in_progress" "done"})
 
@@ -118,7 +124,9 @@
 (defn- daily-window [range-key]
   (case (str range-key)
     "today" {:ok true :window (time/tokyo-today-window)}
-    "days7" {:ok true :window (time/tokyo-days7-window)}
+    "week" {:ok true :window (time/tokyo-week-window)}
+    "last_week" {:ok true :window (time/tokyo-last-week-window)}
+    "around7" {:ok true :window (time/tokyo-around7-window)}
     "all" {:ok true :window :all}
     (do
       (log/warn "日次の期間が不正です" :range range-key)
@@ -128,6 +136,16 @@
   (and (pos? (compare window-end (str (:start_at row))))
        (pos? (compare (str (:end_at row)) window-start))))
 
+(defn- in-daily-window?
+  "期間と重なる作業に加え、期間が現在を含むときは、期間より前に終わった未完了（遅れ）も含める。
+  日次の期間はどれも現在以前に始まるので、現在を含むかは終端だけで判定する。"
+  [window now row]
+  (or (= :all window)
+      (let [[w0 w1] window]
+        (or (overlaps-window? row w0 w1)
+            (and (pos? (compare w1 now))
+                 (overdue? row now))))))
+
 (defn list-daily [sys user-id {:keys [range statuses]}]
   (let [win (daily-window range)
         st (parse-daily-statuses statuses)]
@@ -136,14 +154,11 @@
       (not (:ok st)) st
       :else
       (let [status-set (set (:statuses st))
-            base (->> (db/list-gantt-rows (:ds sys) user-id)
-                      (filter #(contains? status-set (:execution_status %))))
-            rows (if (= :all (:window win))
-                   (mapv #(present-daily-row (:ds sys) %) base)
-                   (let [[w0 w1] (:window win)]
-                     (->> base
-                          (filter #(overlaps-window? % w0 w1))
-                          (mapv #(present-daily-row (:ds sys) %)))))]
+            now (time/tokyo-now-local-minute)
+            rows (->> (db/list-gantt-rows (:ds sys) user-id)
+                      (filter #(contains? status-set (:execution_status %)))
+                      (filter #(in-daily-window? (:window win) now %))
+                      (mapv #(present-daily-row (:ds sys) % now)))]
         (log/info "日次一覧を返しました"
                   :user-id user-id :range (str range) :statuses (:statuses st) :count (count rows))
         {:ok true :rows rows}))))
@@ -157,20 +172,18 @@
       :else
       (let [status-set (set (:statuses st))
             window (:window win)
+            now (time/tokyo-now-local-minute)
             users (db/list-active-users (:ds sys))
             rows (->> users
                       (mapcat
                        (fn [u]
                          (let [uid (:id u)
                                email (:email u)
-                               base (->> (db/list-gantt-rows (:ds sys) uid)
-                                         (filter #(contains? status-set (:execution_status %))))
-                               filtered (if (= :all window)
-                                          base
-                                          (let [[w0 w1] window]
-                                            (filter #(overlaps-window? % w0 w1) base)))]
+                               filtered (->> (db/list-gantt-rows (:ds sys) uid)
+                                             (filter #(contains? status-set (:execution_status %)))
+                                             (filter #(in-daily-window? window now %)))]
                            (map (fn [row]
-                                  (assoc (present-daily-row (:ds sys) row)
+                                  (assoc (present-daily-row (:ds sys) row now)
                                          :user_id uid
                                          :user_email email))
                                 filtered))))
@@ -347,24 +360,57 @@
       :else
       (let [v (validate-body sys user-id body)
             st (when (contains? body :execution_status)
-                 (normalize-execution-status (:execution_status body)))]
+                 (normalize-execution-status (:execution_status body)))
+            expected (when (some? (:version body)) (geo/as-int (:version body)))]
         (cond
           (not (:ok v)) v
           (and st (not (:ok st))) st
+          (and (some? (:version body)) (nil? expected))
+          (do
+            (log/warn "ガント作業の版が不正です" :user-id user-id :gantt-id gid :version (:version body))
+            {:ok false :code "gantt_conflict"})
           :else
-          (let [status (if st (:execution-status st) (:execution_status row))]
-            (db/update-gantt-row! (:ds sys) gid {:title-id (:title-id v)
-                                                 :title (:title v)
-                                                 :start-at (:start-at v)
-                                                 :end-at (:end-at v)
-                                                 :work-name (:work-name v)
-                                                 :execution-status status})
-            (db/replace-gantt-targets! (:ds sys) gid (:field-ids v))
-            (log/info "ガント作業を直しました"
-                      :user-id user-id :gantt-id gid :title-id (:title-id v)
-                      :title (:title v) :fields (count (:field-ids v))
-                      :execution-status status)
-            {:ok true :row (present-row (:ds sys) (db/find-gantt-row (:ds sys) user-id gid))}))))))
+          (let [status (if st (:execution-status st) (:execution_status row))
+                updated (db/update-gantt-row! (:ds sys) gid {:title-id (:title-id v)
+                                                             :title (:title v)
+                                                             :start-at (:start-at v)
+                                                             :end-at (:end-at v)
+                                                             :work-name (:work-name v)
+                                                             :execution-status status
+                                                             :expected-version expected})]
+            (if (nil? updated)
+              (do
+                (log/warn "ガント作業がほかで変更されています"
+                          :user-id user-id :gantt-id gid :expected expected :actual (:version row))
+                {:ok false :code "gantt_conflict"})
+              (do
+                (db/replace-gantt-targets! (:ds sys) gid (:field-ids v))
+                (log/info "ガント作業を直しました"
+                          :user-id user-id :gantt-id gid :title-id (:title-id v)
+                          :title (:title v) :fields (count (:field-ids v))
+                          :execution-status status :version (:version updated))
+                {:ok true :row (present-row (:ds sys) (db/find-gantt-row (:ds sys) user-id gid))}))))))))
+
+(defn update-row-status
+  "実行状態だけを変える。ほかの項目は触らない。"
+  [sys user-id id body]
+  (let [gate (require-fields sys user-id)
+        gid (geo/as-int id)
+        row (when gid (db/find-gantt-row (:ds sys) user-id gid))
+        st (normalize-execution-status (:execution_status body))]
+    (cond
+      (not (:ok gate)) gate
+      (or (nil? gid) (nil? row) (not (active-row? row)))
+      (do
+        (log/warn "ガント作業が見つかりません" :user-id user-id :gantt-id id)
+        {:ok false :code "gantt_not_found"})
+      (not (:ok st)) st
+      :else
+      (let [updated (db/update-gantt-row-status! (:ds sys) gid (:execution-status st))]
+        (log/info "ガント作業の実行状態を変えました"
+                  :user-id user-id :gantt-id gid :execution-status (:execution-status st)
+                  :version (:version updated))
+        {:ok true :row (present-row (:ds sys) updated)}))))
 
 (defn progress-percent [numerator denominator all-done?]
   (let [n (double (or numerator 0.0))

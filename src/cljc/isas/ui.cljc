@@ -148,7 +148,7 @@
    :works-no-fields "圃場が1枚以上あるときだけ、作業を管理できます"
    :works-empty "まだ作業がありません。下の「新しい作業を登録」から作れます"
    :daily-title "日次一覧"
-   :daily-lead "今日・直近7日・すべての予定を、未着手／着手中／完了で回す一覧です"
+   :daily-lead "今日・今週・先週・前後7日・すべての予定を、未着手／着手中／完了で回す一覧です。終わっていない遅れた作業も出ます"
    :phone-daily "日次一覧はパソコンで開いてください"
    :phone-daily-admin-pc "日次一覧はスマホで開いてください"
    :daily-phone-readonly "スマホでは状態を変えられません"
@@ -159,8 +159,11 @@
    :home-memos-more "メモの投稿・検索"
    :daily-no-fields "圃場が1枚以上あるときだけ、日次一覧を使えます"
    :daily-today "今日"
-   :daily-days7 "直近7日"
+   :daily-week "今週"
+   :daily-last-week "先週"
+   :daily-around7 "前後7日"
    :daily-all "すべて"
+   :daily-overdue "遅れ"
    :daily-range-label "期間"
    :daily-filter-apply "絞り込む"
    :daily-filter-empty "状態フィルタを1つ以上オンにしてください"
@@ -169,7 +172,7 @@
    :daily-link-works "作業画面を開く"
    :daily-section-list "一覧"
    :daily-section-filter "期間と状態"
-   :home-link-daily "今日・直近7日・すべての予定を実行状態で回す"
+   :home-link-daily "今日・今週・前後7日などの予定を実行状態で回す"
    :home-link-works "予定の追加・編集"
    :home-link-gantt "題名ごとの時間軸・進捗・地図"
    :fields-lead "圃場の名前・面積・メモを直します。新しい圃場は地図画面で作ります"
@@ -248,6 +251,7 @@
    :title-too-long "題名は200文字以内にしてください"
    :time-invalid "開始と終了は分までの日時にしてください"
    :gantt-not-found "その予定はありません"
+   :gantt-conflict "ほかの画面でこの作業が変更されています。最新の内容を読み込み直したので、確認してからもう一度保存してください"
    :nav-gantt-progress "進捗確定"
    :gantt-progress-title "進捗確定"
    :gantt-progress-day-label "日付（省略時は前日）"
@@ -607,7 +611,7 @@
    :works-no-fields "Work management is available only when you have at least one field"
    :works-empty "No works yet. Use “Register a new work” below"
    :daily-title "Daily list"
-   :daily-lead "Run plans for today, the last 7 days, or all, with Not started / In progress / Done"
+   :daily-lead "Run plans for today, this week, last week, ±7 days, or all, with Not started / In progress / Done. Unfinished overdue works are also shown"
    :phone-daily "Open the daily list on a computer"
    :phone-daily-admin-pc "Open the daily list on a phone"
    :daily-phone-readonly "Status cannot be changed on a phone"
@@ -618,8 +622,11 @@
    :home-memos-more "Compose and search memos"
    :daily-no-fields "Daily list is available only when you have at least one field"
    :daily-today "Today"
-   :daily-days7 "Last 7 days"
+   :daily-week "This week"
+   :daily-last-week "Last week"
+   :daily-around7 "±7 days"
    :daily-all "All"
+   :daily-overdue "Overdue"
    :daily-range-label "Range"
    :daily-filter-apply "Apply filters"
    :daily-filter-empty "Turn on at least one status filter"
@@ -628,7 +635,7 @@
    :daily-link-works "Open Works"
    :daily-section-list "List"
    :daily-section-filter "Range and status"
-   :home-link-daily "Run plans for today, the last 7 days, or all by status"
+   :home-link-daily "Run plans for today, this week, ±7 days and more by status"
    :home-link-works "Add and edit schedules"
    :home-link-gantt "Time axis, progress, and map by title"
    :fields-lead "Edit field names, areas, and memos. Create new fields on the map"
@@ -707,6 +714,7 @@
    :title-too-long "Title must be 200 characters or fewer"
    :time-invalid "Start and end must be date-times to the minute"
    :gantt-not-found "That schedule does not exist"
+   :gantt-conflict "This work was changed on another screen. The latest version has been reloaded; check it and save again"
    :nav-gantt-progress "Finalize progress"
    :gantt-progress-title "Finalize progress"
    :gantt-progress-day-label "Day (yesterday if blank)"
@@ -1078,6 +1086,7 @@
     "paint_empty" (m :paint-empty)
     "no_fields" (m :gantt-no-fields)
     "gantt_not_found" (m :gantt-not-found)
+    "gantt_conflict" (m :gantt-conflict)
     "title_not_found" (m :gantt-title-select)
     "user_not_found" (m :user-not-found)
     "title_required" (m :title-required)
@@ -1286,7 +1295,7 @@
    :gantt-axis "day"
    :gantt-orient "time-h"
    :gantt-finalize-result nil
-   :daily-range "days7"
+   :daily-range "around7"
    :daily-statuses ["not_started" "in_progress"]
    :daily-rows []
    :daily-total nil
@@ -2303,15 +2312,6 @@
       (str/blank? (str v)) []
       :else [(str/trim (str v))])))
 
-(defn- daily-row-put-body [row status]
-  {:title (str (:title row))
-   :title_id (:title_id row)
-   :start_at (:start_at row)
-   :end_at (:end_at row)
-   :work_name (:work_name row)
-   :field_ids (or (:field_ids row) [])
-   :execution_status status})
-
 (defn- gantt-body-from-form [form title-id]
   (let [title (str/trim (as-text (:title form)))
         start (str/trim (as-text (:start_at form)))
@@ -2508,10 +2508,16 @@
 (defn- daily-status-on? [state status]
   (boolean (some #(= (str %) (str status)) (into [] (:daily-statuses state)))))
 
+(def ^:private daily-ranges #{"today" "week" "last_week" "around7" "all"})
+
+(def ^:private daily-default-range "around7")
+
+(defn- current-daily-range [state]
+  (let [r (str (:daily-range state))]
+    (if (contains? daily-ranges r) r daily-default-range)))
+
 (defn- daily-query-path [state]
-  (let [range (let [raw (:daily-range state)
-                    r (str (if (nil? raw) "days7" raw))]
-                (if (#{"today" "days7" "all"} r) r "days7"))
+  (let [range (current-daily-range state)
         statuses (into [] (:daily-statuses state))
         base (if (= "admin" (:kind state))
                "/api/admin/gantt/daily"
@@ -2526,15 +2532,15 @@
   (str "<h2 class=\"section-title\">" (esc (m key)) "</h2>"))
 
 (defn- daily-filter-section [state]
-  (let [range (let [raw (:daily-range state)
-                    r (str (if (nil? raw) "days7" raw))]
-                (if (#{"today" "days7" "all"} r) r "days7"))]
+  (let [range (current-daily-range state)]
     (str "<section class=\"form-section\" id=\"daily-filter-section\">"
          (section-title-html :daily-section-filter)
          "<div class=\"toolbar\" id=\"daily-range-form\">"
          (select-switch (m :daily-range-label) "daily-range" range
                         [["today" (m :daily-today)]
-                         ["days7" (m :daily-days7)]
+                         ["week" (m :daily-week)]
+                         ["last_week" (m :daily-last-week)]
+                         ["around7" (m :daily-around7)]
                          ["all" (m :daily-all)]])
          "</div>"
          "<form data-act=\"set-daily-statuses\" method=\"post\" id=\"daily-status-filter\">"
@@ -2562,6 +2568,8 @@
     (str "<div class=\"daily-item\" id=\"daily-item-" (esc (:id r)) "\">"
          (when (and admin? (not (str/blank? (str (:user_email r)))))
            (str "<p class=\"daily-item-user\">" (esc (:user_email r)) "</p>"))
+         (when (true? (:overdue r))
+           (str "<span class=\"daily-item-overdue\">" (esc (m :daily-overdue)) "</span> "))
          "<span class=\"daily-item-title\">" (esc (:title r)) "</span>"
          " <span class=\"daily-item-time\">"
          (esc (format-display-instant (:start_at r)))
@@ -3821,7 +3829,9 @@
                  (code-message code))
           near (if (= :gantt (:page state)) "gantt-save-form" "works-save-form")
           s (assoc state :flash {:error? true :text text :near near})]
-      {:state s :fx [[:html (render s)]]})))
+      (if (= "gantt_conflict" code)
+        {:state s :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]]}
+        {:state s :fx [[:html (render s)]]}))))
 
 (defn daily-loaded [state body]
   (if (:ok body)
@@ -4478,8 +4488,10 @@
           body (gantt-body-from-form form (:gantt-title-selected state))
           fids (:field_ids body)
           wn (str/trim (as-text (:work_name body)))
-          body' (assoc body :title_id (let [tid (str/trim (as-text (:title_id body)))]
-                                        (when-not (str/blank? tid) tid)))
+          version (:version (gantt-row-by-id state id))
+          body' (cond-> (assoc body :title_id (let [tid (str/trim (as-text (:title_id body)))]
+                                                (when-not (str/blank? tid) tid)))
+                  (some? version) (assoc :version version))
           near (if (= :gantt (:page state)) "gantt-save-form" "works-save-form")]
       (cond
         (str/blank? id)
@@ -4516,7 +4528,7 @@
        :fx [[:api "POST" "/api/admin/gantt/progress/finalize" body :gantt-finalize-result]]})
     "set-daily-range"
     (let [range (str/trim (as-text (:range form)))
-          range' (if (#{"today" "days7" "all"} range) range "today")
+          range' (if (contains? daily-ranges range) range "today")
           s (assoc state :daily-range range' :flash nil)
           statuses (into [] (:daily-statuses s))]
       (if (empty? statuses)
@@ -4543,8 +4555,8 @@
         (flash-html-state state (m :execution-status-invalid) "daily-list")
         :else
         {:state (assoc state :flash nil)
-         :fx [[:api "PUT" (str "/api/user/gantt/" id)
-               (daily-row-put-body row status)
+         :fx [[:api "PUT" (str "/api/user/gantt/" id "/status")
+               {:execution_status status}
                :daily-status-save-result]]}))
     "add-work-time"
     (let [gid (str/trim (as-text (if (nil? (:gantt_id form)) (:gantt-selected state) (:gantt_id form))))
@@ -5146,7 +5158,7 @@
                        :gantt-progress nil :gantt-progress-days nil)
 
                 (= :daily (:page s))
-                (assoc s :daily-range "days7"
+                (assoc s :daily-range daily-default-range
                        :daily-statuses ["not_started" "in_progress"]
                        :daily-rows [] :daily-total nil :flash nil)
 
