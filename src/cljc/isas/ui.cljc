@@ -226,6 +226,8 @@
    :checklist-left-prefix "完了にしましたが、まだのチェックが "
    :checklist-left-suffix " 件あります。作業を開いて確認してください"
    :daily-checklist-left "チェック残り"
+   :daily-work-time-today "今日の作業時間あり"
+   :works-filter-empty "選んだ期間・状態に重なる作業がありません。期間または状態を変えてください"
    :sentence-sep "。"
    :daily-link-edit-work "作業を開く"
    :gantt-start "開始"
@@ -693,6 +695,8 @@
    :checklist-left-prefix "Marked done, but "
    :checklist-left-suffix " checklist item(s) are still pending. Open the work to check them"
    :daily-checklist-left "Checklist pending"
+   :daily-work-time-today "Work time logged today"
+   :works-filter-empty "No works overlap the selected period and statuses. Change the period or statuses"
    :sentence-sep ". "
    :daily-link-edit-work "Open work"
    :gantt-start "Start"
@@ -1271,6 +1275,10 @@
                :orders :orders-new :order :others :relations :gantt-progress
                :memos :memos-drafts :memos-bookmarks} page))
 
+(def ^:private works-default-range "all")
+
+(def ^:private works-default-statuses ["not_started" "in_progress" "done"])
+
 (defn init-state []
   {:path "/"
    :search ""
@@ -1293,6 +1301,9 @@
    :map-mode nil
    :map-mode-parent nil
    :gantt-rows []
+   :gantt-windows nil
+   :works-range works-default-range
+   :works-statuses works-default-statuses
    :gantt-titles []
    :gantt-title-selected nil
    :gantt-selected nil
@@ -2447,9 +2458,9 @@
      "<form data-act=\"add-work-time\" method=\"post\" id=\"" (esc prefix) "-work-time-add\">"
      "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
      "<label>" (esc (m :gantt-start))
-     "<input name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
+     "<input type=\"datetime-local\" name=\"start_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
      "<label>" (esc (m :gantt-end))
-     "<input name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
+     "<input type=\"datetime-local\" name=\"end_at\" placeholder=\"YYYY-MM-DDTHH:MM\" required></label>"
      "<button type=\"submit\" class=\"btn-primary\">" (esc (m :work-time-add)) "</button></form>"
      "</div>"
      "<div class=\"child-list\">"
@@ -2464,9 +2475,9 @@
                        "<input type=\"hidden\" name=\"gantt_id\" value=\"" (esc id) "\">"
                        "<input type=\"hidden\" name=\"id\" value=\"" (esc (:id t)) "\">"
                        "<label>" (esc (m :gantt-start))
-                       "<input name=\"start_at\" value=\"" (esc (:start_at t)) "\" required></label>"
+                       "<input type=\"datetime-local\" name=\"start_at\" value=\"" (esc (:start_at t)) "\" required></label>"
                        "<label>" (esc (m :gantt-end))
-                       "<input name=\"end_at\" value=\"" (esc (:end_at t)) "\" required></label>"
+                       "<input type=\"datetime-local\" name=\"end_at\" value=\"" (esc (:end_at t)) "\" required></label>"
                        (when dur (str "<span class=\"work-time-duration\">" (esc dur) "</span>"))
                        "<button type=\"submit\">" (esc (m :work-time-save)) "</button></form>"
                        "<form data-act=\"delete-work-time\" method=\"post\" class=\"inline\""
@@ -2547,17 +2558,19 @@
 (defn- section-title-html [key]
   (str "<h2 class=\"section-title\">" (esc (m key)) "</h2>"))
 
+(defn- period-options []
+  [["today" (m :daily-today)]
+   ["week" (m :daily-week)]
+   ["last_week" (m :daily-last-week)]
+   ["around7" (m :daily-around7)]
+   ["all" (m :daily-all)]])
+
 (defn- daily-filter-section [state]
   (let [range (current-daily-range state)]
     (str "<section class=\"form-section\" id=\"daily-filter-section\">"
          (section-title-html :daily-section-filter)
          "<div class=\"toolbar\" id=\"daily-range-form\">"
-         (select-switch (m :daily-range-label) "daily-range" range
-                        [["today" (m :daily-today)]
-                         ["week" (m :daily-week)]
-                         ["last_week" (m :daily-last-week)]
-                         ["around7" (m :daily-around7)]
-                         ["all" (m :daily-all)]])
+         (select-switch (m :daily-range-label) "daily-range" range (period-options))
          "</div>"
          "<form data-act=\"set-daily-statuses\" method=\"post\" id=\"daily-status-filter\">"
          "<fieldset><legend>" (esc (m :execution-status)) "</legend>"
@@ -2596,12 +2609,14 @@
          (esc (format-display-instant (:end_at r))) "</span>"
          "<p class=\"daily-item-summary\">"
          "<span>" (esc (daily-work-time-summary (:work_time_count r))) "</span>"
+         (when (pos? (or (:work_time_today r) 0))
+           (str " <span class=\"daily-item-today-time\">" (esc (m :daily-work-time-today)) "</span>"))
          " / "
          "<span>" (esc (daily-checklist-summary (:checklist_done r)
                                                 (:checklist_total r)))
          "</span>"
          (when-not readonly?
-           (str " · <a data-nav href=\"/works\">"
+           (str " · <a data-nav href=\"/works?id=" (esc (:id r)) "\">"
                 (esc (m :daily-link-edit-work)) "</a>"))
          "</p>"
          (if readonly?
@@ -2649,6 +2664,61 @@
                        (esc (:name f)) "</label>"))))
        "</fieldset>"))
 
+(defn- current-works-range [state]
+  (let [r (str (:works-range state))]
+    (if (contains? daily-ranges r) r works-default-range)))
+
+(defn- works-status-on? [state status]
+  (boolean (some #(= (str %) status) (:works-statuses state))))
+
+(defn- works-now [state]
+  (some-> (:gantt-windows state) :now str))
+
+(defn- works-row-overdue? [now r]
+  (boolean (and now
+                (not= "done" (str (:execution_status r)))
+                (not (pos? (compare (str (:end_at r)) now))))))
+
+(defn- works-visible-rows
+  "日次一覧と同じ規則（期間と重なる作業、現在を含む期間では遅れも）で読み込み済みの作業を絞る。
+  期間が届いていなければ期間では絞らない。"
+  [state]
+  (let [range (current-works-range state)
+        win (get (:gantt-windows state) (keyword range))
+        now (works-now state)]
+    (filterv (fn [r]
+               (and (works-status-on? state (str (or (:execution_status r) "not_started")))
+                    (or (= "all" range)
+                        (not (sequential? win))
+                        (let [[w0 w1] (map str win)]
+                          (or (and (pos? (compare w1 (str (:start_at r))))
+                                   (pos? (compare (str (:end_at r)) w0)))
+                              (and (pos? (compare w1 (str now)))
+                                   (works-row-overdue? now r)))))))
+             (or (:gantt-rows state) []))))
+
+(defn- works-filter-html [state]
+  (let [range (current-works-range state)]
+    (str "<form data-act=\"set-works-filter\" method=\"post\" id=\"works-filter\">"
+         "<label>" (esc (m :daily-range-label))
+         "<select name=\"range\" id=\"works-range\">"
+         (apply str
+                (for [[v lab] (period-options)]
+                  (str "<option value=\"" v "\"" (when (= v range) " selected") ">"
+                       (esc lab) "</option>")))
+         "</select></label>"
+         "<fieldset><legend>" (esc (m :execution-status)) "</legend>"
+         (apply str
+                (for [[v lab] [["not_started" (m :exec-not-started)]
+                               ["in_progress" (m :exec-in-progress)]
+                               ["done" (m :exec-done)]]]
+                  (str "<label><input type=\"checkbox\" name=\"status\" value=\"" v "\""
+                       (when (works-status-on? state v) " checked")
+                       "> " (esc lab) "</label>")))
+         "</fieldset>"
+         "<button type=\"submit\" id=\"works-filter-btn\">"
+         (esc (m :daily-filter-apply)) "</button></form>")))
+
 (defn works-view [state]
   (let [fields (:fields state)
         defs (gantt-new-defaults)]
@@ -2659,15 +2729,23 @@
                    (str "<p>" (esc (m :works-no-fields)) "</p>")
                    (let [titles (or (:gantt-titles state) [])
                          rows (or (:gantt-rows state) [])
+                         visible (works-visible-rows state)
+                         now (works-now state)
                          sel (gantt-row-by-id state (:gantt-selected state))]
                      (str
                       (page-lead-html :works-lead)
                       "<section class=\"works-list form-section\" id=\"works-list\">"
                       (section-title-html :works-section-list)
-                      (if (empty? rows)
+                      (when (seq rows) (works-filter-html state))
+                      (cond
+                        (empty? rows)
                         (str "<p class=\"empty-hint\">" (esc (m :works-empty)) "</p>")
+                        (empty? visible)
+                        (str "<p class=\"empty-hint\" id=\"works-filter-empty\">"
+                             (esc (m :works-filter-empty)) "</p>")
+                        :else
                         (apply str
-                               (for [r rows]
+                               (for [r visible]
                                  (let [selected? (same-gantt-id? (:id r) (:gantt-selected state))]
                                    (str "<form class=\"work-item" (when selected? " selected")
                                         "\" data-act=\"select-gantt-row\" method=\"post\">"
@@ -2678,6 +2756,9 @@
                                         (when selected? (esc (m :works-open-selected)))
                                         "</button>"
                                         "<p class=\"work-item-meta\">"
+                                        (when (works-row-overdue? now r)
+                                          (str "<span class=\"daily-item-overdue\">"
+                                               (esc (m :daily-overdue)) "</span> "))
                                         (esc (work-related-title-label state (:title_id r)))
                                         " · " (esc (format-display-instant (:start_at r)))
                                         "〜" (esc (format-display-instant (:end_at r)))
@@ -2707,9 +2788,9 @@
                          "<input name=\"title\" value=\"" (esc (:title sel)) "\" required>"
                          (field-hint (m :gantt-title-hint)) "</label>"
                          "<label>" (esc (m :gantt-start))
-                         "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
+                         "<input type=\"datetime-local\" name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
                          "<label>" (esc (m :gantt-end))
-                         "<input name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
+                         "<input type=\"datetime-local\" name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
                          "<label>" (esc (m :execution-status))
                          (execution-status-select-html (:execution_status sel) "works-execution-status")
                          "</label>"
@@ -2746,10 +2827,10 @@
                       "\" placeholder=\"" (esc (m :gantt-work-new-placeholder)) "\">"
                       (field-hint (m :gantt-title-hint)) "</label>"
                       "<label>" (esc (m :gantt-start))
-                      "<input id=\"works-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
+                      "<input type=\"datetime-local\" id=\"works-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
                       "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                       "<label>" (esc (m :gantt-end))
-                      "<input id=\"works-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
+                      "<input type=\"datetime-local\" id=\"works-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
                       "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                       "<label>" (esc (m :work-name))
                       "<input id=\"works-new-work-name\" name=\"work_name\" list=\"works-add-work-name-list\" value=\"\">"
@@ -2958,9 +3039,9 @@
                             "<input name=\"title\" value=\"" (esc (:title sel)) "\" required>"
                             (field-hint (m :gantt-title-hint)) "</label>"
                             "<label>" (esc (m :gantt-start))
-                            "<input name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
+                            "<input type=\"datetime-local\" name=\"start_at\" value=\"" (esc (:start_at sel)) "\" required></label>"
                             "<label>" (esc (m :gantt-end))
-                            "<input name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
+                            "<input type=\"datetime-local\" name=\"end_at\" value=\"" (esc (:end_at sel)) "\" required></label>"
                             "<label>" (esc (m :execution-status))
                             (execution-status-select-html (:execution_status sel) "gantt-execution-status")
                             "</label>"
@@ -3024,10 +3105,10 @@
                          "\" placeholder=\"" (esc (m :gantt-work-new-placeholder)) "\">"
                          (field-hint (m :gantt-title-hint)) "</label>"
                          "<label>" (esc (m :gantt-start))
-                         "<input id=\"gantt-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
+                         "<input type=\"datetime-local\" id=\"gantt-new-start\" name=\"start_at\" value=\"" (esc (:start defs))
                          "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                          "<label>" (esc (m :gantt-end))
-                         "<input id=\"gantt-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
+                         "<input type=\"datetime-local\" id=\"gantt-new-end\" name=\"end_at\" value=\"" (esc (:end defs))
                          "\" placeholder=\"YYYY-MM-DDTHH:MM\"></label>"
                          "<label>" (esc (m :work-name))
                          "<input id=\"gantt-new-work-name\" name=\"work_name\" list=\"gantt-add-work-name-list\" value=\"\">"
@@ -3522,11 +3603,23 @@
            :memos-bookmarks (memos-bookmarks-view state)
            (unknown-view state)))))))
 
+(defn- split-path-search
+  "画面内リンク（data-nav）は href の ? 以降も path として渡ってくるので、ここで分ける。"
+  [path search]
+  (if-let [i (and (string? path) (str/blank? search) (str/index-of path "?"))]
+    [(subs path 0 i) (subs path i)]
+    [path (or search "")]))
+
+(defn- works-query-id [search]
+  (let [id (str (:id (parse-query search)))]
+    (when (re-matches #"\d+" id) id)))
+
 (defn apply-route [state path search]
-  (let [r (route-for path)]
+  (let [[path search] (split-path-search path search)
+        r (route-for path)]
     (assoc state
            :path path
-           :search (or search "")
+           :search search
            :page (:page r)
            :kind (or (:kind r) (:kind state) "user")
            :order-id (:order-id r)
@@ -3552,7 +3645,8 @@
                               :ui-lang (normalize-lang (or ui-lang (:ui-lang state) "ja")))
                        path search)
         token (:token (parse-query search))]
-    {:state (assoc s :form (if token {:token token} {}))
+    {:state (cond-> (assoc s :form (if token {:token token} {}))
+              (= :works (:page s)) (assoc :gantt-selected (works-query-id (:search s))))
      :fx [[:session (:kind s)]]}))
 
 (defn- memos-load-fx
@@ -3809,6 +3903,7 @@
                  :else nil)
           row (when sel' (gantt-row-by-id (assoc state :gantt-rows rows) sel'))
           s (assoc state :gantt-rows rows :gantt-titles titles
+                   :gantt-windows (:windows body)
                    :gantt-title-selected (if works? (or (:title_id row) tsel') tsel')
                    :gantt-selected sel'
                    :gantt-progress-days (when sel' (:gantt-progress-days state))
@@ -4557,6 +4652,13 @@
                  (not (str/blank? email)) (assoc :email email))]
       {:state (assoc state :form {:day day :email email} :gantt-finalize-result nil :flash nil)
        :fx [[:api "POST" "/api/admin/gantt/progress/finalize" body :gantt-finalize-result]]})
+    "set-works-filter"
+    (let [range (str/trim (as-text (:range form)))
+          allowed (set works-default-statuses)]
+      (guarded (assoc state
+                      :works-range (if (contains? daily-ranges range) range works-default-range)
+                      :works-statuses (vec (filter allowed (form-status-list form)))
+                      :flash nil)))
     "set-daily-range"
     (let [range (str/trim (as-text (:range form)))
           range' (if (contains? daily-ranges range) range "today")
@@ -5187,8 +5289,11 @@
                        :gantt-axis "day" :gantt-orient "time-h" :form {} :paint-data nil)
 
                 (= :works (:page s))
-                (assoc s :gantt-selected nil :gantt-work-times [] :gantt-checklist-items []
-                       :gantt-progress nil :gantt-progress-days nil)
+                (assoc s :gantt-selected (works-query-id (:search s))
+                       :gantt-work-times [] :gantt-checklist-items []
+                       :gantt-progress nil :gantt-progress-days nil
+                       :works-range works-default-range
+                       :works-statuses works-default-statuses)
 
                 (= :daily (:page s))
                 (assoc s :daily-range daily-default-range

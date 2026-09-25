@@ -1,8 +1,10 @@
 (ns isas.review-rv001-test
-  "レビュー記録票 RV-V2-001 の指摘 R-01〜R-04・R-08 の回帰試験。"
+  "レビュー記録票 RV-V2-001 の指摘 R-01〜R-04・R-08〜R-12 の回帰試験。"
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.string :as str]
             [isas.db :as db]
             [isas.gantt :as gantt]
+            [next.jdbc :as jdbc]
             [isas.test-util :as tu]
             [isas.time :as time]
             [isas.ui :as ui]
@@ -333,3 +335,161 @@
           (is (= "pending" (get-in c [:checklist_item :status])))
           (is (:ok r))
           (is (= "done" (:execution_status (db/find-gantt-row-by-id (:ds sys) gid)))))))))
+
+(deftest rv001-r09-work-time-today
+  (tu/with-sys
+    (fn [sys]
+      (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-25T00:00:00Z"))]
+        (let [{:keys [app asid usid fid tid]} (farm sys "rv9@example.com")
+              mk (fn [t]
+                   (get-in (tu/parse (tu/post-json app "/api/user/gantt"
+                                                   (body tid fid t "2026-09-24T08:00" "2026-09-26T17:00")
+                                                   "user" usid))
+                           [:row :id]))
+              wt (fn [gid s e]
+                   (tu/post-json app (str "/api/user/gantt/" gid "/work-times") {:start_at s :end_at e} "user" usid))
+              g-today (mk "稲刈り今日やった")
+              g-yday (mk "稲刈り昨日だけ")
+              g-none (mk "稲刈り未記録")
+              _ (wt g-today "2026-09-24T08:00" "2026-09-24T12:00")
+              _ (wt g-today "2026-09-25T06:00" "2026-09-25T08:00")
+              _ (wt g-yday "2026-09-24T13:00" "2026-09-25T00:00")
+              del-id (get-in (tu/parse (wt g-yday "2026-09-25T06:00" "2026-09-25T07:00")) [:work_time :id])
+              _ (tu/delete-path app (str "/api/user/gantt/" g-yday "/work-times/" del-id) "user" usid)
+              rows (daily app "user" usid "week" "not_started,in_progress")]
+          (testing "R-09 今日と重なる作業時間の件数を返す"
+            (is (= 1 (:work_time_today (by-title rows "稲刈り今日やった"))))
+            (is (= 2 (:work_time_count (by-title rows "稲刈り今日やった"))))
+            (is (some? del-id))
+            (is (= 0 (:work_time_today (by-title rows "稲刈り昨日だけ"))))
+            (is (= 1 (:work_time_count (by-title rows "稲刈り昨日だけ"))))
+            (is (= 0 (:work_time_today (by-title rows "稲刈り未記録"))))
+            (is (some? g-none)))
+          (testing "R-09 管理者の横断一覧も同じ"
+            (is (= 1 (:work_time_today (by-title (daily app "admin" asid "week" "not_started") "稲刈り今日やった")))))
+          (testing "R-09 日次一覧は今日の作業時間がある行にだけ印を出す"
+            (let [h (tu/page-html {:page :daily :kind "user" :session {:email "a"} :fields [{:id 1}]
+                                   :daily-statuses ["not_started"] :daily-rows rows})]
+              (is (= 1 (count (re-seq #"daily-item-today-time" h))))
+              (is (re-find #"今日の作業時間あり" h))
+              (is (re-find #"Work time logged today"
+                           (ui/with-ui-lang {:ui-lang "en"}
+                             #(tu/page-html {:page :daily :kind "user" :session {:email "a"} :ui-lang "en"
+                                             :fields [{:id 1}] :daily-statuses ["not_started"]
+                                             :daily-rows rows})))))))))))
+
+(def ^:private win
+  {:now "2026-09-25T09:00"
+   :today ["2026-09-25T00:00" "2026-09-26T00:00"]
+   :week ["2026-09-21T00:00" "2026-09-28T00:00"]
+   :last_week ["2026-09-14T00:00" "2026-09-21T00:00"]
+   :around7 ["2026-09-18T00:00" "2026-10-03T00:00"]})
+
+(defn- wrow [id title s e st]
+  {:id id :title title :title_id nil :start_at s :end_at e :execution_status st :field_ids [] :version 1})
+
+(def ^:private works-rows
+  [(wrow 1 "先月の遅れ" "2026-08-20T08:00" "2026-08-20T17:00" "not_started")
+   (wrow 2 "先週済" "2026-09-16T08:00" "2026-09-16T17:00" "done")
+   (wrow 3 "今日" "2026-09-25T08:00" "2026-09-25T17:00" "in_progress")
+   (wrow 4 "日曜" "2026-09-27T08:00" "2026-09-27T17:00" "not_started")
+   (wrow 5 "来月" "2026-10-20T08:00" "2026-10-20T17:00" "not_started")])
+
+(defn- works-state [& kvs]
+  (apply assoc (ui/init-state) :page :works :kind "user" :session {:email "a"} :ui-lang "ja"
+         :fields [{:id 1}] :gantt-rows works-rows :gantt-windows win kvs))
+
+(defn- listed [h]
+  (set (map second (re-seq #"class=\"work-open-btn\" id=\"work-btn-\d+\">編集する: ([^<（]+)" h))))
+
+(deftest rv001-r10-open-work-and-picker
+  (testing "R-10 日次の「作業を開く」はその作業を指す"
+    (is (re-find #"href=\"/works\?id=7\""
+                 (tu/page-html {:page :daily :kind "user" :session {:email "a"} :fields [{:id 1}]
+                                :daily-statuses ["not_started"]
+                                :daily-rows [(wrow 7 "A" "2026-09-25T08:00" "2026-09-25T17:00" "not_started")]}))))
+  (testing "R-10 画面内リンクの ? 以降を検索部として扱い、作業を選んだ状態で開く"
+    (let [s (:state (ui/handle (assoc (ui/init-state) :page :daily :kind "user")
+                               [:path {:path "/works?id=7" :search ""}]))]
+      (is (= "/works" (:path s)))
+      (is (= "?id=7" (:search s)))
+      (is (= :works (:page s)))
+      (is (= "7" (:gantt-selected s))))
+    (is (nil? (:gantt-selected (:state (ui/handle (ui/init-state) [:path {:path "/works?id=x" :search ""}])))))
+    (is (nil? (:gantt-selected (:state (ui/handle (ui/init-state) [:path {:path "/works" :search ""}])))))
+    (is (= "?token=t" (:search (ui/apply-route (ui/init-state) "/reset" "?token=t"))))
+    (is (= [nil ""] ((juxt :path :search) (ui/apply-route (ui/init-state) nil nil)))))
+  (testing "R-10 直接開いた /works?id= でも選ぶ"
+    (is (= "5" (get-in (ui/boot (ui/init-state) {:path "/works" :search "?id=5"}) [:state :gantt-selected])))
+    (is (nil? (get-in (ui/boot (ui/init-state) {:path "/daily" :search "?id=5"}) [:state :gantt-selected]))))
+  (testing "R-10 読み込み後、指した作業の明細を読む"
+    (let [r (ui/gantt-loaded (works-state :gantt-selected "3") {:ok true :rows works-rows :titles [] :windows win})]
+      (is (= "3" (get-in r [:state :gantt-selected])))
+      (is (some #(str/includes? (str (nth % 2)) "/api/user/gantt/3/") (:fx r)))))
+  (testing "R-10 開始・終了は日時の選択部品"
+    (let [h (tu/page-html (works-state :gantt-selected 3 :gantt-titles []))
+          hg (tu/page-html (assoc (works-state :gantt-selected 3) :page :gantt
+                                  :gantt-titles [{:id 10 :name "題"}] :gantt-title-selected 10
+                                  :gantt-rows [(assoc (wrow 3 "今日" "2026-09-25T08:00" "2026-09-25T17:00" "not_started")
+                                                      :title_id 10)]))]
+      (is (= 6 (count (re-seq #"type=\"datetime-local\" (id=\"works-new-(start|end)\" )?name=\"(start|end)_at\"" h))))
+      (is (nil? (re-find #"<input (id=\"[^\"]+\" )?name=\"(start|end)_at\"" h)))
+      (is (re-find #"type=\"datetime-local\" name=\"start_at\" placeholder" h))
+      (is (re-find #"type=\"datetime-local\" id=\"gantt-new-start\"" hg))
+      (is (re-find #"type=\"datetime-local\" name=\"start_at\" value=\"2026-09-25T08:00\"" hg)))))
+
+(deftest rv001-r11-works-filter
+  (testing "R-11 作業一覧 API は期間と現在時刻を返す"
+    (tu/with-sys
+      (fn [sys]
+        (binding [time/*now-fn* (fn [] (Instant/parse "2026-09-25T00:00:00Z"))]
+          (let [{:keys [app usid]} (farm sys "rv11@example.com")
+                w (:windows (tu/parse (tu/get-path app "/api/user/gantt" "user" usid)))]
+            (is (= win w)))))))
+  (testing "R-11 初期値はすべての期間・すべての状態"
+    (let [h (tu/page-html (works-state))]
+      (is (= #{"先月の遅れ" "先週済" "今日" "日曜" "来月"} (listed h)))
+      (is (re-find #"<option value=\"all\" selected>" h))
+      (is (= 3 (count (re-seq #"name=\"status\" value=\"[a-z_]+\" checked" h))))))
+  (testing "R-11 期間は日次一覧と同じ規則（現在を含む期間は遅れも出す）"
+    (is (= #{"先月の遅れ" "今日"} (listed (tu/page-html (works-state :works-range "today")))))
+    (is (= #{"先月の遅れ" "今日" "日曜"} (listed (tu/page-html (works-state :works-range "week")))))
+    (is (= #{"先週済"} (listed (tu/page-html (works-state :works-range "last_week")))))
+    (is (= #{"先月の遅れ" "今日" "日曜"} (listed (tu/page-html (works-state :works-range "around7"))))))
+  (testing "R-11 遅れの印"
+    (let [h (tu/page-html (works-state))]
+      (is (= 1 (count (re-seq #"daily-item-overdue" h))))
+      (is (nil? (re-find #"daily-item-overdue" (tu/page-html (works-state :gantt-windows nil)))))))
+  (testing "R-11 状態で絞る・何も出ないときは案内"
+    (is (= #{"先週済"} (listed (tu/page-html (works-state :works-statuses ["done"])))))
+    (let [h (tu/page-html (works-state :works-range "today" :works-statuses ["done"]))]
+      (is (empty? (listed h)))
+      (is (re-find #"選んだ期間・状態に重なる作業がありません" h))))
+  (testing "R-11 期間が届いていなければ期間では絞らない"
+    (is (= 5 (count (listed (tu/page-html (works-state :works-range "today" :gantt-windows nil)))))))
+  (testing "R-11 作業が無いときは絞り込みを出さない"
+    (is (nil? (re-find #"works-filter" (tu/page-html (works-state :gantt-rows []))))))
+  (testing "R-11 絞り込みの操作"
+    (let [s (:state (ui/handle (works-state) [:submit {:act "set-works-filter"
+                                                       :form {:range "week" :status ["done" "weird"]}}]))
+          bad (:state (ui/handle (works-state :works-range "today")
+                                 [:submit {:act "set-works-filter" :form {:range "month"}}]))]
+      (is (= "week" (:works-range s)))
+      (is (= ["done"] (:works-statuses s)))
+      (is (= "all" (:works-range bad)))
+      (is (= [] (:works-statuses bad)))
+      (is (= #{} (listed (tu/page-html bad))))))
+  (testing "R-11 作業画面を開き直すと初期値に戻る"
+    (let [s (:state (ui/handle (works-state :works-range "today" :works-statuses ["done"])
+                               [:path {:path "/works" :search ""}]))]
+      (is (= "all" (:works-range s)))
+      (is (= ["not_started" "in_progress" "done"] (:works-statuses s)))))
+  (testing "R-11 範囲外の値は既定に戻す"
+    (is (= 5 (count (listed (tu/page-html (works-state :works-range "month"))))))))
+
+(deftest rv001-r12-busy-timeout
+  (testing "R-12 全接続に busy_timeout が効く"
+    (is (str/ends-with? (db/sqlite-url "data/x.sqlite") "?busy_timeout=5000"))
+    (tu/with-sys
+      (fn [sys]
+        (is (= 5000 (:timeout (jdbc/execute-one! (:ds sys) ["PRAGMA busy_timeout"]))))))))

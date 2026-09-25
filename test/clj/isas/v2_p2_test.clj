@@ -85,7 +85,7 @@
                                  :work_time_count 2 :checklist_done 1 :checklist_total 3}]})]
       (is (re-find #"作業時間 2 件" h))
       (is (re-find #"チェック 1/3" h))
-      (is (re-find #"href=\"/works\"" h))
+      (is (re-find #"href=\"/works\?id=10\"" h))
       (is (re-find #"作業を開く" h))))
   (testing "V2P2-2.3-01〜04 要約文言"
     (let [h0 (html {:page :daily :fields [{:id 1}]

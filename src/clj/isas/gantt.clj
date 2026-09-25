@@ -93,10 +93,11 @@
   (and (not= "done" (:execution_status row))
        (not (pos? (compare (str (:end_at row)) now)))))
 
-(defn- present-daily-row [ds row now]
+(defn- present-daily-row [ds row now [t0 t1]]
   (merge (present-row ds row)
          (child-summary ds (:id row))
-         {:overdue (overdue? row now)}))
+         {:overdue (overdue? row now)
+          :work_time_today (long (db/count-gantt-work-times-in-window ds (:id row) t0 t1))}))
 
 (def ^:private execution-statuses #{"not_started" "in_progress" "done"})
 
@@ -132,6 +133,15 @@
       (log/warn "日次の期間が不正です" :range range-key)
       {:ok false :code "range_invalid"})))
 
+(defn- period-windows
+  "作業画面の一覧を、日次一覧と同じ期間（Asia/Tokyo）で画面側が絞るための現在時刻と期間。"
+  []
+  {:now (time/tokyo-now-local-minute)
+   :today (time/tokyo-today-window)
+   :week (time/tokyo-week-window)
+   :last_week (time/tokyo-last-week-window)
+   :around7 (time/tokyo-around7-window)})
+
 (defn- overlaps-window? [row window-start window-end]
   (and (pos? (compare window-end (str (:start_at row))))
        (pos? (compare (str (:end_at row)) window-start))))
@@ -155,10 +165,11 @@
       :else
       (let [status-set (set (:statuses st))
             now (time/tokyo-now-local-minute)
+            today (time/tokyo-today-window)
             rows (->> (db/list-gantt-rows (:ds sys) user-id)
                       (filter #(contains? status-set (:execution_status %)))
                       (filter #(in-daily-window? (:window win) now %))
-                      (mapv #(present-daily-row (:ds sys) % now)))]
+                      (mapv #(present-daily-row (:ds sys) % now today)))]
         (log/info "日次一覧を返しました"
                   :user-id user-id :range (str range) :statuses (:statuses st) :count (count rows))
         {:ok true :rows rows}))))
@@ -173,6 +184,7 @@
       (let [status-set (set (:statuses st))
             window (:window win)
             now (time/tokyo-now-local-minute)
+            today (time/tokyo-today-window)
             users (db/list-active-users (:ds sys))
             rows (->> users
                       (mapcat
@@ -183,7 +195,7 @@
                                              (filter #(contains? status-set (:execution_status %)))
                                              (filter #(in-daily-window? window now %)))]
                            (map (fn [row]
-                                  (assoc (present-daily-row (:ds sys) row now)
+                                  (assoc (present-daily-row (:ds sys) row now today)
                                          :user_id uid
                                          :user_email email))
                                 filtered))))
@@ -283,7 +295,7 @@
   (let [titles (mapv present-title (db/list-gantt-titles (:ds sys) user-id))
         rows (mapv #(present-row (:ds sys) %) (db/list-gantt-rows (:ds sys) user-id))]
     (log/info "ガント行を一覧しました" :user-id user-id :count (count rows) :title-count (count titles))
-    {:ok true :titles titles :rows rows}))
+    {:ok true :titles titles :rows rows :windows (period-windows)}))
 
 (defn list-admin-rows
   "管理者向け候補。全利用者の未削除行。user_email 付き。"

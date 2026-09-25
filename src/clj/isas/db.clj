@@ -287,8 +287,12 @@
   (log/info "データベースの表を用意しました")
   ds)
 
+(def busy-timeout-ms
+  "書き込みが重なったとき、失敗にする前に待つ時間。接続を使うたびに開くので URL で全接続に効かせる。"
+  5000)
+
 (defn sqlite-url [path]
-  (str "jdbc:sqlite:" path))
+  (str "jdbc:sqlite:" path "?busy_timeout=" busy-timeout-ms))
 
 (defn count-admins [ds]
   (:c (jdbc/execute-one! ds ["SELECT COUNT(*) AS c FROM admins"])))
@@ -661,6 +665,14 @@
   (:c (jdbc/execute-one! ds ["SELECT COUNT(*) AS c FROM gantt_work_times
                               WHERE gantt_id = ? AND deleted_at IS NULL"
                              gantt-id])))
+
+(defn count-gantt-work-times-in-window
+  "未削除の作業時間のうち [w0, w1) と1分でも重なる件数。"
+  [ds gantt-id w0 w1]
+  (:c (jdbc/execute-one! ds ["SELECT COUNT(*) AS c FROM gantt_work_times
+                              WHERE gantt_id = ? AND deleted_at IS NULL
+                                AND start_at < ? AND end_at > ?"
+                             gantt-id w1 w0])))
 
 (defn insert-gantt-checklist-item! [ds {:keys [gantt-id label status]}]
   (jdbc/execute-one! ds
