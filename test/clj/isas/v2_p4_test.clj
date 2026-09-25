@@ -104,11 +104,12 @@
       (is (= :daily (get-in to [:state :page])))
       (is (= :api (ffirst (:fx to))))
       (is (str/includes? (nth (first (:fx to)) 2) "/api/admin/gantt/daily"))))
-  (testing "V2P4-2.4-03 圃場0狭幅は日次閲覧可・パソコンは不可"
+  (testing "V2P4-2.4-03 圃場0は狭幅もパソコンも日次一覧を出さない（RV-V2-001 R-04）"
     (let [narrow (html {:page :daily :narrow? true :fields []
                         :daily-statuses ["not_started"] :daily-rows []})
           wide (html {:page :daily :narrow? false :fields []})]
-      (is (re-find #"daily-list|daily-filter" narrow))
+      (is (re-find #"圃場が1枚以上" narrow))
+      (is (nil? (re-find #"daily-list|daily-filter" narrow)))
       (is (re-find #"圃場が1枚以上" wide))))
   (testing "V2P4-2.4-04 管理者狭幅にメール・状態ラベル"
     (let [h (html {:page :daily :kind "admin" :narrow? true
@@ -290,15 +291,14 @@
       (is (empty? (get-in admin-empty [:state :daily-rows])))
       (is (= :html (ffirst (:fx admin-pc))))
       (is (= "/api/memos" (nth (first (:fx memos)) 2)))))
-  (testing "fields-loaded 狭幅圃場0でも daily GET"
+  (testing "fields-loaded 狭幅圃場0は daily GET しない（RV-V2-001 R-04）"
     (let [r (ui/fields-loaded
              (assoc (ui/init-state) :page :daily :kind "user" :narrow? true
                     :session {:email "a"}
                     :daily-statuses ["not_started" "in_progress"])
              {:ok true :fields []})]
-      (is (= :api (ffirst (:fx r))))
-      (is (str/includes? (nth (first (:fx r)) 2) "/api/user/gantt/daily"))
-      (is (= 1 (count (:fx r)))))
+      (is (= :html (ffirst (:fx r))))
+      (is (empty? (get-in r [:state :daily-rows]))))
     (let [r (ui/fields-loaded
              (assoc (ui/init-state) :page :daily :kind "user" :narrow? false
                     :session {:email "a"}

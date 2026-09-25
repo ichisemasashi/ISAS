@@ -223,6 +223,10 @@
    :gantt-row-saved "作業を保存しました"
    :gantt-row-added "作業を登録しました"
    :daily-status-saved "実行状態を保存しました"
+   :checklist-left-prefix "完了にしましたが、まだのチェックが "
+   :checklist-left-suffix " 件あります。作業を開いて確認してください"
+   :daily-checklist-left "チェック残り"
+   :sentence-sep "。"
    :daily-link-edit-work "作業を開く"
    :gantt-start "開始"
    :gantt-end "終了"
@@ -686,6 +690,10 @@
    :gantt-row-saved "Work saved"
    :gantt-row-added "Work registered"
    :daily-status-saved "Execution status saved"
+   :checklist-left-prefix "Marked done, but "
+   :checklist-left-suffix " checklist item(s) are still pending. Open the work to check them"
+   :daily-checklist-left "Checklist pending"
+   :sentence-sep ". "
    :daily-link-edit-work "Open work"
    :gantt-start "Start"
    :gantt-end "End"
@@ -2405,6 +2413,14 @@
       (str (m :work-time-count-prefix) c (m :work-time-count-suffix))
       (m :daily-work-time-none))))
 
+(defn- checklist-left [done total]
+  (max 0 (- (or total 0) (or done 0))))
+
+(defn- with-checklist-left [text left]
+  (if (pos? (or left 0))
+    (str text (m :sentence-sep) (m :checklist-left-prefix) left (m :checklist-left-suffix))
+    text))
+
 (defn- daily-checklist-summary [done total]
   (let [t (or total 0)
         d (or done 0)]
@@ -2570,6 +2586,9 @@
            (str "<p class=\"daily-item-user\">" (esc (:user_email r)) "</p>"))
          (when (true? (:overdue r))
            (str "<span class=\"daily-item-overdue\">" (esc (m :daily-overdue)) "</span> "))
+         (when (and (= "done" (:execution_status r))
+                    (pos? (checklist-left (:checklist_done r) (:checklist_total r))))
+           (str "<span class=\"daily-item-checklist-left\">" (esc (m :daily-checklist-left)) "</span> "))
          "<span class=\"daily-item-title\">" (esc (:title r)) "</span>"
          " <span class=\"daily-item-time\">"
          (esc (format-display-instant (:start_at r)))
@@ -2760,7 +2779,7 @@
               (str nav (flash-html state)
                    "<p>" (esc (m :phone-daily-admin-pc)) "</p>"))
 
-      (and (not admin?) (not narrow?) (empty? fields))
+      (and (not admin?) (empty? fields))
       (layout (m :daily-title)
               (str nav (flash-html state)
                    "<p>" (esc (m :daily-no-fields)) "</p>"))
@@ -3681,7 +3700,7 @@
       (and (= :works (:page s)) (empty? (:fields s)))
       (guarded s)
 
-      (and (= :daily (:page s)) (empty? (:fields s)) (not (:narrow? s)))
+      (and (= :daily (:page s)) (empty? (:fields s)))
       (guarded (assoc s :daily-rows []))
 
       (= :works (:page s))
@@ -3693,10 +3712,9 @@
       (let [statuses (into [] (:daily-statuses s))]
         (if (empty? statuses)
           (guarded (assoc s :daily-rows [] :daily-total nil))
-          (let [fx (cond-> [[:api "GET" (daily-query-path s) nil :daily-loaded]]
-                     (seq (:fields s))
-                     (conj [:api "GET" "/api/user/gantt" nil :daily-context-loaded]))]
-            {:state s :fx fx})))
+          {:state s
+           :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]
+                [:api "GET" "/api/user/gantt" nil :daily-context-loaded]]}))
 
       (= :orders-new (:page s))
       (let [defaults #?(:clj {:work_date (time/today-work-date)
@@ -3813,12 +3831,16 @@
           id (:id row)
           tid (:title_id row)
           added? (not (same-gantt-id? (:gantt-selected state) id))
-          text (if added? (m :gantt-row-added) (m :gantt-row-saved))
+          text (if added?
+                 (m :gantt-row-added)
+                 (with-checklist-left (m :gantt-row-saved) (:checklist-left state)))
           near (if added?
                  (if (= :gantt (:page state)) "gantt-add-form" "works-add-form")
                  (if (= :gantt (:page state)) "gantt-save-form" "works-save-form"))
-          s (flash-ok-state (assoc state :gantt-selected id :gantt-title-selected tid
-                                   :gantt-progress-days nil)
+          s (flash-ok-state (-> state
+                                (dissoc :checklist-left)
+                                (assoc :gantt-selected id :gantt-title-selected tid
+                                       :gantt-progress-days nil))
                             text near)]
       {:state s
        :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]
@@ -3828,7 +3850,9 @@
                  (m :gantt-work-needed)
                  (code-message code))
           near (if (= :gantt (:page state)) "gantt-save-form" "works-save-form")
-          s (assoc state :flash {:error? true :text text :near near})]
+          s (-> state
+                (dissoc :checklist-left)
+                (assoc :flash {:error? true :text text :near near}))]
       (if (= "gantt_conflict" code)
         {:state s :fx [[:api "GET" "/api/user/gantt" nil :gantt-loaded]]}
         {:state s :fx [[:html (render s)]]}))))
@@ -3850,12 +3874,16 @@
 (defn daily-status-save-result [state body]
   (if (:ok body)
     (let [statuses (into [] (:daily-statuses state))
-          s (flash-ok-state state (m :daily-status-saved) "daily-list")]
+          s (flash-ok-state (dissoc state :checklist-left)
+                            (with-checklist-left (m :daily-status-saved) (:checklist-left state))
+                            "daily-list")]
       (if (empty? statuses)
         (guarded (assoc s :daily-rows []))
         {:state s
          :fx [[:api "GET" (daily-query-path s) nil :daily-loaded]]}))
-    (let [s (assoc state :flash {:error? true :text (code-message (:code body)) :near "daily-list"})]
+    (let [s (-> state
+                (dissoc :checklist-left)
+                (assoc :flash {:error? true :text (code-message (:code body)) :near "daily-list"}))]
       {:state s :fx [[:html (render s)]]})))
 
 (defn gantt-delete-result [state body]
@@ -4503,7 +4531,10 @@
         (or (str/blank? (:start_at body')) (str/blank? (:end_at body')))
         (flash-html-state state (m :time-invalid) near)
         :else
-        {:state state
+        {:state (assoc state :checklist-left
+                       (when (and (= "done" (:execution_status body'))
+                                  (same-gantt-id? (:gantt-selected state) id))
+                         (count (remove #(= "done" (:status %)) (:gantt-checklist-items state)))))
          :fx [[:api "PUT" (str "/api/user/gantt/" id) body' :gantt-save-result]]}))
     "delete-gantt-row"
     (let [id (str/trim (as-text (if (nil? (:id form)) (:gantt-selected state) (:id form))))]
@@ -4554,7 +4585,9 @@
         (not (#{"not_started" "in_progress" "done"} status))
         (flash-html-state state (m :execution-status-invalid) "daily-list")
         :else
-        {:state (assoc state :flash nil)
+        {:state (assoc state :flash nil
+                       :checklist-left (when (= "done" status)
+                                         (checklist-left (:checklist_done row) (:checklist_total row))))
          :fx [[:api "PUT" (str "/api/user/gantt/" id "/status")
                {:execution_status status}
                :daily-status-save-result]]}))

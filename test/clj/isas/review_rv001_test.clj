@@ -1,5 +1,5 @@
 (ns isas.review-rv001-test
-  "レビュー記録票 RV-V2-001 の重大指摘 R-01〜R-03 の回帰試験。"
+  "レビュー記録票 RV-V2-001 の指摘 R-01〜R-04・R-08 の回帰試験。"
   (:require [clojure.test :refer [deftest is testing]]
             [isas.db :as db]
             [isas.gantt :as gantt]
@@ -223,3 +223,113 @@
       (is (re-find #"遅れ</span> <span class=\"daily-item-title\">遅れA" h))
       (doseq [v ["today" "week" "last_week" "around7" "all"]]
         (is (re-find (re-pattern (str "<option value=\"" v "\"")) h))))))
+
+(deftest rv001-r04-no-fields-daily
+  (testing "R-04 圃場0枚はスマホでも日次一覧を出さず案内だけ"
+    (let [h (tu/page-html {:page :daily :kind "user" :narrow? true :session {:email "a"} :fields []
+                           :daily-statuses ["not_started"] :daily-rows []})]
+      (is (re-find #"圃場が1枚以上あるときだけ、日次一覧を使えます" h))
+      (is (nil? (re-find #"daily-filter|daily-list" h)))))
+  (testing "R-04 圃場0枚は日次 API を呼ばない"
+    (let [r (ui/fields-loaded (assoc (ui/init-state) :page :daily :kind "user" :narrow? true
+                                     :session {:email "a"} :daily-statuses ["not_started"])
+                              {:ok true :fields []})]
+      (is (= :html (ffirst (:fx r))))
+      (is (= 1 (count (:fx r))))))
+  (testing "R-04 圃場があれば日次一覧と作業一覧を読む"
+    (let [r (ui/fields-loaded (assoc (ui/init-state) :page :daily :kind "user" :narrow? true
+                                     :session {:email "a"} :daily-statuses ["not_started"])
+                              {:ok true :fields [{:id 1}]})]
+      (is (= [:daily-loaded :daily-context-loaded] (map #(nth % 4) (:fx r))))))
+  (testing "R-04 管理者は圃場がなくても横断一覧を出す"
+    (let [h (tu/page-html {:page :daily :kind "admin" :narrow? true :session {:email "a"} :fields []
+                           :daily-statuses ["not_started"] :daily-rows []})]
+      (is (nil? (re-find #"圃場が1枚以上" h))))))
+
+(defn- daily-state [row]
+  (assoc (ui/init-state) :page :daily :kind "user" :session {:email "a"} :ui-lang "ja"
+         :fields [{:id 1}] :daily-statuses ["not_started" "in_progress" "done"]
+         :daily-rows [(merge {:id 7 :title "A" :title_id 1 :start_at "2026-09-25T08:00"
+                              :end_at "2026-09-25T17:00" :field_ids [1]
+                              :execution_status "not_started" :version 1}
+                             row)]))
+
+(defn- flash-text [r] (get-in r [:state :flash :text]))
+
+(deftest rv001-r08-checklist-left
+  (testing "R-08 日次で完了にしたときチェックが残っていれば注意を出す"
+    (let [s (:state (ui/handle (daily-state {:checklist_done 1 :checklist_total 3})
+                               [:submit {:act "set-daily-row-status" :form {:id "7" :execution_status "done"}}]))
+          r (ui/daily-status-save-result s {:ok true})]
+      (is (= 2 (:checklist-left s)))
+      (is (= "実行状態を保存しました。完了にしましたが、まだのチェックが 2 件あります。作業を開いて確認してください"
+             (flash-text r)))
+      (is (not (contains? (:state r) :checklist-left)))))
+  (testing "R-08 英語の注意"
+    (let [s (:state (ui/handle (assoc (daily-state {:checklist_done 0 :checklist_total 1}) :ui-lang "en")
+                               [:submit {:act "set-daily-row-status" :form {:id "7" :execution_status "done"}}]))
+          r (ui/with-ui-lang {:ui-lang "en"} #(ui/daily-status-save-result s {:ok true}))]
+      (is (= "Execution status saved. Marked done, but 1 checklist item(s) are still pending. Open the work to check them"
+             (flash-text r)))))
+  (testing "R-08 チェックが残っていない・完了以外・チェックなしは注意しない"
+    (doseq [[row st] [[{:checklist_done 2 :checklist_total 2} "done"]
+                      [{:checklist_done 0 :checklist_total 2} "in_progress"]
+                      [{} "done"]]]
+      (let [s (:state (ui/handle (daily-state row)
+                                 [:submit {:act "set-daily-row-status" :form {:id "7" :execution_status st}}]))]
+        (is (= "実行状態を保存しました" (flash-text (ui/daily-status-save-result s {:ok true})))))))
+  (testing "R-08 保存に失敗したら注意を持ち越さない"
+    (let [s (:state (ui/handle (daily-state {:checklist_done 0 :checklist_total 2})
+                               [:submit {:act "set-daily-row-status" :form {:id "7" :execution_status "done"}}]))
+          r (ui/daily-status-save-result s {:ok false :code "gantt_not_found"})]
+      (is (true? (get-in r [:state :flash :error?])))
+      (is (not (contains? (:state r) :checklist-left)))))
+  (testing "R-08 日次一覧は完了でチェック残りの行にだけ印を出す"
+    (let [h (tu/page-html {:page :daily :kind "user" :session {:email "a"} :fields [{:id 1}]
+                           :daily-statuses ["done" "in_progress"]
+                           :daily-rows [{:id 1 :title "残りあり" :execution_status "done" :field_ids []
+                                         :start_at "2026-09-25T08:00" :end_at "2026-09-25T17:00"
+                                         :checklist_done 1 :checklist_total 2}
+                                        {:id 2 :title "全部済" :execution_status "done" :field_ids []
+                                         :start_at "2026-09-25T08:00" :end_at "2026-09-25T17:00"
+                                         :checklist_done 2 :checklist_total 2}
+                                        {:id 3 :title "作業中" :execution_status "in_progress" :field_ids []
+                                         :start_at "2026-09-25T08:00" :end_at "2026-09-25T17:00"
+                                         :checklist_done 0 :checklist_total 2}]})]
+      (is (= 1 (count (re-seq #"daily-item-checklist-left" h))))
+      (is (re-find #"チェック残り</span> <span class=\"daily-item-title\">残りあり" h))))
+  (testing "R-08 作業画面で完了を保存したときも、選択中の作業のチェック残りを注意する"
+    (let [base (assoc (ui/init-state) :page :works :kind "user" :session {:email "a"} :ui-lang "ja"
+                      :fields [{:id 1}] :gantt-selected 7
+                      :gantt-rows [{:id 7 :title "A" :title_id 1 :start_at "2026-09-25T08:00"
+                                    :end_at "2026-09-25T17:00" :field_ids [] :execution_status "in_progress"
+                                    :version 2}]
+                      :gantt-checklist-items [{:id 1 :label "x" :status "done"}
+                                              {:id 2 :label "y" :status "pending"}])
+          form {:id "7" :title "A" :title_id "1" :start_at "2026-09-25T08:00" :end_at "2026-09-25T17:00"
+                :execution_status "done"}
+          s (:state (ui/handle base [:submit {:act "save-gantt-row" :form form}]))
+          ok (ui/gantt-save-result s {:ok true :row {:id 7 :title_id 1}})
+          ng (ui/gantt-save-result s {:ok false :code "gantt_conflict"})
+          not-done (:state (ui/handle base [:submit {:act "save-gantt-row"
+                                                     :form (assoc form :execution_status "in_progress")}]))]
+      (is (= 1 (:checklist-left s)))
+      (is (= "作業を保存しました。完了にしましたが、まだのチェックが 1 件あります。作業を開いて確認してください"
+             (flash-text ok)))
+      (is (not (contains? (:state ok) :checklist-left)))
+      (is (not (contains? (:state ng) :checklist-left)))
+      (is (nil? (:checklist-left not-done)))
+      (is (= "作業を保存しました" (flash-text (ui/gantt-save-result not-done {:ok true :row {:id 7 :title_id 1}}))))))
+  (testing "R-08 状態は連動させない（チェック残りがあっても完了で保存できる）"
+    (tu/with-sys
+      (fn [sys]
+        (let [{:keys [app usid fid tid]} (farm sys "rv8@example.com")
+              gid (get-in (tu/parse (tu/post-json app "/api/user/gantt"
+                                                  (body tid fid "チェック付き" "2026-09-25T08:00" "2026-09-25T17:00")
+                                                  "user" usid))
+                          [:row :id])
+              c (tu/parse (tu/post-json app (str "/api/user/gantt/" gid "/checklist-items") {:label "片付け"} "user" usid))
+              r (tu/parse (tu/put-json app (str "/api/user/gantt/" gid "/status") {:execution_status "done"} "user" usid))]
+          (is (= "pending" (get-in c [:checklist_item :status])))
+          (is (:ok r))
+          (is (= "done" (:execution_status (db/find-gantt-row-by-id (:ds sys) gid)))))))))

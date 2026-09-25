@@ -739,6 +739,11 @@
       (is (= :html (tu/fx-op s [:submit {:act "select-gantt-row" :form {}}])))
       (is (= :api (tu/fx-op s [:submit {:act "add-gantt-row"
                                         :form {:start_at "2026-09-18T08:00" :end_at "2026-09-18T09:00"}}])))
+      (is (= "田植え" (:work_name (nth (first (:fx (ui/handle s [:submit {:act "add-gantt-row"
+                                                                         :form {:title "植え付け" :work_name " 田植え "
+                                                                                :start_at "2026-09-18T08:00"
+                                                                                :end_at "2026-09-18T09:00"}}])))
+                                       3))))
       (is (= :html (tu/fx-op (dissoc s :gantt-selected)
                              [:submit {:act "save-gantt-row"
                                        :form {:title "行" :start_at "2026-09-18T08:00"
